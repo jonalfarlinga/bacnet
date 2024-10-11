@@ -160,10 +160,6 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 				fmt.Sprintf("ComplexACK object at index %d is not Object type", i),
 			)
 		}
-		fmt.Printf(
-			"Object i %d tagnum %d tagclass %v data %x\n",
-			i, enc_obj.TagNumber, enc_obj.TagClass, enc_obj.Data,
-		)
 		if enc_obj.TagClass {
 			switch enc_obj.TagNumber {
 			case 0:
@@ -193,7 +189,6 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 				if err != nil {
 					return decCACK, errors.Wrap(err, "decode Application object case 7")
 				}
-				fmt.Printf("String value %s\n", value)
 				decCACK.PresentValue = value
 			}
 		}
