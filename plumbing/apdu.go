@@ -132,7 +132,6 @@ func (a *APDU) UnmarshalBinary(b []byte) error {
 
 				// Drop tags so that they don't get in the way!
 				if b[offset] == objects.TagOpening || b[offset] == objects.TagClosing {
-					fmt.Print("tag opening/closing\n")
 					offset++
 					if offset >= len(b) {
 						break
