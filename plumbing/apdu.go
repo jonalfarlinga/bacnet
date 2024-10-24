@@ -144,7 +144,7 @@ func (a *APDU) UnmarshalBinary(b []byte) error {
 				o.Data = b[offset+1 : offset+int(o.Length)+1]
 				objs = append(objs, &o)
 				offset += int(o.Length) + 1
-
+				
 				if offset >= len(b) {
 					break
 				}

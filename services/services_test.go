@@ -27,13 +27,14 @@ type testCase struct {
 
 func TestUnconfirmedWhoIs(t *testing.T) {
 	t.Helper()
+	str, _ := services.NewUnconfirmedWhoIs(
+		plumbing.NewBVLC(plumbing.BVLCFuncBroadcast),
+		plumbing.NewNPDU(false, false, false, false),
+	)
 	var testcases = []testCase{
 		{
 			description: "Unconfirmed request WhoIs frame",
-			structured: services.NewUnconfirmedWhoIs(
-				plumbing.NewBVLC(plumbing.BVLCFuncBroadcast),
-				plumbing.NewNPDU(false, false, false, false),
-			),
+			structured: str,
 			serialized: []byte{
 				0x81, 0x0b, 0x00, 0x08, // BVLC
 				0x01, 0x00, // NPDU
@@ -45,7 +46,7 @@ func TestUnconfirmedWhoIs(t *testing.T) {
 	for _, c := range testcases {
 		t.Run(c.description, func(t *testing.T) {
 			t.Run("Decode", func(t *testing.T) {
-				msg, err := bacnet.Parse(c.serialized)
+				msg, _, err := bacnet.Parse(c.serialized)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -71,13 +72,14 @@ func TestUnconfirmedWhoIs(t *testing.T) {
 
 func TestUnconfirmedIAm(t *testing.T) {
 	t.Helper()
+	str, _ := services.NewUnconfirmedIAm(
+		plumbing.NewBVLC(plumbing.BVLCFuncBroadcast),
+		plumbing.NewNPDU(false, false, false, false),
+	)
 	var testcases = []testCase{
 		{
 			description: "Unconfirmed request IAm frame",
-			structured: services.NewUnconfirmedIAm(
-				plumbing.NewBVLC(plumbing.BVLCFuncBroadcast),
-				plumbing.NewNPDU(false, false, false, false),
-			),
+			structured: str,
 			serialized: []byte{
 				0x81, 0x0b, 0x00, 0x14, // BVLC
 				0x01, 0x00, // NPDU
@@ -93,7 +95,7 @@ func TestUnconfirmedIAm(t *testing.T) {
 	for _, c := range testcases {
 		t.Run(c.description, func(t *testing.T) {
 			t.Run("Decode", func(t *testing.T) {
-				msg, err := bacnet.Parse(c.serialized)
+				msg, _, err := bacnet.Parse(c.serialized)
 				if err != nil {
 					t.Fatal(err)
 				}

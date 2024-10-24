@@ -2,6 +2,7 @@ package objects
 
 import (
 	"encoding/binary"
+	"log"
 
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/pkg/errors"
@@ -16,6 +17,7 @@ func DecObjectIdentifier(rawPayload APDUPayload) (ObjectIdentifier, error) {
 	decObjectId := ObjectIdentifier{}
 
 	rawObject, ok := rawPayload.(*Object)
+	log.Println("DecObjectIdentifier: rawObject:", rawObject.Data)
 	if !ok {
 		return decObjectId, errors.Wrap(common.ErrWrongPayload, "failed to decode ObjectID")
 	}
@@ -32,7 +34,7 @@ func DecObjectIdentifier(rawPayload APDUPayload) (ObjectIdentifier, error) {
 	}
 
 	joinedData := binary.BigEndian.Uint32(rawObject.Data)
-	decObjectId.ObjectType = uint16(joinedData & (uint32(0xFFC) << 20) >> 20)
+	decObjectId.ObjectType = uint16((joinedData >> 22) & 0x3FF)
 	decObjectId.InstanceNumber = uint32(joinedData & 0x3FFFFF)
 
 	return decObjectId, nil

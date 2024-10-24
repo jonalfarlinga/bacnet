@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
@@ -20,7 +21,7 @@ type ComplexACKDec struct {
 	ObjectType   uint16
 	InstanceId   uint32
 	PropertyId   uint8
-	PresentValue interface{}
+	Tags 	   []*objects.AppTag
 }
 
 func ComplexACKObjects(objectType uint16, instN uint32, propertyId uint8, value interface{}) []objects.APDUPayload {
@@ -152,6 +153,7 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 		)
 	}
 
+	objs := make([]*objects.AppTag, 0)
 	for i, obj := range c.APDU.Objects {
 		enc_obj, ok := obj.(*objects.Object)
 		if !ok {
@@ -181,22 +183,42 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 				decCACK.PropertyId = propId
 			}
 		} else {
+			log.Println("TagNumber", enc_obj.TagNumber)
 			switch enc_obj.TagNumber {
-			case 4:
+			case objects.TagReal:
 				value, err := objects.DecReal(obj)
 				if err != nil {
 					return decCACK, errors.Wrap(err, "decode Application object case 4")
 				}
-				decCACK.PresentValue = value
-			case 7:
+				objs = append(objs, &objects.AppTag{
+					TagNumber: objects.TagReal,
+					Value:     value,
+				})
+			case objects.TagCharacterString:
 				value, err := objects.DecString(obj)
 				if err != nil {
 					return decCACK, errors.Wrap(err, "decode Application object case 7")
 				}
 				fmt.Printf("String value %s\n", value)
-				decCACK.PresentValue = value
+				objs = append(objs, &objects.AppTag{
+					TagNumber: objects.TagCharacterString,
+					Value:     value,
+				})
+			case objects.TagBACnetObjectIdentifier:
+				objId, err := objects.DecObjectIdentifier(obj)
+				if err != nil {
+					return decCACK, errors.Wrap(err, "decode Context object case 0")
+				}
+				objs = append(objs, &objects.AppTag{
+					TagNumber: objects.TagBACnetObjectIdentifier,
+					Value:     fmt.Sprintf("objectid: %d instance id: %d", objId.ObjectType, objId.InstanceNumber),
+				})
+				log.Println("ObjectType", objId.ObjectType, "InstanceId", objId.InstanceNumber)
+			default:
+				log.Println("not encoded")
 			}
 		}
+		decCACK.Tags = objs
 	}
 
 	return decCACK, nil
