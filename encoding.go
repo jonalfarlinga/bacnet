@@ -13,7 +13,7 @@ const (
 func NewWhois() ([]byte, error) {
 	bvlc := plumbing.NewBVLC(plumbing.BVLCFuncBroadcast)
 	npdu := plumbing.NewNPDU(false, false, false, false)
-	u := services.NewUnconfirmedWhoIs(bvlc, npdu)
+	u, _ := services.NewUnconfirmedWhoIs(bvlc, npdu)
 	return u.MarshalBinary()
 }
 
@@ -25,7 +25,7 @@ func NewIAm(deviceId uint32, vendorId uint16) ([]byte, error) {
 	npdu.DLEN = 0
 	npdu.Hop = 0xFF
 
-	u := services.NewUnconfirmedIAm(bvlc, npdu)
+	u, _ := services.NewUnconfirmedIAm(bvlc, npdu)
 
 	u.APDU.Objects = services.IAmObjects(deviceId,
 		DEFAULT_ACCEPTED_SIZE, DEFAULT_SEGMENTATION_SUPPORT, vendorId)
@@ -38,7 +38,7 @@ func NewCACK(service uint8, objectType uint16, instN uint32, propertyId uint8, v
 	bvlc := plumbing.NewBVLC(plumbing.BVLCFuncUnicast)
 	npdu := plumbing.NewNPDU(false, false, false, false)
 
-	c := services.NewComplexACK(bvlc, npdu)
+	c, _ := services.NewComplexACK(bvlc, npdu)
 
 	c.APDU.Service = service
 	c.APDU.InvokeID = 1
@@ -53,7 +53,7 @@ func NewSACK(service uint8) ([]byte, error) {
 	bvlc := plumbing.NewBVLC(plumbing.BVLCFuncUnicast)
 	npdu := plumbing.NewNPDU(false, false, false, false)
 
-	s := services.NewSimpleACK(bvlc, npdu)
+	s, _ := services.NewSimpleACK(bvlc, npdu)
 
 	s.APDU.Service = service
 	s.APDU.InvokeID = 1
@@ -67,7 +67,7 @@ func NewError(service, errorClass, errorCode uint8) ([]byte, error) {
 	bvlc := plumbing.NewBVLC(plumbing.BVLCFuncUnicast)
 	npdu := plumbing.NewNPDU(false, false, false, false)
 
-	e := services.NewError(bvlc, npdu)
+	e, _ := services.NewError(bvlc, npdu)
 
 	e.APDU.Service = service
 	e.APDU.InvokeID = 1
@@ -82,7 +82,7 @@ func NewReadProperty(objectType uint16, instanceNumber uint32, propertyId uint8)
 	bvlc := plumbing.NewBVLC(plumbing.BVLCFuncUnicast)
 	npdu := plumbing.NewNPDU(false, false, false, true)
 
-	c := services.NewConfirmedReadProperty(bvlc, npdu)
+	c, _ := services.NewConfirmedReadProperty(bvlc, npdu)
 
 	c.APDU.Service = services.ServiceConfirmedReadProperty
 	c.APDU.MaxSize = 5
@@ -98,7 +98,7 @@ func NewWriteProperty(objectType uint16, instanceNumber uint32, propertyId uint8
 	bvlc := plumbing.NewBVLC(plumbing.BVLCFuncUnicast)
 	npdu := plumbing.NewNPDU(false, false, false, true)
 
-	c := services.NewConfirmedWriteProperty(bvlc, npdu)
+	c, _ := services.NewConfirmedWriteProperty(bvlc, npdu)
 
 	c.APDU.Service = services.ServiceConfirmedWriteProperty
 	c.APDU.MaxSize = 5

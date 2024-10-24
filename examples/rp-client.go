@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jonalfarlinga/bacnet"
+	"github.com/jonalfarlinga/bacnet/plumbing"
 	"github.com/jonalfarlinga/bacnet/services"
 	"github.com/spf13/cobra"
 )
@@ -79,25 +80,39 @@ func ReadPropertyClientExample(cmd *cobra.Command, args []string) {
 		log.Println(serviceMsg)
         // switch between recieved messages
 		switch t {
+        case plumbing.ComplexAck:
+            cACKEnc, ok := serviceMsg.(*services.ComplexACK)
+            if !ok {
+                log.Fatalf("we didn't receive a CACK reply...\n")
+            }
+            log.Printf("unmarshalled BVLC: %#v\n", cACKEnc.BVLC)
+            log.Printf("unmarshalled NPDU: %#v\n", cACKEnc.NPDU)
 
+            decodedCACK, err := cACKEnc.Decode()
+            if err != nil {
+                log.Fatalf("couldn't decode the CACK reply: %v\n", err)
+            }
+
+            log.Printf(
+                "decoded CACK reply:\n\tObject Type: %d\n\tInstance Id: %d\n\tProperty Id: %d\n\tValue: %v\f",
+                decodedCACK.ObjectType, decodedCACK.InstanceId, decodedCACK.PropertyId, decodedCACK.PresentValue,
+            )
+        case plumbing.Error:
+            errEnc, ok := serviceMsg.(*services.Error)
+            if !ok {
+                log.Fatalf("we didn't receive an Error reply...\n")
+            }
+            log.Printf("unmarshalled BVLC: %#v\n", errEnc.BVLC)
+            log.Printf("unmarshalled NPDU: %#v\n", errEnc.NPDU)
+
+            decodedErr, err := errEnc.Decode()
+            if err != nil {
+                log.Fatalf("couldn't decode the Error reply: %v\n", err)
+            }
+            log.Printf("decoded Error reply:\n\tError Class: %d\n\tError Code: %d\n",
+                decodedErr.ErrorClass, decodedErr.ErrorCode,
+            )
 		}
-		cACKEnc, ok := serviceMsg.(*services.ComplexACK)
-		if !ok {
-			log.Fatalf("we didn't receive a CACK reply...\n")
-		}
-
-		log.Printf("unmarshalled BVLC: %#v\n", cACKEnc.BVLC)
-		log.Printf("unmarshalled NPDU: %#v\n", cACKEnc.NPDU)
-
-		decodedCACK, err := cACKEnc.Decode()
-		if err != nil {
-			log.Fatalf("couldn't decode the CACK reply: %v\n", err)
-		}
-
-		log.Printf(
-			"decoded CACK reply:\n\tObject Type: %d\n\tInstance Id: %d\n\tProperty Id: %d\n\tValue: %v\f",
-			decodedCACK.ObjectType, decodedCACK.InstanceId, decodedCACK.PropertyId, decodedCACK.PresentValue,
-		)
 
 		sentRequests++
 
