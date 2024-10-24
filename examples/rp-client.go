@@ -15,7 +15,7 @@ import (
 )
 
 func init() {
-	ReadPropertyClientCmd.Flags().Uint16Var(&rpObjectType, "object-type", 1, "Object type to read.")
+	ReadPropertyClientCmd.Flags().Uint16Var(&rpObjectType, "object-type", 0, "Object type to read.")
 	ReadPropertyClientCmd.Flags().Uint32Var(&rpInstanceId, "instance-id", 0, "Instance ID to read.") // Analog-input
 	ReadPropertyClientCmd.Flags().Uint8Var(&rpPropertyId, "property-id", 85, "Property ID to read.") // Current-value
 	ReadPropertyClientCmd.Flags().IntVar(&rpPeriod, "period", 1, "Period, in seconds, between requests.")
@@ -72,11 +72,15 @@ func ReadPropertyClientExample(cmd *cobra.Command, args []string) {
 
 		log.Printf("read %d bytes from %s: %x\n", nBytes, remoteAddr, replyRaw[:nBytes])
 
-		serviceMsg, err := bacnet.Parse(replyRaw[:nBytes])
+		serviceMsg, t, err := bacnet.Parse(replyRaw[:nBytes])
 		if err != nil {
 			log.Fatalf("error parsing the received message: %v\n", err)
 		}
+		log.Println(serviceMsg)
+        // switch between recieved messages
+		switch t {
 
+		}
 		cACKEnc, ok := serviceMsg.(*services.ComplexACK)
 		if !ok {
 			log.Fatalf("we didn't receive a CACK reply...\n")

@@ -60,7 +60,7 @@ func (a *APDU) UnmarshalBinary(b []byte) error {
 					offset++
 					o.Length = uint8(b[offset])
 				}
-				
+
 				o.Data = b[offset+1 : offset+int(o.Length)+1]
 				objs = append(objs, &o)
 				offset += int(o.Length) + 1
@@ -133,7 +133,7 @@ func (a *APDU) UnmarshalBinary(b []byte) error {
 
 				// Drop tags so that they don't get in the way!
 				if b[offset] == objects.TagOpening || b[offset] == objects.TagClosing {
-					fmt.Print("tag opening/closing\n")
+					fmt.Println("tag opening/closing", offset)
 					offset++
 					if offset >= len(b) {
 						break
@@ -248,7 +248,7 @@ func (a *APDU) MarshalTo(b []byte) error {
 // MarshalLen returns the serial length of APDU.
 func (a *APDU) MarshalLen() int {
 	var l int = 0
-	fmt.Println(a.Type)
+	fmt.Println("APDU Type", a.Type)
 	switch a.Type {
 	case ConfirmedReq:
 		l += 4
@@ -257,7 +257,7 @@ func (a *APDU) MarshalLen() int {
 	case UnConfirmedReq:
 		l += 2
 	}
-	fmt.Println(a.Objects)
+	fmt.Println("APDU Obj", a.Objects)
 	for _, o := range a.Objects {
 		l += o.MarshalLen()
 	}

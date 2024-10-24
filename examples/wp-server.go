@@ -57,11 +57,14 @@ func WritePropertyServerExample(cmd *cobra.Command, args []string) {
 
 		log.Printf("read %d bytes from %s: %x\n", nBytes, remoteAddr, reqRaw[:nBytes])
 
-		serviceMsg, err := bacnet.Parse(reqRaw[:nBytes])
+		serviceMsg, t, err := bacnet.Parse(reqRaw[:nBytes])
 		if err != nil {
 			log.Fatalf("error parsing the received message: %v\n", err)
 		}
+        // switch between recieved messages
+		switch t {
 
+		}
 		writePropertyMessage, ok := serviceMsg.(*services.ConfirmedWriteProperty)
 		if !ok {
 			_, ok := serviceMsg.(*services.UnconfirmedWhoIs)

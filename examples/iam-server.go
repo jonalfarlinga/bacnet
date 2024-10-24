@@ -60,11 +60,14 @@ func IAmExample(cmd *cobra.Command, args []string) {
 
 		log.Printf("read %d bytes from %s: %x\n", nBytes, remoteAddr, reqRaw[:nBytes])
 
-		serviceMsg, err := bacnet.Parse(reqRaw[:nBytes])
+		serviceMsg, t, err := bacnet.Parse(reqRaw[:nBytes])
 		if err != nil {
 			log.Fatalf("error parsing the received message: %v\n", err)
 		}
+        // switch between recieved messages
+		switch t {
 
+		}
 		whoIsMessage, ok := serviceMsg.(*services.UnconfirmedWhoIs)
 		if !ok {
 			log.Fatalf("we didn't receive a WhoIs reply...\n")

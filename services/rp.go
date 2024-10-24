@@ -31,7 +31,7 @@ func ConfirmedReadPropertyObjects(objectType uint16, instN uint32, propertyId ui
 	return objs
 }
 
-func NewConfirmedReadProperty(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *ConfirmedReadProperty {
+func NewConfirmedReadProperty(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*ConfirmedReadProperty, uint8) {
 	c := &ConfirmedReadProperty{
 		BVLC: bvlc,
 		NPDU: npdu,
@@ -41,7 +41,7 @@ func NewConfirmedReadProperty(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *Confirm
 	}
 	c.SetLength()
 
-	return c
+	return c, c.APDU.Type
 }
 
 func (c *ConfirmedReadProperty) UnmarshalBinary(b []byte) error {

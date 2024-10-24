@@ -14,17 +14,19 @@ const bacnetLenMin = 8
 func combine(t, s uint8) uint16 {
 	// 0001, 0010
 	// return:
-	// 0001 0000 OR
+	// 0001 0000
+	// BINOR
 	// 0000 0010
-	// = 0001 0010
+	// _________
+	// 0001 0010
 	return uint16(t)<<8 | uint16(s)
 }
 
 // Parse decodes the given bytes.
-func Parse(b []byte) (plumbing.BACnet, error) {
+func Parse(b []byte) (plumbing.BACnet, uint8, error) {
 
 	if len(b) < bacnetLenMin {
-		return nil, errors.Wrap(
+		return nil, 0, errors.Wrap(
 			common.ErrTooShortToParse,
 			fmt.Sprintf("Parsing length %d", len(b)),
 		)
@@ -37,13 +39,13 @@ func Parse(b []byte) (plumbing.BACnet, error) {
 	offset := 0
 	fmt.Println("parsing")
 	if err := bvlc.UnmarshalBinary(b); err != nil {
-		return nil, errors.Wrap(err, fmt.Sprintf("Parsing BVLC %x", b))
+		return nil, 0, errors.Wrap(err, fmt.Sprintf("Parsing BVLC %x", b))
 	}
 	fmt.Println("bvlc done")
 	offset += bvlc.MarshalLen()
 
 	if err := npdu.UnmarshalBinary(b[offset:]); err != nil {
-		return nil, errors.Wrap(err, fmt.Sprintf("Parsing NPDU %x", b[offset:]))
+		return nil, 0, errors.Wrap(err, fmt.Sprintf("Parsing NPDU %x", b[offset:]))
 	}
 	fmt.Println("npdu done")
 	offset += npdu.MarshalLen()
@@ -64,35 +66,36 @@ func Parse(b []byte) (plumbing.BACnet, error) {
 
 	// why don't we create c using PDUType instead of b[offset]?
 	// then below cases don't have to be left-shifted
+	var t uint8
 	switch c {
 	case combine(plumbing.UnConfirmedReq<<4, services.ServiceUnconfirmedWhoIs):
-		bacnet = services.NewUnconfirmedWhoIs(&bvlc, &npdu)
+		bacnet, t = services.NewUnconfirmedWhoIs(&bvlc, &npdu)
 	case combine(plumbing.UnConfirmedReq<<4, services.ServiceUnconfirmedIAm):
-		bacnet = services.NewUnconfirmedIAm(&bvlc, &npdu)
+		bacnet, t = services.NewUnconfirmedIAm(&bvlc, &npdu)
 	case combine(plumbing.ConfirmedReq<<4, services.ServiceConfirmedReadProperty):
-		bacnet = services.NewConfirmedReadProperty(&bvlc, &npdu)
+		bacnet, t = services.NewConfirmedReadProperty(&bvlc, &npdu)
 	case combine(plumbing.ConfirmedReq<<4, services.ServiceConfirmedWriteProperty):
-		bacnet = services.NewConfirmedWriteProperty(&bvlc, &npdu)
+		bacnet, t = services.NewConfirmedWriteProperty(&bvlc, &npdu)
 	case combine(plumbing.ComplexAck<<4, 0):
-		bacnet = services.NewComplexACK(&bvlc, &npdu)
+		bacnet, t = services.NewComplexACK(&bvlc, &npdu)
 	case combine(plumbing.SimpleAck<<4, 0):
-		bacnet = services.NewSimpleACK(&bvlc, &npdu)
+		bacnet, t = services.NewSimpleACK(&bvlc, &npdu)
 	case combine(plumbing.Error<<4, 0):
-		bacnet = services.NewError(&bvlc, &npdu)
+		bacnet, t = services.NewError(&bvlc, &npdu)
 	default:
-		return nil, errors.Wrap(
+		return nil, 0, errors.Wrap(
 			common.ErrNotImplemented,
 			fmt.Sprintf("Parsing service: %x", c),
 		)
 	}
 
 	if err := bacnet.UnmarshalBinary(b); err != nil {
-		return nil, errors.Wrap(
+		return nil, 0, errors.Wrap(
 			err,
 			fmt.Sprintf("Parsing BACnet %x", b[offset:]),
 		)
 	}
 
 	fmt.Println("processed")
-	return bacnet, nil
+	return bacnet, t, nil
 }

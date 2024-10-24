@@ -50,7 +50,7 @@ func ComplexACKObjects(objectType uint16, instN uint32, propertyId uint8, value 
 	return objs
 }
 
-func NewComplexACK(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *ComplexACK {
+func NewComplexACK(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*ComplexACK, uint8) {
 	c := &ComplexACK{
 		BVLC: bvlc,
 		NPDU: npdu,
@@ -59,7 +59,7 @@ func NewComplexACK(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *ComplexACK {
 			objects.ObjectTypeAnalogOutput, 1, objects.PropertyIdPresentValue, 0)),
 	}
 	c.SetLength()
-	return c
+	return c, c.APDU.Type
 }
 
 func (c *ComplexACK) UnmarshalBinary(b []byte) error {
@@ -145,7 +145,7 @@ func (u *ComplexACK) SetLength() {
 func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 	decCACK := ComplexACKDec{}
 
-	if len(c.APDU.Objects) != 3 {
+	if len(c.APDU.Objects) < 3 {
 		return decCACK, errors.Wrap(
 			common.ErrWrongObjectCount,
 			fmt.Sprintf("failed to decode CACK - objects count: %d", len(c.APDU.Objects)),

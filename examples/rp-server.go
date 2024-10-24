@@ -55,11 +55,14 @@ func ReadPropertyServerExample(cmd *cobra.Command, args []string) {
 
 		log.Printf("read %d bytes from %s: %x\n", nBytes, remoteAddr, reqRaw[:nBytes])
 
-		serviceMsg, err := bacnet.Parse(reqRaw[:nBytes])
+		serviceMsg, t, err := bacnet.Parse(reqRaw[:nBytes])
 		if err != nil {
 			log.Fatalf("error parsing the received message: %v\n", err)
 		}
+        // switch between recieved messages
+		switch t {
 
+		}
 		readPropertyMessage, ok := serviceMsg.(*services.ConfirmedReadProperty)
 		if !ok {
 			log.Fatalf("we didn't receive a ReadProperty request: %x\n", reqRaw[:nBytes])

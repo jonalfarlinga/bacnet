@@ -40,7 +40,7 @@ func IAmObjects(insNum uint32, acceptedSize uint16, supportedSeg uint8, vendorID
 }
 
 // NewUnconfirmedIAm creates a UnconfirmedIam.
-func NewUnconfirmedIAm(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *UnconfirmedIAm {
+func NewUnconfirmedIAm(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*UnconfirmedIAm, uint8) {
 	u := &UnconfirmedIAm{
 		BVLC: bvlc,
 		NPDU: npdu,
@@ -49,7 +49,7 @@ func NewUnconfirmedIAm(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *UnconfirmedIAm
 	}
 	u.SetLength()
 
-	return u
+	return u, u.APDU.Type
 }
 
 // UnmarshalBinary sets the values retrieved from byte sequence in a UnconfirmedIAm frame.

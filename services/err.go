@@ -21,7 +21,6 @@ type ErrorDec struct {
 	ErrorCode  uint8
 }
 
-// IAmObjects creates an instance of UnconfirmedIAm objects.
 func ErrorObjects(errClass, errCode uint8) []objects.APDUPayload {
 	objs := make([]objects.APDUPayload, 2)
 
@@ -31,8 +30,7 @@ func ErrorObjects(errClass, errCode uint8) []objects.APDUPayload {
 	return objs
 }
 
-// NewUnconfirmedIAm creates a UnconfirmedIam.
-func NewError(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *Error {
+func NewError(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*Error, uint8) {
 	e := &Error{
 		BVLC: bvlc,
 		NPDU: npdu,
@@ -41,7 +39,7 @@ func NewError(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *Error {
 	}
 	e.SetLength()
 
-	return e
+	return e, e.APDU.Type
 }
 
 // UnmarshalBinary sets the values retrieved from byte sequence in a UnconfirmedIAm frame.

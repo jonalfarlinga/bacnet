@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jonalfarlinga/bacnet"
+	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/services"
 	"github.com/spf13/cobra"
 )
@@ -39,7 +40,7 @@ func whoIsExample(cmd *cobra.Command, args []string) {
 		log.Fatalf("Failed to resolve UDP address: %s", err)
 	}
 
-	_, err = net.InterfaceAddrs()
+	ifaceAddrs, err := net.InterfaceAddrs()
 	if err != nil {
 		log.Fatalf("couldn't get interface information: %v\n", err)
 	}
@@ -72,20 +73,23 @@ func whoIsExample(cmd *cobra.Command, args []string) {
 			if err != nil {
 				log.Fatalf("error reading incoming packet: %v\n", err)
 			}
-			// if !common.IsLocalAddr(ifaceAddrs, remoteAddr) {
-			// 	break
-			// }
-			// log.Printf("got our own broadcast, back to listening...\n")
+			if !common.IsLocalAddr(ifaceAddrs, remoteAddr) {
+				break
+			}
+			log.Printf("got our own broadcast, back to listening...\n")
 			break
 		}
 
 		log.Printf("read %d bytes from %s: %x\n", nBytes, remoteAddr, replyRaw[:nBytes])
 
-		serviceMsg, err := bacnet.Parse(replyRaw[:nBytes])
+		serviceMsg, t, err := bacnet.Parse(replyRaw[:nBytes])
 		if err != nil {
 			log.Fatalf("error parsing the received message: %v\n", err)
 		}
+        // switch between recieved messages
+		switch t {
 
+		}
 		iAmMessage, ok := serviceMsg.(*services.UnconfirmedIAm)
 		if !ok {
 			log.Fatalf("we didn't receive an IAm reply...\n")

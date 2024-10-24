@@ -38,7 +38,7 @@ func ConfirmedWritePropertyObjects(objectType uint16, instN uint32, propertyId u
 	return objs
 }
 
-func NewConfirmedWriteProperty(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *ConfirmedWriteProperty {
+func NewConfirmedWriteProperty(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*ConfirmedWriteProperty, uint8) {
 	c := &ConfirmedWriteProperty{
 		BVLC: bvlc,
 		NPDU: npdu,
@@ -46,7 +46,7 @@ func NewConfirmedWriteProperty(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *Confir
 	}
 	c.SetLength()
 
-	return c
+	return c, c.APDU.Type
 }
 
 func (c *ConfirmedWriteProperty) UnmarshalBinary(b []byte) error {

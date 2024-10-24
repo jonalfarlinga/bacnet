@@ -91,6 +91,6 @@ func (o *Object) MarshalTo(b []byte) error {
 
 // MarshalLen returns the serial length of Object.
 func (o *Object) MarshalLen() int {
-	fmt.Println(o.Data)
+	fmt.Println("marshallen", o.Data, 1 + int(o.Length))
 	return 1 + int(o.Length)
 }
