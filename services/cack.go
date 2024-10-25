@@ -64,7 +64,7 @@ func NewComplexACK(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*ComplexACK, uint8
 }
 
 func (c *ComplexACK) UnmarshalBinary(b []byte) error {
-	if l := len(b); l < c.MarshalLen() {
+	if l := len(b); l < c.MarshalLen()-2 {
 		return errors.Wrap(
 			common.ErrTooShortToParse,
 			fmt.Sprintf("failed to unmarshal CACK %v - marshal length %d binary length %d", c, c.MarshalLen(), l),
@@ -74,23 +74,26 @@ func (c *ComplexACK) UnmarshalBinary(b []byte) error {
 	var offset int = 0
 	if err := c.BVLC.UnmarshalBinary(b[offset:]); err != nil {
 		return errors.Wrap(
-			common.ErrTooShortToParse,
+			err,
 			fmt.Sprintf("unmarshalling CACK %v", c),
 		)
 	}
+	fmt.Println("BVLC", c.BVLC)
 	offset += c.BVLC.MarshalLen()
 
 	if err := c.NPDU.UnmarshalBinary(b[offset:]); err != nil {
 		return errors.Wrap(
-			common.ErrTooShortToParse,
+			err,
 			fmt.Sprintf("unmarshalling CACK %v", c),
 		)
 	}
+	fmt.Println("NPDU", c.NPDU, c.NPDU.MarshalLen())
 	offset += c.NPDU.MarshalLen()
 
+	fmt.Println(b[offset:])
 	if err := c.APDU.UnmarshalBinary(b[offset:]); err != nil {
 		return errors.Wrap(
-			common.ErrTooShortToParse,
+			err,
 			fmt.Sprintf("unmarshalling CACK %v", c),
 		)
 	}
@@ -185,6 +188,16 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 		} else {
 			log.Println("TagNumber", enc_obj.TagNumber)
 			switch enc_obj.TagNumber {
+			case objects.TagUnsignedInteger:
+				value, err := objects.DecUnsignedInteger(obj)
+				if err != nil {
+					return decCACK, errors.Wrap(err, "decode Application object case 0")
+				}
+				objs = append(objs, &objects.AppTag{
+					TagNumber: objects.TagUnsignedInteger,
+					TagClass:  false,
+					Value:     value,
+				})
 			case objects.TagReal:
 				value, err := objects.DecReal(obj)
 				if err != nil {
@@ -192,6 +205,7 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 				}
 				objs = append(objs, &objects.AppTag{
 					TagNumber: objects.TagReal,
+					TagClass:  false,
 					Value:     value,
 				})
 			case objects.TagCharacterString:
@@ -199,9 +213,9 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 				if err != nil {
 					return decCACK, errors.Wrap(err, "decode Application object case 7")
 				}
-				fmt.Printf("String value %s\n", value)
 				objs = append(objs, &objects.AppTag{
 					TagNumber: objects.TagCharacterString,
+					TagClass:  false,
 					Value:     value,
 				})
 			case objects.TagBACnetObjectIdentifier:
@@ -211,9 +225,9 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 				}
 				objs = append(objs, &objects.AppTag{
 					TagNumber: objects.TagBACnetObjectIdentifier,
-					Value:     fmt.Sprintf("objectid: %d instance id: %d", objId.ObjectType, objId.InstanceNumber),
+					TagClass:  false,
+					Value:     fmt.Sprintf("%d:%d", objId.ObjectType, objId.InstanceNumber),
 				})
-				log.Println("ObjectType", objId.ObjectType, "InstanceId", objId.InstanceNumber)
 			default:
 				log.Println("not encoded")
 			}

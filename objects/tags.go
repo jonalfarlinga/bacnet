@@ -13,11 +13,6 @@ type NamedTag struct {
 	Name      uint8
 }
 
-type AppTag struct {
-	TagNumber uint8
-	Value    interface{}
-}
-
 func NewNamedTag(number uint8, class bool, name uint8) *NamedTag {
 	return &NamedTag{
 		TagNumber: number,

@@ -129,9 +129,9 @@ func (u *UnconfirmedIAm) MarshalLen() int {
 	l := u.BVLC.MarshalLen()
 	m := l
 	l += u.NPDU.MarshalLen()
-	n := l-m
+	n := l - m
 	l += u.APDU.MarshalLen()
-	o := l-m-n
+	o := l - m - n
 	fmt.Println("mlen", l, m, n, o)
 
 	return l
@@ -161,7 +161,7 @@ func (u *UnconfirmedIAm) Decode() (UnconfirmedIAmDec, error) {
 			}
 			decIAm.DeviceId = objId.InstanceNumber
 		case 1:
-			maxLen, err := objects.DecUnisgnedInteger(obj)
+			maxLen, err := objects.DecUnsignedInteger(obj)
 			if err != nil {
 				return decIAm, errors.Wrap(err, "decoding UnconfirmedIAm")
 			}
@@ -173,7 +173,7 @@ func (u *UnconfirmedIAm) Decode() (UnconfirmedIAmDec, error) {
 			}
 			decIAm.SegmentationSupported = uint8(segSupport)
 		case 3:
-			vendorId, err := objects.DecUnisgnedInteger(obj)
+			vendorId, err := objects.DecUnsignedInteger(obj)
 			if err != nil {
 				return decIAm, errors.Wrap(err, "decoding UnconfirmedIAm")
 			}

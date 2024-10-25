@@ -17,4 +17,5 @@ var (
 	ErrWrongStructure          = errors.New("unexpected object structure")
 	ErrWrongPayload            = errors.New("wrong payload type")
 	ErrInvalidObjectType       = errors.New("invalid object type")
+	ErrInvalidData             = errors.New("invalid data")
 )

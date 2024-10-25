@@ -37,3 +37,40 @@ const (
 	ErrorCodeUnknownObject        uint8 = 31
 	ErrorCodeServiceRequestDenied uint8 = 29
 )
+
+func TagToString(t uint8) string {
+	switch t {
+		case TagNull:
+			return "Null"
+		case TagBoolean:
+			return "Boolean"
+		case TagUnsignedInteger:
+			return "UnsignedInteger"
+		case TagSignedInteger:
+			return "SignedInteger"
+		case TagReal:
+			return "Real"
+		case TagDouble:
+			return "Double"
+		case TagOctetString:
+			return "OctetString"
+		case TagCharacterString:
+			return "CharacterString"
+		case TagBitString:
+			return "BitString"
+		case TagEnumerated:
+			return "Enumerated"
+		case TagDate:
+			return "Date"
+		case TagTime:
+			return "Time"
+		case TagBACnetObjectIdentifier:
+			return "BACnetObjectIdentifier"
+		case TagOpening:
+			return "Opening"
+		case TagClosing:
+			return "Closing"
+		default:
+			return "Unknown"
+	}
+}

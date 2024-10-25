@@ -35,7 +35,7 @@ func EncString(value string) *Object {
 	return &newObj
 }
 
-func DecUnisgnedInteger(rawPayload APDUPayload) (uint32, error) {
+func DecUnsignedInteger(rawPayload APDUPayload) (uint32, error) {
 	rawObject, ok := rawPayload.(*Object)
 	if !ok {
 		return 0, errors.Wrap(

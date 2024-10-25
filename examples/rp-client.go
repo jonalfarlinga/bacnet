@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jonalfarlinga/bacnet"
+	"github.com/jonalfarlinga/bacnet/objects"
 	"github.com/jonalfarlinga/bacnet/plumbing"
 	"github.com/jonalfarlinga/bacnet/services"
 	"github.com/spf13/cobra"
@@ -99,7 +100,7 @@ func ReadPropertyClientExample(cmd *cobra.Command, args []string) {
 				decodedCACK.ObjectType, decodedCACK.InstanceId, decodedCACK.PropertyId,
 			)
 			for i, t := range decodedCACK.Tags {
-				out = fmt.Sprintf("%s\tTag %d:\n\t\tType: %d\n\t\tValue: %v\n", out, i, t.TagNumber, t.Value)
+				out = fmt.Sprintf("%s\tTag %d:\n\t\tType: %s\n\t\tValue: %v\n", out, i, objects.TagToString(t.TagNumber), t.Value)
 			}
 			log.Print(out)
 		case plumbing.Error:

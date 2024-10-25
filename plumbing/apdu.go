@@ -30,7 +30,9 @@ func NewAPDU(t, s uint8, objs []objects.APDUPayload) *APDU {
 
 // UnmarshalBinary sets the values retrieved from byte sequence in a APDU frame.
 func (a *APDU) UnmarshalBinary(b []byte) error {
-	if l := len(b); l < a.MarshalLen() {
+	fmt.Println("UnmarshalBinary: APDU")
+	if l := len(b); l < a.MarshalLen()-2 {
+		fmt.Println("UnmarshalBinary: APDU - MarshalLen:", a.MarshalLen(), "BinaryLen:", l)
 		return errors.Wrap(
 			common.ErrTooShortToParse,
 			fmt.Sprintf("failed to unmarshal APDU - marshal length %d binary length %d", a.MarshalLen(), l),
@@ -133,7 +135,6 @@ func (a *APDU) UnmarshalBinary(b []byte) error {
 
 				// Drop tags so that they don't get in the way!
 				if b[offset] == objects.TagOpening || b[offset] == objects.TagClosing {
-					fmt.Println("tag opening/closing", offset)
 					offset++
 					if offset >= len(b) {
 						break
@@ -144,7 +145,7 @@ func (a *APDU) UnmarshalBinary(b []byte) error {
 				o.Data = b[offset+1 : offset+int(o.Length)+1]
 				objs = append(objs, &o)
 				offset += int(o.Length) + 1
-				
+
 				if offset >= len(b) {
 					break
 				}
@@ -248,7 +249,6 @@ func (a *APDU) MarshalTo(b []byte) error {
 // MarshalLen returns the serial length of APDU.
 func (a *APDU) MarshalLen() int {
 	var l int = 0
-	fmt.Println("APDU Type", a.Type)
 	switch a.Type {
 	case ConfirmedReq:
 		l += 4
@@ -257,7 +257,6 @@ func (a *APDU) MarshalLen() int {
 	case UnConfirmedReq:
 		l += 2
 	}
-	fmt.Println("APDU Obj", a.Objects)
 	for _, o := range a.Objects {
 		l += o.MarshalLen()
 	}
