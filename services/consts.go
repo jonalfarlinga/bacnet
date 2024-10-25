@@ -43,4 +43,5 @@ const (
 	ServiceConfirmedVTData
 	ServiceConfirmedAuthenticate
 	ServiceConfirmedRequestKey
+	ServiceConfirmedReadRange
 )

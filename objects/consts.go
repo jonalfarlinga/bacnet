@@ -28,6 +28,7 @@ const (
 
 const (
 	PropertyIdPresentValue uint8 = 85
+	PropertyIdLogBuffer uint8 = 131
 )
 
 const (

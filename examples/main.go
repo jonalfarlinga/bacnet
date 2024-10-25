@@ -19,6 +19,7 @@ func init() {
 	rootCmd.AddCommand(ReadPropertyClientCmd)
 	rootCmd.AddCommand(WritePropertyServerCmd)
 	rootCmd.AddCommand(WritePropertyClientCmd)
+	rootCmd.AddCommand(ReadRangeClientCmd)
 
 	rootCmd.PersistentFlags().StringVar(&rAddr, "remote-address", "127.0.0.1:47808", "Remote IP:Port tuple to connect to.")
 	rootCmd.PersistentFlags().StringVar(&bAddr, "broadcast-address", ":47808", "Default broadcast address to bind to.")

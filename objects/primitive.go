@@ -68,6 +68,17 @@ func DecUnsignedInteger(rawPayload APDUPayload) (uint32, error) {
 	)
 }
 
+func EncUnsignedInteger(value uint) *Object {
+	switch {
+	case value <= 255:
+		return EncUnsignedInteger8(uint8(value))
+	case value <= 65535:
+		return EncUnsignedInteger16(uint16(value))
+	default:
+		panic("EncUnsignedInteger not implemented for 32-bit  and 64-bit")
+	}
+}
+
 func EncUnsignedInteger8(value uint8) *Object {
 	newObj := Object{}
 
@@ -202,6 +213,34 @@ func EncNull() *Object {
 	newObj.TagClass = false
 	newObj.Data = nil
 	newObj.Length = 0
+
+	return &newObj
+}
+
+func EncSignedInteger(value int) *Object {
+	newObj := Object{}
+
+	var data []byte
+	switch {
+	case value >= -128 && value <= 127:
+		data = make([]byte, 1)
+		data[0] = byte(value)
+	case value >= -32768 && value <= 32767:
+		data = make([]byte, 2)
+		binary.BigEndian.PutUint16(data, uint16(value))
+	case value >= -8388608 && value <= 8388607:
+		data = make([]byte, 3)
+		data[0] = byte(value >> 16)
+		binary.BigEndian.PutUint16(data[1:], uint16(value))
+	default:
+		data = make([]byte, 4)
+		binary.BigEndian.PutUint32(data, uint32(value))
+	}
+
+	newObj.TagNumber = TagSignedInteger
+	newObj.TagClass = false
+	newObj.Data = data
+	newObj.Length = uint8(len(data))
 
 	return &newObj
 }

@@ -16,30 +16,34 @@ import (
 )
 
 func init() {
-	ReadPropertyClientCmd.Flags().Uint16Var(&rpObjectType, "object-type", 0, "Object type to read.")
-	ReadPropertyClientCmd.Flags().Uint32Var(&rpInstanceId, "instance-id", 0, "Instance ID to read.") // Analog-input
-	ReadPropertyClientCmd.Flags().Uint8Var(&rpPropertyId, "property-id", 85, "Property ID to read.") // Current-value
-	ReadPropertyClientCmd.Flags().IntVar(&rpPeriod, "period", 1, "Period, in seconds, between requests.")
-	ReadPropertyClientCmd.Flags().IntVar(&rpN, "messages", 1, "Number of messages to send, being 0 unlimited.")
+	ReadRangeClientCmd.Flags().Uint16Var(&rrObjectType, "object-type", 0, "Object type to read.")
+	ReadRangeClientCmd.Flags().Uint32Var(&rrInstanceId, "instance-id", 0, "Instance ID to read.")  // Analog-input
+	ReadRangeClientCmd.Flags().Uint8Var(&rrPropertyId, "property-id", 131, "Property ID to read.") // Current-value
+	ReadRangeClientCmd.Flags().Uint16Var(&rrRangeStart, "range-start", 1, "Range start index.")
+	ReadRangeClientCmd.Flags().Int32Var(&rrLength, "length", 50, "Length of results.")
+	ReadRangeClientCmd.Flags().IntVar(&rrPeriod, "period", 1, "Period, in seconds, between requests.")
+	ReadRangeClientCmd.Flags().IntVar(&rrN, "messages", 1, "Number of messages to send, being 0 unlimited.")
 }
 
 var (
-	rpObjectType uint16
-	rpInstanceId uint32
-	rpPropertyId uint8
-	rpPeriod     int
-	rpN          int
+	rrObjectType uint16
+	rrInstanceId uint32
+	rrPropertyId uint8
+	rrRangeStart uint16
+	rrLength     int32
+	rrPeriod     int
+	rrN          int
 
-	ReadPropertyClientCmd = &cobra.Command{
-		Use:   "rpc",
-		Short: "Send ReadProperty requests.",
+	ReadRangeClientCmd = &cobra.Command{
+		Use:   "rrc",
+		Short: "Send ReadRange requests.",
 		Long:  "There's not much more really. This command sends a configurable ReadProperty request.",
 		Args:  argValidation,
-		Run:   ReadPropertyClientExample,
+		Run:   ReadRangeClientExample,
 	}
 )
 
-func ReadPropertyClientExample(cmd *cobra.Command, args []string) {
+func ReadRangeClientExample(cmd *cobra.Command, args []string) {
 	remoteUDPAddr, err := net.ResolveUDPAddr("udp", rAddr)
 	if err != nil {
 		log.Fatalf("Failed to resolve UDP address: %s", err)
@@ -51,20 +55,20 @@ func ReadPropertyClientExample(cmd *cobra.Command, args []string) {
 	}
 	defer listenConn.Close()
 
-	mReadProperty, err := bacnet.NewReadProperty(rpObjectType, rpInstanceId, rpPropertyId)
+	mReadRange, err := bacnet.NewReadRange(rrObjectType, rrInstanceId, rrPropertyId, rrRangeStart, rrLength)
 	if err != nil {
 		log.Fatalf("error generating initial ReadProperty: %v\n", err)
 	}
 
-	replyRaw := make([]byte, 1024)
+	replyRaw := make([]byte, 2048)
 	sentRequests := 0
 	for {
 		listenConn.SetDeadline(time.Now().Add(5 * time.Second))
-		if _, err := listenConn.WriteTo(mReadProperty, remoteUDPAddr); err != nil {
+		if _, err := listenConn.WriteTo(mReadRange, remoteUDPAddr); err != nil {
 			log.Fatalf("Failed to write the request: %s\n", err)
 		}
 
-		log.Printf("sent: %x", mReadProperty)
+		log.Printf("sent: %x", mReadRange)
 
 		nBytes, remoteAddr, err := listenConn.ReadFrom(replyRaw)
 		if err != nil {

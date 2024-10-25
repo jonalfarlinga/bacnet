@@ -29,6 +29,7 @@ func NewBVLC(f uint8) *BVLC {
 	bvlc := &BVLC{
 		Type:     BVLCType,
 		Function: f,
+		Length: 4,
 	}
 	return bvlc
 }

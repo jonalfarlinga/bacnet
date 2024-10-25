@@ -32,7 +32,6 @@ func NewObject(number uint8, class bool, data []byte) *Object {
 		Data:      data,
 	}
 
-	fmt.Println("NewObject created:", obj)
 	return obj
 }
 
@@ -50,7 +49,6 @@ func (o *Object) UnmarshalBinary(b []byte) error {
 	o.TagNumber = b[0] >> 4
 	o.TagClass = common.IntToBool(int(b[0]) & 0x8 >> 3)
 	o.Length = b[0] & 0x7
-	fmt.Println("UnmarshalBinary: TagNumber:", o.TagNumber, "TagClass:", o.TagClass, "Length:", o.Length)
 
 	if l := len(b); l < int(o.Length) {
 		return errors.Wrap(
@@ -60,8 +58,6 @@ func (o *Object) UnmarshalBinary(b []byte) error {
 	}
 
 	o.Data = b[1:o.Length]
-	fmt.Println("UnmarshalBinary: Data:", o.Data)
-
 	return nil
 }
 

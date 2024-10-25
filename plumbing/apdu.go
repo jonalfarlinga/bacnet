@@ -30,9 +30,7 @@ func NewAPDU(t, s uint8, objs []objects.APDUPayload) *APDU {
 
 // UnmarshalBinary sets the values retrieved from byte sequence in a APDU frame.
 func (a *APDU) UnmarshalBinary(b []byte) error {
-	fmt.Println("UnmarshalBinary: APDU")
 	if l := len(b); l < a.MarshalLen()-2 {
-		fmt.Println("UnmarshalBinary: APDU - MarshalLen:", a.MarshalLen(), "BinaryLen:", l)
 		return errors.Wrap(
 			common.ErrTooShortToParse,
 			fmt.Sprintf("failed to unmarshal APDU - marshal length %d binary length %d", a.MarshalLen(), l),
@@ -42,8 +40,12 @@ func (a *APDU) UnmarshalBinary(b []byte) error {
 	a.Type = b[0] >> 4
 	a.Flags = b[0] & 0x7
 
+	if b[0] & 0x2 == 1 {
+		a.MaxSeg = b[1] >> 4
+		a.MaxSize = b[1] & 0xF
+	}
+
 	var offset int = 1
-	fmt.Println("Type: ", a.Type)
 	switch a.Type {
 	case UnConfirmedReq:
 		a.Service = b[offset]
@@ -118,41 +120,40 @@ func (a *APDU) UnmarshalBinary(b []byte) error {
 		offset++
 		a.Service = b[offset]
 		offset++
-		if len(b) > 3 {
-			objs := []objects.APDUPayload{}
-			for {
-				o := objects.Object{
-					TagNumber: b[offset] >> 4,
-					TagClass:  common.IntToBool(int(b[offset]) & 0x8 >> 3),
-					Length:    b[offset] & 0x7,
-				}
+		objs := []objects.APDUPayload{}
+		for {
+			o := objects.Object{
+				TagNumber: b[offset] >> 4,
+				TagClass:  common.IntToBool(int(b[offset]) & 0x8 >> 3),
+				Length:    b[offset] & 0x7,
+			}
 
-				// Handle extended value case
-				if o.Length == 5 {
-					offset++
-					o.Length = uint8(b[offset])
-				}
+			// Handle extended value case
+			if o.Length == 5 {
+				offset++
+				o.Length = uint8(b[offset])
+			}
 
-				// Drop tags so that they don't get in the way!
-				if b[offset] == objects.TagOpening || b[offset] == objects.TagClosing {
-					offset++
-					if offset >= len(b) {
-						break
-					}
-					continue
-				}
-
-				o.Data = b[offset+1 : offset+int(o.Length)+1]
-				objs = append(objs, &o)
-				offset += int(o.Length) + 1
-
+			// Drop tags so that they don't get in the way!
+			if b[offset] == objects.TagOpening || b[offset] == objects.TagClosing {
+				offset++
 				if offset >= len(b) {
 					break
 				}
+				continue
 			}
-			fmt.Println("Objects: ", len(objs))
-			a.Objects = objs
+
+			o.Data = b[offset+1 : offset+int(o.Length)+1]
+			objs = append(objs, &o)
+			offset += int(o.Length) + 1
+
+			if offset >= len(b) {
+				break
+			}
 		}
+		a.Objects = objs
+	default:
+		panic("APDU Type not implemented.")
 	}
 
 	return nil
@@ -170,6 +171,11 @@ func (a *APDU) MarshalTo(b []byte) error {
 	var offset int = 0
 	b[offset] = a.Type<<4 | a.Flags
 	offset++
+
+	if a.Flags&0x2 == 1 {
+		b[offset] = (a.MaxSeg & 0x7 << 4) | (a.MaxSize & 0xF)
+		offset++
+	}
 
 	switch a.Type {
 	case UnConfirmedReq:

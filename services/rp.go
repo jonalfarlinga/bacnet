@@ -9,7 +9,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// UnconfirmedIAm is a BACnet message.
+// UnconfirmedReadProperty is a BACnet message.
 type ConfirmedReadProperty struct {
 	*plumbing.BVLC
 	*plumbing.NPDU
@@ -35,6 +35,7 @@ func NewConfirmedReadProperty(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*Confir
 	c := &ConfirmedReadProperty{
 		BVLC: bvlc,
 		NPDU: npdu,
+		
 		// TODO: Consider to implement parameter struct to an argment of New functions.
 		APDU: plumbing.NewAPDU(plumbing.ConfirmedReq, ServiceConfirmedReadProperty, ConfirmedReadPropertyObjects(
 			objects.ObjectTypeAnalogOutput, 1, objects.PropertyIdPresentValue)),

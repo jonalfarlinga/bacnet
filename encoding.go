@@ -1,6 +1,9 @@
 package bacnet
 
 import (
+	"fmt"
+	"log"
+
 	"github.com/jonalfarlinga/bacnet/plumbing"
 	"github.com/jonalfarlinga/bacnet/services"
 )
@@ -89,6 +92,27 @@ func NewReadProperty(objectType uint16, instanceNumber uint32, propertyId uint8)
 	c.APDU.InvokeID = 1
 	c.APDU.Objects = services.ConfirmedReadPropertyObjects(objectType, instanceNumber, propertyId)
 
+	c.SetLength()
+
+	return c.MarshalBinary()
+}
+
+func NewReadRange(objectType uint16, instanceNumber uint32, propertyId uint8, rangeStart uint16, length int32) ([]byte, error) {
+	bvlc := plumbing.NewBVLC(plumbing.BVLCFuncUnicast)
+	fmt.Println(bvlc.Length)
+	npdu := plumbing.NewNPDU(false, false, false, true)
+
+	c, _ := services.NewConfirmedReadRange(bvlc, npdu)
+
+	c.APDU.Service = services.ServiceConfirmedReadRange
+	c.APDU.MaxSeg = 7
+	c.APDU.MaxSize = 5
+	c.APDU.InvokeID = 1
+	c.APDU.Flags = 2
+	c.APDU.Objects = services.ConfirmedReadRangeObjects(objectType, instanceNumber, propertyId, rangeStart, length)
+
+	log.Printf("NewReadRange\n\tbvlc: Type: %d, Function: %d\n\tnpdu: DNET: %d, DLEN: %d, Hop: %d\n\tapdu: Service: %d, MaxSize: %d, InvokeID: %d\n\tobjects: %v\n",
+		c.BVLC.Type, c.BVLC.Function, c.NPDU.DNET, c.NPDU.DLEN, c.NPDU.Hop, c.APDU.Service, c.APDU.MaxSize, c.APDU.InvokeID, c.APDU.Objects)
 	c.SetLength()
 
 	return c.MarshalBinary()
