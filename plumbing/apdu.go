@@ -30,13 +30,12 @@ func NewAPDU(t, s uint8, objs []objects.APDUPayload) *APDU {
 
 // UnmarshalBinary sets the values retrieved from byte sequence in a APDU frame.
 func (a *APDU) UnmarshalBinary(b []byte) error {
-	if l := len(b); l < a.MarshalLen()-2 {
-		return errors.Wrap(
-			common.ErrTooShortToParse,
-			fmt.Sprintf("failed to unmarshal APDU - marshal length %d binary length %d", a.MarshalLen(), l),
-		)
-	}
-
+	// if l := len(b); l < a.MarshalLen()-2 {
+	// 	return errors.Wrap(
+	// 		common.ErrTooShortToParse,
+	// 		fmt.Sprintf("failed to unmarshal APDU - marshal length %d binary length %d", a.MarshalLen(), l),
+	// 	)
+	// }
 	a.Type = b[0] >> 4
 	a.Flags = b[0] & 0x7
 
@@ -63,6 +62,10 @@ func (a *APDU) UnmarshalBinary(b []byte) error {
 				if o.Length == 5 {
 					offset++
 					o.Length = uint8(b[offset])
+				} else if o.Length > 5 {
+					offset++
+					objs = append(objs, &o)
+					continue
 				}
 
 				o.Data = b[offset+1 : offset+int(o.Length)+1]
@@ -94,14 +97,9 @@ func (a *APDU) UnmarshalBinary(b []byte) error {
 				if o.Length == 5 {
 					offset++
 					o.Length = uint8(b[offset])
-				}
-
-				// Drop tags so that they don't get in the way!
-				if b[offset] == objects.TagOpening || b[offset] == objects.TagClosing {
+				} else if o.Length > 5 {
 					offset++
-					if offset >= len(b) {
-						break
-					}
+					objs = append(objs, &o)
 					continue
 				}
 
@@ -121,7 +119,7 @@ func (a *APDU) UnmarshalBinary(b []byte) error {
 		a.Service = b[offset]
 		offset++
 		objs := []objects.APDUPayload{}
-		for {
+		for offset < len(b) {
 			o := objects.Object{
 				TagNumber: b[offset] >> 4,
 				TagClass:  common.IntToBool(int(b[offset]) & 0x8 >> 3),
@@ -132,14 +130,9 @@ func (a *APDU) UnmarshalBinary(b []byte) error {
 			if o.Length == 5 {
 				offset++
 				o.Length = uint8(b[offset])
-			}
-
-			// Drop tags so that they don't get in the way!
-			if b[offset] == objects.TagOpening || b[offset] == objects.TagClosing {
+			} else if o.Length > 5 {
 				offset++
-				if offset >= len(b) {
-					break
-				}
+				objs = append(objs, &o)
 				continue
 			}
 

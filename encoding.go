@@ -1,7 +1,6 @@
 package bacnet
 
 import (
-	"fmt"
 	"log"
 
 	"github.com/jonalfarlinga/bacnet/plumbing"
@@ -99,7 +98,6 @@ func NewReadProperty(objectType uint16, instanceNumber uint32, propertyId uint8)
 
 func NewReadRange(objectType uint16, instanceNumber uint32, propertyId uint8, rangeStart uint16, length int32) ([]byte, error) {
 	bvlc := plumbing.NewBVLC(plumbing.BVLCFuncUnicast)
-	fmt.Println(bvlc.Length)
 	npdu := plumbing.NewNPDU(false, false, false, true)
 
 	c, _ := services.NewConfirmedReadRange(bvlc, npdu)

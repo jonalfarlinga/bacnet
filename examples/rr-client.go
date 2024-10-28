@@ -85,19 +85,19 @@ func ReadRangeClientExample(cmd *cobra.Command, args []string) {
 		// switch between recieved message type
 		switch t {
 		case plumbing.ComplexAck:
-			cACKEnc, ok := serviceMsg.(*services.ComplexACK)
+			cACK, ok := serviceMsg.(*services.ComplexACK)
 			if !ok {
 				log.Fatalf("we didn't receive a CACK reply...\n")
 			}
-			log.Printf("unmarshalled BVLC: %#v\n", cACKEnc.BVLC)
-			log.Printf("unmarshalled NPDU: %#v\n", cACKEnc.NPDU)
+			logBuffer := services.NewLogBufferCACK(cACK)
+			log.Printf("unmarshalled BVLC: %#v\n", logBuffer.BVLC)
+			log.Printf("unmarshalled NPDU: %#v\n", logBuffer.NPDU)
 
-			decodedCACK, err := cACKEnc.Decode()
+			decodedLogBuffer, err := logBuffer.Decode()
 			if err != nil {
-				log.Fatalf("couldn't decode the CACK reply: %v\n", err)
+				log.Fatalf("couldn't decode the LogBuffer reply: %v\n", err)
 			}
-			printCACK(&decodedCACK)
-
+			printLogBuffer(&decodedLogBuffer)
 		case plumbing.Error:
 			errEnc, ok := serviceMsg.(*services.Error)
 			if !ok {

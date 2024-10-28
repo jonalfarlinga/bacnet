@@ -180,6 +180,9 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 				if err != nil {
 					return decCACK, errors.Wrap(err, "decode Context object case 1")
 				}
+				if propId == objects.PropertyIdLogBuffer {
+					return decCACK, fmt.Errorf("PropertyIdLogBuffer")
+				}
 				decCACK.PropertyId = propId
 			}
 		} else {
@@ -214,6 +217,28 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 				}
 				objs = append(objs, &objects.AppTag{
 					TagNumber: objects.TagCharacterString,
+					TagClass:  false,
+					Length:    uint8(obj.MarshalLen()),
+					Value:     value,
+				})
+			case objects.TagDate:
+				value, err := objects.DecDate(obj)
+				if err != nil {
+					return decCACK, errors.Wrap(err, "decode Application object case 9")
+				}
+				objs = append(objs, &objects.AppTag{
+					TagNumber: objects.TagDate,
+					TagClass:  false,
+					Length:    uint8(obj.MarshalLen()),
+					Value:     value,
+				})
+			case objects.TagTime:
+				value, err := objects.DecTime(obj)
+				if err != nil {
+					return decCACK, errors.Wrap(err, "decode Application object case 8")
+				}
+				objs = append(objs, &objects.AppTag{
+					TagNumber: objects.TagTime,
 					TagClass:  false,
 					Length:    uint8(obj.MarshalLen()),
 					Value:     value,

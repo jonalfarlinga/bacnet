@@ -58,11 +58,8 @@ func NewConfirmedReadRange(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*Confirmed
 
 func (c *ConfirmedReadRange) MarshalLen() int {
 	l := c.BVLC.MarshalLen()
-	fmt.Println(l)
 	l += c.NPDU.MarshalLen()
-	fmt.Println(c.NPDU.MarshalLen())
 	l += c.APDU.MarshalLen()
-	fmt.Println(c.APDU.MarshalLen())
 
 	return l
 }
@@ -108,7 +105,6 @@ func (c *ConfirmedReadRange) UnmarshalBinary(b []byte) error {
 
 func (c *ConfirmedReadRange) MarshalBinary() ([]byte, error) {
 	b := make([]byte, c.MarshalLen())
-	fmt.Println(c.MarshalLen())
 	if err := c.MarshalTo(b); err != nil {
 		return nil, errors.Wrap(err, "failed to marshal binary")
 	}
@@ -126,19 +122,16 @@ func (c *ConfirmedReadRange) MarshalTo(b []byte) error {
 	if err := c.BVLC.MarshalTo(b[offset:]); err != nil {
 		return errors.Wrap(err, "failed to marshal ConfirmedRP")
 	}
-	fmt.Println(b[:offset+1])
 	offset += c.BVLC.MarshalLen()
 
 	if err := c.NPDU.MarshalTo(b[offset:]); err != nil {
 		return errors.Wrap(err, "failed to marshal ConfirmedRP")
 	}
-	fmt.Println(b[:offset+1])
 	offset += c.NPDU.MarshalLen()
 
 	if err := c.APDU.MarshalTo(b[offset:]); err != nil {
 		return errors.Wrap(err, "failed to marshal ConfirmedRP")
 	}
-	fmt.Println(b[:offset+1])
 
 	return nil
 }

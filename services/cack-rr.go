@@ -1,0 +1,377 @@
+package services
+
+import (
+	"fmt"
+	"log"
+
+	"github.com/jonalfarlinga/bacnet/common"
+	"github.com/jonalfarlinga/bacnet/objects"
+	"github.com/jonalfarlinga/bacnet/plumbing"
+	"github.com/pkg/errors"
+)
+
+// UnconfirmedIAm is a BACnet message.
+type LogBufferCACK struct {
+	*plumbing.BVLC
+	*plumbing.NPDU
+	*plumbing.APDU
+}
+
+type LogBufferCACKDec struct {
+	ObjectType uint16
+	InstanceId uint32
+	PropertyId uint8
+	FirstItem  bool
+	LastItem   bool
+	MoreItems  bool
+	ItemCount  uint32
+	Tags       []*objects.AppTag
+}
+
+type StatusFlags struct {
+	InAlarm      bool
+	Fault        bool
+	Overridden   bool
+	OutOfService bool
+}
+
+func LogBufferCACKObjects(instN uint32, propertyId uint8, value interface{}) []objects.APDUPayload {
+	objs := make([]objects.APDUPayload, 5)
+	objs[0] = objects.EncObjectIdentifier(true, 0, 20, instN)
+	objs[1] = objects.EncPropertyIdentifier(true, 1, propertyId)
+	flags := &objects.Object{
+		TagClass:  true,
+		TagNumber: 3,
+		Length:    2,
+		Data:      []byte{0x00},
+	}
+	objs[2] = objects.APDUPayload(flags)
+    count := &objects.Object{
+        TagClass:  true,
+        TagNumber: 4,
+        Length:    1,
+        Data:      []byte{0x00},
+    }
+	objs[3] = objects.APDUPayload(count)
+    objs[4] = objects.EncOpeningTag(5)
+
+	switch v := value.(type) {
+	case int:
+		objs[4] = objects.EncReal(float32(v))
+	case uint8:
+		objs[5] = objects.EncUnsignedInteger8(v)
+	case uint16:
+		objs[3] = objects.EncUnsignedInteger16(v)
+	case float32:
+		objs[3] = objects.EncReal(v)
+	case string:
+		objs[3] = objects.EncString(v)
+	default:
+		panic(
+			fmt.Sprintf("Unsupported PresentValue type %T", value),
+		)
+    }
+    objs[5] = objects.EncClosingTag(5)
+	return objs
+}
+
+func NewLogBufferCACK(cack *ComplexACK) *LogBufferCACK {
+	c := &LogBufferCACK{
+		BVLC: cack.BVLC,
+		NPDU: cack.NPDU,
+		// TODO: Consider to implement parameter struct to an argment of New functions.
+		APDU: cack.APDU,
+	}
+	c.SetLength()
+	return c
+}
+
+func (c *LogBufferCACK) UnmarshalBinary(b []byte) error {
+	// if l := len(b); l < c.MarshalLen()-2 {
+	// 	return errors.Wrap(
+	// 		common.ErrTooShortToParse,
+	// 		fmt.Sprintf("failed to unmarshal CACK %v - marshal length %d binary length %d", c, c.MarshalLen(), l),
+	// 	)
+	// }
+
+	// var offset int = 0
+	// if err := c.BVLC.UnmarshalBinary(b[offset:]); err != nil {
+	// 	return errors.Wrap(
+	// 		err,
+	// 		fmt.Sprintf("unmarshalling CACK %v", c),
+	// 	)
+	// }
+	// offset += c.BVLC.MarshalLen()
+
+	// if err := c.NPDU.UnmarshalBinary(b[offset:]); err != nil {
+	// 	return errors.Wrap(
+	// 		err,
+	// 		fmt.Sprintf("unmarshalling CACK %v", c),
+	// 	)
+	// }
+	// offset += c.NPDU.MarshalLen()
+
+	// if err := c.APDU.UnmarshalBinary(b[offset:]); err != nil {
+	// 	return errors.Wrap(
+	// 		err,
+	// 		fmt.Sprintf("unmarshalling CACK %v", c),
+	// 	)
+	// }
+
+	return nil
+}
+
+func (c *LogBufferCACK) MarshalBinary() ([]byte, error) {
+	b := make([]byte, c.MarshalLen())
+	if err := c.MarshalTo(b); err != nil {
+		return nil, errors.Wrap(err, "failed to marshal binary")
+	}
+	return b, nil
+}
+
+func (c *LogBufferCACK) MarshalTo(b []byte) error {
+	// if len(b) < c.MarshalLen() {
+	// 	return errors.Wrap(
+	// 		common.ErrTooShortToMarshalBinary,
+	// 		fmt.Sprintf("failed to marshal CACK %x - marshal length too short", b),
+	// 	)
+	// }
+	// var offset = 0
+	// if err := c.BVLC.MarshalTo(b[offset:]); err != nil {
+	// 	return errors.Wrap(err, "marshalling CACK")
+	// }
+	// offset += c.BVLC.MarshalLen()
+
+	// if err := c.NPDU.MarshalTo(b[offset:]); err != nil {
+	// 	return errors.Wrap(err, "marshalling CACK")
+	// }
+	// offset += c.NPDU.MarshalLen()
+
+	// if err := c.APDU.MarshalTo(b[offset:]); err != nil {
+	// 	return errors.Wrap(err, "marshalling CACK")
+	// }
+
+	return nil
+}
+
+func (c *LogBufferCACK) MarshalLen() int {
+	l := c.BVLC.MarshalLen()
+	l += c.NPDU.MarshalLen()
+	l += c.APDU.MarshalLen()
+
+	return l
+}
+
+func (u *LogBufferCACK) SetLength() {
+	u.BVLC.Length = uint16(u.MarshalLen())
+}
+
+func (c *LogBufferCACK) Decode() (LogBufferCACKDec, error) {
+	decCACK := LogBufferCACKDec{}
+
+	if len(c.APDU.Objects) < 3 {
+		return decCACK, errors.Wrap(
+			common.ErrWrongObjectCount,
+			fmt.Sprintf("failed to decode CACK - objects count: %d", len(c.APDU.Objects)),
+		)
+	}
+
+	context := []uint8{8}
+	objs := make([]*objects.AppTag, 0)
+	for i, obj := range c.APDU.Objects {
+		enc_obj, ok := obj.(*objects.Object)
+		if !ok {
+			return decCACK, errors.Wrap(
+				common.ErrInvalidObjectType,
+				fmt.Sprintf("LogBufferCACK object at index %d is not Object type", i),
+			)
+		}
+		// log.Printf(
+		// 	"\tObject i %d tagnum %d tagclass %v data %x\n",
+		// 	i, enc_obj.TagNumber, enc_obj.TagClass, enc_obj.Data,
+		// )
+
+		// add or remove context based on opening and closing tags
+		if enc_obj.Length == 6 {
+			context = append(context, enc_obj.TagNumber)
+			continue
+		}
+		if enc_obj.Length == 7 {
+			if len(context) == 0 {
+				return decCACK, errors.Wrap(
+					common.ErrInvalidObjectType,
+					fmt.Sprintf("LogBufferCACK object at index %d has mismatched closing tag", i),
+				)
+			}
+			context = context[:len(context)-1]
+			continue
+		}
+
+		if enc_obj.TagClass {
+			c := combine(context[len(context)-1], enc_obj.TagNumber)
+			switch c {
+			case combine(8, 0):
+				objId, err := objects.DecObjectIdentifier(obj)
+				if err != nil {
+					return decCACK, errors.Wrap(err, "decode Context object case 0")
+				}
+				decCACK.ObjectType = objId.ObjectType
+				decCACK.InstanceId = objId.InstanceNumber
+			case combine(8, 1):
+				propId, err := objects.DecPropertyIdentifier(obj)
+				if err != nil {
+					return decCACK, errors.Wrap(err, "decode Context object case 1")
+				}
+				decCACK.PropertyId = propId
+			case combine(8, 3):
+				first, last, more, err := decResultsFlag(obj)
+				if err != nil {
+                    return decCACK, errors.Wrap(err, "decode Context object case 3")
+				}
+				decCACK.FirstItem = first
+				decCACK.LastItem = last
+				decCACK.MoreItems = more
+			case combine(8, 4):
+				data, err := objects.DecUnsignedInteger(obj)
+				if err != nil {
+                    return decCACK, errors.Wrap(err, "decode Context object case 4")
+				}
+				decCACK.ItemCount = data
+			case combine(1, 2):
+				value, err := objects.DecReal(obj)
+				if err != nil {
+                    return decCACK, errors.Wrap(err, "decode Context object case 2")
+				}
+				objs = append(objs, &objects.AppTag{
+                    TagNumber: 2,
+					TagClass:  true,
+					Length:    uint8(obj.MarshalLen()),
+					Value:     value,
+				})
+            case combine(5, 2):
+                value, err := decStatusFlags(obj)
+                if err != nil {
+                    return decCACK, errors.Wrap(err, "decode Context object case 2")
+                }
+                objs = append(objs, &objects.AppTag{
+                    TagNumber: 2,
+                    TagClass:  true,
+                    Length:    uint8(obj.MarshalLen()),
+                    Value:     value,
+                })
+			default:
+			}
+		} else {
+			// log.Println("TagNumber", enc_obj.TagNumber)
+			switch enc_obj.TagNumber {
+			case objects.TagUnsignedInteger:
+				value, err := objects.DecUnsignedInteger(obj)
+				if err != nil {
+					return decCACK, errors.Wrap(err, "decode Application object case 0")
+				}
+				objs = append(objs, &objects.AppTag{
+					TagNumber: objects.TagUnsignedInteger,
+					TagClass:  false,
+					Length:    uint8(obj.MarshalLen()),
+					Value:     value,
+				})
+			case objects.TagReal:
+				value, err := objects.DecReal(obj)
+				if err != nil {
+					return decCACK, errors.Wrap(err, "decode Application object case 4")
+				}
+				objs = append(objs, &objects.AppTag{
+					TagNumber: objects.TagReal,
+					TagClass:  false,
+					Length:    uint8(obj.MarshalLen()),
+					Value:     value,
+				})
+			case objects.TagCharacterString:
+				value, err := objects.DecString(obj)
+				if err != nil {
+					return decCACK, errors.Wrap(err, "decode Application object case 7")
+				}
+				objs = append(objs, &objects.AppTag{
+					TagNumber: objects.TagCharacterString,
+					TagClass:  false,
+					Length:    uint8(obj.MarshalLen()),
+					Value:     value,
+				})
+			case objects.TagDate:
+				value, err := objects.DecDate(obj)
+				if err != nil {
+					return decCACK, errors.Wrap(err, "decode Application object case 9")
+				}
+				objs = append(objs, &objects.AppTag{
+					TagNumber: objects.TagDate,
+					TagClass:  false,
+					Length:    uint8(obj.MarshalLen()),
+					Value:     value,
+				})
+			case objects.TagTime:
+				value, err := objects.DecTime(obj)
+				if err != nil {
+					return decCACK, errors.Wrap(err, "decode Application object case 8")
+				}
+				objs = append(objs, &objects.AppTag{
+					TagNumber: objects.TagTime,
+					TagClass:  false,
+					Length:    uint8(obj.MarshalLen()),
+					Value:     value,
+				})
+			case objects.TagBACnetObjectIdentifier:
+				objId, err := objects.DecObjectIdentifier(obj)
+				if err != nil {
+					return decCACK, errors.Wrap(err, "decode Context object case 0")
+				}
+				objs = append(objs, &objects.AppTag{
+					TagNumber: objects.TagBACnetObjectIdentifier,
+					TagClass:  false,
+					Length:    uint8(obj.MarshalLen()),
+					Value:     fmt.Sprintf("%d:%d", objId.ObjectType, objId.InstanceNumber),
+				})
+			default:
+				log.Println("\tnot encoded")
+			}
+		}
+		decCACK.Tags = objs
+	}
+
+	return decCACK, nil
+}
+
+func decResultsFlag(obj objects.APDUPayload) (bool, bool, bool, error) {
+	var first, last, more bool
+	enc_obj, ok := obj.(*objects.Object)
+	if !ok {
+		return false, false, false, common.ErrInvalidObjectType
+	}
+	first = enc_obj.Data[1]&0x80 == 0x80
+	last = enc_obj.Data[1]&0x40 == 0x40
+	more = enc_obj.Data[1]&0x20 == 0x20
+	return first, last, more, nil
+}
+
+func decStatusFlags(obj objects.APDUPayload) (StatusFlags, error) {
+	var status StatusFlags
+	enc_obj, ok := obj.(*objects.Object)
+	if !ok {
+		return status, common.ErrInvalidObjectType
+	}
+	status.InAlarm = enc_obj.Data[1]&0x80 == 0x80
+	status.Fault = enc_obj.Data[1]&0x40 == 0x40
+	status.Overridden = enc_obj.Data[1]&0x20 == 0x20
+	status.OutOfService = enc_obj.Data[1]&0x10 == 0x10
+	return status, nil
+}
+
+func combine(t, s uint8) uint16 {
+	// 0001, 0010
+	// return:
+	// 0001 0000
+	// BINOR
+	// 0000 0010
+	// _________
+	// 0001 0010
+	return uint16(t)<<8 | uint16(s)
+}

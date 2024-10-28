@@ -1,5 +1,7 @@
 package objects
 
+import "fmt"
+
 // Tag number
 const (
 	TagNull uint8 = iota
@@ -15,8 +17,6 @@ const (
 	TagDate
 	TagTime
 	TagBACnetObjectIdentifier
-	TagOpening uint8 = 0x3E
-	TagClosing uint8 = 0x3F
 )
 
 // Be sure to check ../bacnet-stack/src/bacnet/bacenum.h for more!
@@ -28,7 +28,7 @@ const (
 
 const (
 	PropertyIdPresentValue uint8 = 85
-	PropertyIdLogBuffer uint8 = 131
+	PropertyIdLogBuffer    uint8 = 131
 )
 
 const (
@@ -39,39 +39,38 @@ const (
 	ErrorCodeServiceRequestDenied uint8 = 29
 )
 
-func TagToString(t uint8) string {
-	switch t {
-		case TagNull:
-			return "Null"
-		case TagBoolean:
-			return "Boolean"
-		case TagUnsignedInteger:
-			return "UnsignedInteger"
-		case TagSignedInteger:
-			return "SignedInteger"
-		case TagReal:
-			return "Real"
-		case TagDouble:
-			return "Double"
-		case TagOctetString:
-			return "OctetString"
-		case TagCharacterString:
-			return "CharacterString"
-		case TagBitString:
-			return "BitString"
-		case TagEnumerated:
-			return "Enumerated"
-		case TagDate:
-			return "Date"
-		case TagTime:
-			return "Time"
-		case TagBACnetObjectIdentifier:
-			return "BACnetObjectIdentifier"
-		case TagOpening:
-			return "Opening"
-		case TagClosing:
-			return "Closing"
-		default:
-			return "Unknown"
+func TagToString(t *AppTag) string {
+	if t.TagClass {
+		return fmt.Sprintf("Context %v", t.TagNumber)
+	}
+	switch t.TagNumber {
+	case TagNull:
+		return "Null"
+	case TagBoolean:
+		return "Boolean"
+	case TagUnsignedInteger:
+		return "UnsignedInteger"
+	case TagSignedInteger:
+		return "SignedInteger"
+	case TagReal:
+		return "Real"
+	case TagDouble:
+		return "Double"
+	case TagOctetString:
+		return "OctetString"
+	case TagCharacterString:
+		return "CharacterString"
+	case TagBitString:
+		return "BitString"
+	case TagEnumerated:
+		return "Enumerated"
+	case TagDate:
+		return "Date"
+	case TagTime:
+		return "Time"
+	case TagBACnetObjectIdentifier:
+		return "BACnetObjectIdentifier"
+	default:
+		return "Unknown"
 	}
 }

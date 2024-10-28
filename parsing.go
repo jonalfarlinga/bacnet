@@ -97,6 +97,6 @@ func Parse(b []byte) (plumbing.BACnet, uint8, error) {
 		)
 	}
 
-	log.Println("message parsed")
+	// log.Println("message parsed")
 	return bacnet, t, nil
 }

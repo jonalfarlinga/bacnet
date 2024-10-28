@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"time"
 
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/pkg/errors"
@@ -44,7 +45,7 @@ func DecUnsignedInteger(rawPayload APDUPayload) (uint32, error) {
 		)
 	}
 
-	if rawObject.TagNumber != TagUnsignedInteger || rawObject.TagClass {
+	if rawObject.TagNumber != TagUnsignedInteger && !rawObject.TagClass {
 		return 0, errors.Wrap(
 			common.ErrWrongStructure,
 			fmt.Sprintf("failed to decode UnsignedInteger - wrong tag number - %v", rawObject.TagNumber),
@@ -116,7 +117,7 @@ func DecEnumerated(rawPayload APDUPayload) (uint32, error) {
 		)
 	}
 
-	if rawObject.TagNumber != TagEnumerated || rawObject.TagClass {
+	if rawObject.TagNumber != TagEnumerated && !rawObject.TagClass {
 		return 0, errors.Wrap(
 			common.ErrWrongStructure,
 			fmt.Sprintf("failed to decode EnumObject - wrong tag number - %v", rawObject.TagNumber),
@@ -163,7 +164,7 @@ func DecReal(rawPayload APDUPayload) (float32, error) {
 		)
 	}
 
-	if rawObject.TagNumber != TagReal {
+	if rawObject.TagNumber != TagEnumerated && !rawObject.TagClass {
 		return 0, errors.Wrap(
 			common.ErrWrongStructure,
 			fmt.Sprintf("failed to decode real - wrong tag number - %v", rawObject.TagNumber),
@@ -196,7 +197,7 @@ func DecNull(rawPayload APDUPayload) (bool, error) {
 		)
 	}
 
-	if rawObject.TagNumber != TagReal {
+	if rawObject.TagNumber != TagEnumerated && !rawObject.TagClass {
 		return false, errors.Wrap(
 			common.ErrWrongStructure,
 			fmt.Sprintf("failed to decode Null - wrong tag number - %v", rawObject.TagNumber),
@@ -243,4 +244,59 @@ func EncSignedInteger(value int) *Object {
 	newObj.Length = uint8(len(data))
 
 	return &newObj
+}
+
+func DecTime(rawPayload APDUPayload) (time.Time, error) {
+	rawObject, ok := rawPayload.(*Object)
+	if !ok {
+		return time.Time{}, errors.Wrap(
+			common.ErrWrongPayload,
+			fmt.Sprintf("failed to decode Time - %v", rawPayload),
+		)
+	}
+	
+	if rawObject.Length != 4 {
+		return time.Time{}, errors.Wrap(
+			common.ErrWrongStructure,
+			fmt.Sprintf("failed to decode Time - wrong length - %v", rawObject.Length),
+		)
+	}
+
+	hour := int(rawObject.Data[0])
+	minute := int(rawObject.Data[1])
+	second := int(rawObject.Data[2])
+	hundredths := int(rawObject.Data[3])
+
+	return time.Date(0, 1, 1, hour, minute, second, hundredths*10_000_000, time.UTC), nil
+}
+
+func DecDate(rawPayload APDUPayload) (time.Time, error) {
+	rawObject, ok := rawPayload.(*Object)
+	if !ok {
+		return time.Time{}, errors.Wrap(
+			common.ErrWrongPayload,
+			fmt.Sprintf("failed to decode Date - %v", rawPayload),
+		)
+	}
+	if rawObject.Length != 4 {
+		return time.Time{}, errors.Wrap(
+			common.ErrWrongStructure,
+			fmt.Sprintf("failed to decode Date - wrong length - %v", rawObject.Length),
+		)
+	}
+
+	year := int(rawObject.Data[0]) + 1900
+	month := time.Month(rawObject.Data[1])
+	day := int(rawObject.Data[2])
+	weekday := time.Weekday(rawObject.Data[3])
+
+	date := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
+	if weekday != time.Sunday && date.Weekday() != weekday {
+		return time.Time{}, errors.Wrap(
+			common.ErrInvalidData,
+			fmt.Sprintf("failed to decode Date - weekday mismatch - %v", weekday),
+		)
+	}
+
+	return date, nil
 }
