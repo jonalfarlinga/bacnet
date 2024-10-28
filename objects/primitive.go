@@ -164,7 +164,7 @@ func DecReal(rawPayload APDUPayload) (float32, error) {
 		)
 	}
 
-	if rawObject.TagNumber != TagEnumerated && !rawObject.TagClass {
+	if rawObject.TagNumber != TagReal && !rawObject.TagClass {
 		return 0, errors.Wrap(
 			common.ErrWrongStructure,
 			fmt.Sprintf("failed to decode real - wrong tag number - %v", rawObject.TagNumber),
@@ -254,7 +254,7 @@ func DecTime(rawPayload APDUPayload) (time.Time, error) {
 			fmt.Sprintf("failed to decode Time - %v", rawPayload),
 		)
 	}
-	
+
 	if rawObject.Length != 4 {
 		return time.Time{}, errors.Wrap(
 			common.ErrWrongStructure,

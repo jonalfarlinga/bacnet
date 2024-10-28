@@ -2,7 +2,6 @@ package bacnet
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/plumbing"

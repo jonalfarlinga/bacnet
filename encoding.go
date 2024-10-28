@@ -1,8 +1,6 @@
 package bacnet
 
 import (
-	"log"
-
 	"github.com/jonalfarlinga/bacnet/plumbing"
 	"github.com/jonalfarlinga/bacnet/services"
 )
