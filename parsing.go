@@ -38,17 +38,17 @@ func Parse(b []byte) (plumbing.BACnet, uint8, error) {
 	var bacnet plumbing.BACnet
 
 	offset := 0
-	log.Println("parsing")
+	// log.Println("parsing")
 	if err := bvlc.UnmarshalBinary(b); err != nil {
 		return nil, 0, errors.Wrap(err, fmt.Sprintf("Parsing BVLC %x", b))
 	}
-	log.Println("bvlc done")
+	// log.Println("bvlc done")
 	offset += bvlc.MarshalLen()
 
 	if err := npdu.UnmarshalBinary(b[offset:]); err != nil {
 		return nil, 0, errors.Wrap(err, fmt.Sprintf("Parsing NPDU %x", b[offset:]))
 	}
-	log.Println("npdu done")
+	// log.Println("npdu done")
 	offset += npdu.MarshalLen()
 
 	var c uint16

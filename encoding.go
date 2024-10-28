@@ -109,8 +109,6 @@ func NewReadRange(objectType uint16, instanceNumber uint32, propertyId uint8, ra
 	c.APDU.Flags = 2
 	c.APDU.Objects = services.ConfirmedReadRangeObjects(objectType, instanceNumber, propertyId, rangeStart, length)
 
-	log.Printf("NewReadRange\n\tbvlc: Type: %d, Function: %d\n\tnpdu: DNET: %d, DLEN: %d, Hop: %d\n\tapdu: Service: %d, MaxSize: %d, InvokeID: %d\n\tobjects: %v\n",
-		c.BVLC.Type, c.BVLC.Function, c.NPDU.DNET, c.NPDU.DLEN, c.NPDU.Hop, c.APDU.Service, c.APDU.MaxSize, c.APDU.InvokeID, c.APDU.Objects)
 	c.SetLength()
 
 	return c.MarshalBinary()
