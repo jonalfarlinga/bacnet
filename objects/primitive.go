@@ -289,12 +289,14 @@ func DecDate(rawPayload APDUPayload) (time.Time, error) {
 	month := time.Month(rawObject.Data[1])
 	day := int(rawObject.Data[2])
 	weekday := time.Weekday(rawObject.Data[3])
-
+	if weekday == 7 {
+		weekday = time.Weekday(0)
+	}
 	date := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
-	if weekday != time.Sunday && date.Weekday() != weekday {
+	if date.Weekday() != weekday {
 		return time.Time{}, errors.Wrap(
 			common.ErrInvalidData,
-			fmt.Sprintf("failed to decode Date - weekday mismatch - %v", weekday),
+			fmt.Sprintf("failed to decode Date - weekday mismatch - %v %v", weekday, date.Weekday(),),
 		)
 	}
 
