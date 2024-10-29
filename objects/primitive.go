@@ -188,23 +188,23 @@ func EncReal(value float32) *Object {
 	return &newObj
 }
 
-func DecNull(rawPayload APDUPayload) (bool, error) {
+func DecNull(rawPayload APDUPayload) error {
 	rawObject, ok := rawPayload.(*Object)
 	if !ok {
-		return false, errors.Wrap(
+		return errors.Wrap(
 			common.ErrWrongPayload,
 			fmt.Sprintf("failed to decode Null - %v", rawPayload),
 		)
 	}
 
-	if rawObject.TagNumber != TagEnumerated && !rawObject.TagClass {
-		return false, errors.Wrap(
+	if rawObject.TagNumber != TagNull && !rawObject.TagClass {
+		return errors.Wrap(
 			common.ErrWrongStructure,
 			fmt.Sprintf("failed to decode Null - wrong tag number - %v", rawObject.TagNumber),
 		)
 	}
 
-	return rawObject.TagNumber == TagNull && !rawObject.TagClass && rawObject.Length == 0, nil
+	return nil
 }
 
 func EncNull() *Object {

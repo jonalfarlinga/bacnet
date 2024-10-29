@@ -2,7 +2,6 @@ package services
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
@@ -46,14 +45,14 @@ func LogBufferCACKObjects(instN uint32, propertyId uint8, value interface{}) []o
 		Data:      []byte{0x00},
 	}
 	objs[2] = objects.APDUPayload(flags)
-    count := &objects.Object{
-        TagClass:  true,
-        TagNumber: 4,
-        Length:    1,
-        Data:      []byte{0x00},
-    }
+	count := &objects.Object{
+		TagClass:  true,
+		TagNumber: 4,
+		Length:    1,
+		Data:      []byte{0x00},
+	}
 	objs[3] = objects.APDUPayload(count)
-    objs[4] = objects.EncOpeningTag(5)
+	objs[4] = objects.EncOpeningTag(5)
 
 	switch v := value.(type) {
 	case int:
@@ -70,8 +69,8 @@ func LogBufferCACKObjects(instN uint32, propertyId uint8, value interface{}) []o
 		panic(
 			fmt.Sprintf("Unsupported PresentValue type %T", value),
 		)
-    }
-    objs[5] = objects.EncClosingTag(5)
+	}
+	objs[5] = objects.EncClosingTag(5)
 	return objs
 }
 
@@ -226,7 +225,7 @@ func (c *LogBufferCACK) Decode() (LogBufferCACKDec, error) {
 			case combine(8, 3):
 				first, last, more, err := decResultsFlag(obj)
 				if err != nil {
-                    return decCACK, errors.Wrap(err, "decode Context object case 3")
+					return decCACK, errors.Wrap(err, "decode Context object case 3")
 				}
 				decCACK.FirstItem = first
 				decCACK.LastItem = last
@@ -234,105 +233,40 @@ func (c *LogBufferCACK) Decode() (LogBufferCACKDec, error) {
 			case combine(8, 4):
 				data, err := objects.DecUnsignedInteger(obj)
 				if err != nil {
-                    return decCACK, errors.Wrap(err, "decode Context object case 4")
+					return decCACK, errors.Wrap(err, "decode Context object case 4")
 				}
 				decCACK.ItemCount = data
 			case combine(1, 2):
 				value, err := objects.DecReal(obj)
 				if err != nil {
-                    return decCACK, errors.Wrap(err, "decode Context object case 2")
+					return decCACK, errors.Wrap(err, "decode Context object case 2")
 				}
 				objs = append(objs, &objects.AppTag{
-                    TagNumber: 2,
+					TagNumber: 2,
 					TagClass:  true,
 					Length:    uint8(obj.MarshalLen()),
 					Value:     value,
 				})
-            case combine(5, 2):
-                value, err := decStatusFlags(obj)
-                if err != nil {
-                    return decCACK, errors.Wrap(err, "decode Context object case 2")
-                }
-                objs = append(objs, &objects.AppTag{
-                    TagNumber: 2,
-                    TagClass:  true,
-                    Length:    uint8(obj.MarshalLen()),
-                    Value:     value,
-                })
+			case combine(5, 2):
+				value, err := decStatusFlags(obj)
+				if err != nil {
+					return decCACK, errors.Wrap(err, "decode Context object case 2")
+				}
+				objs = append(objs, &objects.AppTag{
+					TagNumber: 2,
+					TagClass:  true,
+					Length:    uint8(obj.MarshalLen()),
+					Value:     value,
+				})
 			default:
 			}
 		} else {
 			// log.Println("TagNumber", enc_obj.TagNumber)
-			switch enc_obj.TagNumber {
-			case objects.TagUnsignedInteger:
-				value, err := objects.DecUnsignedInteger(obj)
-				if err != nil {
-					return decCACK, errors.Wrap(err, "decode Application object case 0")
-				}
-				objs = append(objs, &objects.AppTag{
-					TagNumber: objects.TagUnsignedInteger,
-					TagClass:  false,
-					Length:    uint8(obj.MarshalLen()),
-					Value:     value,
-				})
-			case objects.TagReal:
-				value, err := objects.DecReal(obj)
-				if err != nil {
-					return decCACK, errors.Wrap(err, "decode Application object case 4")
-				}
-				objs = append(objs, &objects.AppTag{
-					TagNumber: objects.TagReal,
-					TagClass:  false,
-					Length:    uint8(obj.MarshalLen()),
-					Value:     value,
-				})
-			case objects.TagCharacterString:
-				value, err := objects.DecString(obj)
-				if err != nil {
-					return decCACK, errors.Wrap(err, "decode Application object case 7")
-				}
-				objs = append(objs, &objects.AppTag{
-					TagNumber: objects.TagCharacterString,
-					TagClass:  false,
-					Length:    uint8(obj.MarshalLen()),
-					Value:     value,
-				})
-			case objects.TagDate:
-				value, err := objects.DecDate(obj)
-				if err != nil {
-					return decCACK, errors.Wrap(err, "decode Application object case 9")
-				}
-				objs = append(objs, &objects.AppTag{
-					TagNumber: objects.TagDate,
-					TagClass:  false,
-					Length:    uint8(obj.MarshalLen()),
-					Value:     value,
-				})
-			case objects.TagTime:
-				value, err := objects.DecTime(obj)
-				if err != nil {
-					return decCACK, errors.Wrap(err, "decode Application object case 8")
-				}
-				objs = append(objs, &objects.AppTag{
-					TagNumber: objects.TagTime,
-					TagClass:  false,
-					Length:    uint8(obj.MarshalLen()),
-					Value:     value,
-				})
-			case objects.TagBACnetObjectIdentifier:
-				objId, err := objects.DecObjectIdentifier(obj)
-				if err != nil {
-					return decCACK, errors.Wrap(err, "decode Context object case 0")
-				}
-				objs = append(objs, &objects.AppTag{
-					TagNumber: objects.TagBACnetObjectIdentifier,
-					TagClass:  false,
-					Length:    uint8(obj.MarshalLen()),
-					Value:     fmt.Sprintf("%d:%d", objId.ObjectType, objId.InstanceNumber),
-				})
-			default:
-				log.Println("\tnot encoded")
+			tag, err := decodeTags(enc_obj, &obj)
+			if err != nil {
+				return decCACK, errors.Wrap(err, "decode Application Tag")
 			}
+			objs = append(objs, tag)
 		}
 		decCACK.Tags = objs
 	}

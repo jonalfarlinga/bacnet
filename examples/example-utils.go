@@ -47,3 +47,17 @@ func printLogBuffer(d *services.LogBufferCACKDec) {
 	}
 	log.Print(out)
 }
+
+func printIAm(d *services.UnconfirmedIAmDec) {
+	out := "Decoded IAm reply:\n"
+
+	out += fmt.Sprintf(
+		"\n\tObject Type: %d\n\tInstance Id: %d\n\tMax APDU Length: %d\n",
+		d.DeviceType, d.InstanceNumber, d.MaxAPDULength,
+	)
+	out += fmt.Sprintf(
+		"\tSegmentation Supported: %d\n\tVendor Id: %d\n",
+		d.SegmentationSupported, d.VendorId,
+	)
+	log.Print(out)
+}

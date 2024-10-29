@@ -86,7 +86,7 @@ func whoIsExample(cmd *cobra.Command, args []string) {
 		if err != nil {
 			log.Fatalf("error parsing the received message: %v\n", err)
 		}
-        // switch between recieved messages
+		// switch between recieved messages
 		switch t {
 
 		}
@@ -103,10 +103,7 @@ func whoIsExample(cmd *cobra.Command, args []string) {
 			log.Fatalf("couldn't decode the IAm reply: %v\n", err)
 		}
 
-		log.Printf(
-			"decoded IAm reply:\n\tDevice ID: %d\n\tMax. APDU Length: %d\n\tSegmentation support: %d\n\tVendor ID: %d\n",
-			decodedIAm.DeviceId, decodedIAm.MaxAPDULength, decodedIAm.SegmentationSupported, decodedIAm.VendorId,
-		)
+		printIAm(&decodedIAm)
 
 		sentRequests++
 

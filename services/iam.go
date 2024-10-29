@@ -17,7 +17,8 @@ type UnconfirmedIAm struct {
 }
 
 type UnconfirmedIAmDec struct {
-	DeviceId              uint32
+	InstanceNumber        uint32
+	DeviceType            uint16
 	MaxAPDULength         uint16
 	SegmentationSupported uint8
 	VendorId              uint16
@@ -27,7 +28,7 @@ type UnconfirmedIAmDec struct {
 func IAmObjects(insNum uint32, acceptedSize uint16, supportedSeg uint8, vendorID uint16) []objects.APDUPayload {
 	objs := make([]objects.APDUPayload, 4)
 
-	objs[0] = objects.EncObjectIdentifier(false, objects.TagBACnetObjectIdentifier, objects.ObjectTypeDevice, 321)
+	objs[0] = objects.EncObjectIdentifier(false, 0, 20, 321)
 	objs[1] = objects.EncUnsignedInteger16(acceptedSize)
 	objs[2] = objects.EncEnumerated(supportedSeg)
 	if vendorID < 256 {
@@ -158,7 +159,8 @@ func (u *UnconfirmedIAm) Decode() (UnconfirmedIAmDec, error) {
 			if err != nil {
 				return decIAm, errors.Wrap(err, "decoding UnconfirmedIAm")
 			}
-			decIAm.DeviceId = objId.InstanceNumber
+			decIAm.DeviceType = objId.ObjectType
+			decIAm.InstanceNumber = objId.InstanceNumber
 		case 1:
 			maxLen, err := objects.DecUnsignedInteger(obj)
 			if err != nil {
