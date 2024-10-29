@@ -258,6 +258,18 @@ func (c *LogBufferCACK) Decode() (LogBufferCACKDec, error) {
 					Length:    uint8(obj.MarshalLen()),
 					Value:     value,
 				})
+
+			case combine(1, 0):
+				value, err := objects.DecLogStatus(obj)
+				if err != nil {
+					return decCACK, errors.Wrap(err, "decode Context object case 0")
+				}
+				objs = append(objs, &objects.AppTag{
+					TagNumber: 0,
+					TagClass:  true,
+					Length:    uint8(obj.MarshalLen()),
+					Value:     value,
+				})
 			default:
 			}
 		} else {

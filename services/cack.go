@@ -63,12 +63,12 @@ func NewComplexACK(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*ComplexACK, uint8
 }
 
 func (c *ComplexACK) UnmarshalBinary(b []byte) error {
-	if l := len(b); l < c.MarshalLen()-2 {
-		return errors.Wrap(
-			common.ErrTooShortToParse,
-			fmt.Sprintf("failed to unmarshal CACK %v - marshal length %d binary length %d", c, c.MarshalLen(), l),
-		)
-	}
+	// if l := len(b); l < c.MarshalLen()-2 {
+	// 	return errors.Wrap(
+	// 		common.ErrTooShortToParse,
+	// 		fmt.Sprintf("failed to unmarshal CACK %v - marshal length %d binary length %d", c, c.MarshalLen(), l),
+	// 	)
+	// }
 
 	var offset int = 0
 	if err := c.BVLC.UnmarshalBinary(b[offset:]); err != nil {
