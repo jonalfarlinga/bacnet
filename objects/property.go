@@ -7,7 +7,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func DecPropertyIdentifier(rawPayload APDUPayload) (uint8, error) {
+func DecPropertyIdentifier(rawPayload APDUPayload) (uint16, error) {
 	rawObject, ok := rawPayload.(*Object)
 	if !ok {
 		return 0, errors.Wrap(
@@ -15,32 +15,20 @@ func DecPropertyIdentifier(rawPayload APDUPayload) (uint8, error) {
 			fmt.Sprintf("failed to decode PropertyID - %v", rawPayload),
 		)
 	}
-
-	switch rawObject.TagClass {
-	case true:
-		if rawObject.Length != 1 {
-			return 0, errors.Wrap(
-				common.ErrWrongStructure,
-				fmt.Sprintf("failed to decode PropertyID - wrong binary length - %x", rawObject.Data),
-			)
-		}
-	case false:
-		if rawObject.Length != 1 || !rawObject.TagClass {
-			return 0, errors.Wrap(
-				common.ErrWrongStructure,
-				fmt.Sprintf("failed to decode PropertyID - wrong tag number - %v", rawObject.TagNumber),
-			)
-		}
+	if rawObject.Length == 1{
+		return uint16(rawObject.Data[0]), nil
 	}
-
-	return rawObject.Data[0], nil
+	return uint16(rawObject.Data[0])<<8 + uint16(rawObject.Data[1]), nil
 }
 
-func EncPropertyIdentifier(contextTag bool, tagN uint8, propId uint8) *Object {
+func EncPropertyIdentifier(contextTag bool, tagN uint8, propId uint16) *Object {
 	newObj := Object{}
-	data := make([]byte, 1)
-	data[0] = propId
-
+	var data []byte
+	if propId < 256 {
+		data = []byte{uint8(propId)}
+	} else {
+		data = []byte{uint8(propId >> 8), uint8(propId)}
+	}
 	newObj.TagNumber = tagN
 	newObj.TagClass = contextTag
 	newObj.Data = data

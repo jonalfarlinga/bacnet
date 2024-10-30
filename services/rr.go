@@ -20,11 +20,11 @@ type ConfirmedReadRange struct {
 type ConfirmedReadRangeDec struct {
 	ObjectType uint16
 	InstanceId uint32
-	PropertyId uint8
+	PropertyId uint16
 	Tags       []*objects.AppTag
 }
 
-func ConfirmedReadRangeObjects(objectType uint16, instN uint32, property uint8, index uint16, count int32) []objects.APDUPayload {
+func ConfirmedReadRangeObjects(objectType uint16, instN uint32, property uint16, index uint16, count int32) []objects.APDUPayload {
 	objs := make([]objects.APDUPayload, 6)
 
 	objs[0] = objects.EncObjectIdentifier(true, 0, objectType, instN)

@@ -19,7 +19,7 @@ type LogBufferCACK struct {
 type LogBufferCACKDec struct {
 	ObjectType uint16
 	InstanceId uint32
-	PropertyId uint8
+	PropertyId uint16
 	FirstItem  bool
 	LastItem   bool
 	MoreItems  bool
@@ -34,7 +34,7 @@ type StatusFlags struct {
 	OutOfService bool
 }
 
-func LogBufferCACKObjects(instN uint32, propertyId uint8, value interface{}) []objects.APDUPayload {
+func LogBufferCACKObjects(instN uint32, propertyId uint16, value interface{}) []objects.APDUPayload {
 	objs := make([]objects.APDUPayload, 5)
 	objs[0] = objects.EncObjectIdentifier(true, 0, 20, instN)
 	objs[1] = objects.EncPropertyIdentifier(true, 1, propertyId)

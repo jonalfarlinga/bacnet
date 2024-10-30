@@ -19,12 +19,12 @@ type ConfirmedWriteProperty struct {
 type ConfirmedWritePropertyDec struct {
 	ObjectType uint16
 	InstanceId uint32
-	PropertyId uint8
+	PropertyId uint16
 	Value      float32
 	Priority   uint8
 }
 
-func ConfirmedWritePropertyObjects(objectType uint16, instN uint32, propertyId uint8, value float32) []objects.APDUPayload {
+func ConfirmedWritePropertyObjects(objectType uint16, instN uint32, propertyId uint16, value float32) []objects.APDUPayload {
 	objs := make([]objects.APDUPayload, 7)
 
 	objs[0] = objects.EncObjectIdentifier(true, 0, objectType, instN)

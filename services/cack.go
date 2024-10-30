@@ -19,11 +19,11 @@ type ComplexACK struct {
 type ComplexACKDec struct {
 	ObjectType uint16
 	InstanceId uint32
-	PropertyId uint8
+	PropertyId uint16
 	Tags       []*objects.AppTag
 }
 
-func ComplexACKObjects(objectType uint16, instN uint32, propertyId uint8, value interface{}) []objects.APDUPayload {
+func ComplexACKObjects(objectType uint16, instN uint32, propertyId uint16, value interface{}) []objects.APDUPayload {
 	objs := make([]objects.APDUPayload, 5)
 	objs[0] = objects.EncObjectIdentifier(true, 0, objectType, instN)
 	objs[1] = objects.EncPropertyIdentifier(true, 1, propertyId)

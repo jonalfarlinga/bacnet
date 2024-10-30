@@ -24,11 +24,7 @@ const (
 	ObjectTypeAnalogInput  uint16 = 0
 	ObjectTypeAnalogOutput uint16 = 1
 	ObjectTypeDevice       uint16 = 8
-)
-
-const (
-	PropertyIdPresentValue uint8 = 85
-	PropertyIdLogBuffer    uint8 = 131
+	ObjectTrendLog         uint16 = 20
 )
 
 const (

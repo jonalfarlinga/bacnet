@@ -17,7 +17,7 @@ import (
 func init() {
 	WritePropertyClientCmd.Flags().Uint16Var(&wpObjectType, "object-type", 1, "Object type to read.")
 	WritePropertyClientCmd.Flags().Uint32Var(&wpInstanceId, "instance-id", 0, "Instance ID to read.") // Analog-input
-	WritePropertyClientCmd.Flags().Uint8Var(&wpPropertyId, "property-id", 85, "Property ID to read.") // Current-value
+	WritePropertyClientCmd.Flags().Uint16Var(&wpPropertyId, "property-id", 85, "Property ID to read.") // Current-value
 	WritePropertyClientCmd.Flags().Float32Var(&wpValue, "value", 1.1, "Value to write.")
 	WritePropertyClientCmd.Flags().IntVar(&wpPeriod, "period", 1, "Period, in seconds, between requests.")
 	WritePropertyClientCmd.Flags().IntVar(&wpN, "messages", 1, "Number of requests to send, being 0 unlimited.")
@@ -26,7 +26,7 @@ func init() {
 var (
 	wpObjectType uint16
 	wpInstanceId uint32
-	wpPropertyId uint8
+	wpPropertyId uint16
 	wpValue      float32
 	wpPeriod     int
 	wpN          int

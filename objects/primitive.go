@@ -24,14 +24,14 @@ func DecString(rawPayload APDUPayload) (string, error) {
 			fmt.Sprintf("DecString wrong tag number: %v", rawObject.TagNumber),
 		)
 	}
-	return string(rawObject.Data), nil
+	return string(rawObject.Data[1:]), nil
 }
 
 func EncString(value string) *Object {
 	newObj := Object{}
 	newObj.TagNumber = TagCharacterString
 	newObj.TagClass = false
-	newObj.Data = []byte(value)
+	newObj.Data = append([]byte{0}, []byte(value)...)
 	newObj.Length = uint8(len(newObj.Data))
 	return &newObj
 }

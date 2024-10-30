@@ -18,7 +18,7 @@ import (
 func init() {
 	ReadPropertyClientCmd.Flags().Uint16Var(&rpObjectType, "object-type", 0, "Object type to read.")
 	ReadPropertyClientCmd.Flags().Uint32Var(&rpInstanceId, "instance-id", 0, "Instance ID to read.") // Analog-input
-	ReadPropertyClientCmd.Flags().Uint8Var(&rpPropertyId, "property-id", 85, "Property ID to read.") // Current-value
+	ReadPropertyClientCmd.Flags().Uint16Var(&rpPropertyId, "property-id", 85, "Property ID to read.") // Current-value
 	ReadPropertyClientCmd.Flags().IntVar(&rpPeriod, "period", 1, "Period, in seconds, between requests.")
 	ReadPropertyClientCmd.Flags().IntVar(&rpN, "messages", 1, "Number of messages to send, being 0 unlimited.")
 }
@@ -26,7 +26,7 @@ func init() {
 var (
 	rpObjectType uint16
 	rpInstanceId uint32
-	rpPropertyId uint8
+	rpPropertyId uint16
 	rpPeriod     int
 	rpN          int
 

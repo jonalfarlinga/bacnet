@@ -34,7 +34,7 @@ func NewIAm(deviceId uint32, vendorId uint16) ([]byte, error) {
 	return u.MarshalBinary()
 }
 
-func NewCACK(service uint8, objectType uint16, instN uint32, propertyId uint8, value float32) ([]byte, error) {
+func NewCACK(service uint8, objectType uint16, instN uint32, propertyId uint16, value float32) ([]byte, error) {
 	bvlc := plumbing.NewBVLC(plumbing.BVLCFuncUnicast)
 	npdu := plumbing.NewNPDU(false, false, false, false)
 
@@ -78,7 +78,7 @@ func NewError(service, errorClass, errorCode uint8) ([]byte, error) {
 	return e.MarshalBinary()
 }
 
-func NewReadProperty(objectType uint16, instanceNumber uint32, propertyId uint8) ([]byte, error) {
+func NewReadProperty(objectType uint16, instanceNumber uint32, propertyId uint16) ([]byte, error) {
 	bvlc := plumbing.NewBVLC(plumbing.BVLCFuncUnicast)
 	npdu := plumbing.NewNPDU(false, false, false, true)
 
@@ -94,7 +94,7 @@ func NewReadProperty(objectType uint16, instanceNumber uint32, propertyId uint8)
 	return c.MarshalBinary()
 }
 
-func NewReadRange(objectType uint16, instanceNumber uint32, propertyId uint8, rangeStart uint16, length int32) ([]byte, error) {
+func NewReadRange(objectType uint16, instanceNumber uint32, propertyId uint16, rangeStart uint16, length int32) ([]byte, error) {
 	bvlc := plumbing.NewBVLC(plumbing.BVLCFuncUnicast)
 	npdu := plumbing.NewNPDU(false, false, false, true)
 
@@ -112,7 +112,7 @@ func NewReadRange(objectType uint16, instanceNumber uint32, propertyId uint8, ra
 	return c.MarshalBinary()
 }
 
-func NewWriteProperty(objectType uint16, instanceNumber uint32, propertyId uint8, value float32) ([]byte, error) {
+func NewWriteProperty(objectType uint16, instanceNumber uint32, propertyId uint16, value float32) ([]byte, error) {
 	bvlc := plumbing.NewBVLC(plumbing.BVLCFuncUnicast)
 	npdu := plumbing.NewNPDU(false, false, false, true)
 

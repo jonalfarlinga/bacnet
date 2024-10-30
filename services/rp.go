@@ -19,10 +19,10 @@ type ConfirmedReadProperty struct {
 type ConfirmedReadPropertyDec struct {
 	ObjectType uint16
 	InstanceId uint32
-	PropertyId uint8
+	PropertyId uint16
 }
 
-func ConfirmedReadPropertyObjects(objectType uint16, instN uint32, propertyId uint8) []objects.APDUPayload {
+func ConfirmedReadPropertyObjects(objectType uint16, instN uint32, propertyId uint16) []objects.APDUPayload {
 	objs := make([]objects.APDUPayload, 2)
 
 	objs[0] = objects.EncObjectIdentifier(true, 0, objectType, instN)
@@ -35,7 +35,7 @@ func NewConfirmedReadProperty(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*Confir
 	c := &ConfirmedReadProperty{
 		BVLC: bvlc,
 		NPDU: npdu,
-		
+
 		// TODO: Consider to implement parameter struct to an argment of New functions.
 		APDU: plumbing.NewAPDU(plumbing.ConfirmedReq, ServiceConfirmedReadProperty, ConfirmedReadPropertyObjects(
 			objects.ObjectTypeAnalogOutput, 1, objects.PropertyIdPresentValue)),

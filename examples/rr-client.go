@@ -18,7 +18,7 @@ import (
 func init() {
 	ReadRangeClientCmd.Flags().Uint16Var(&rrObjectType, "object-type", 0, "Object type to read.")
 	ReadRangeClientCmd.Flags().Uint32Var(&rrInstanceId, "instance-id", 0, "Instance ID to read.")  // Analog-input
-	ReadRangeClientCmd.Flags().Uint8Var(&rrPropertyId, "property-id", 131, "Property ID to read.") // Current-value
+	ReadRangeClientCmd.Flags().Uint16Var(&rrPropertyId, "property-id", 131, "Property ID to read.") // Current-value
 	ReadRangeClientCmd.Flags().Uint16Var(&rrRangeStart, "range-start", 1, "Range start index.")
 	ReadRangeClientCmd.Flags().Int32Var(&rrLength, "length", 50, "Length of results.")
 	ReadRangeClientCmd.Flags().IntVar(&rrPeriod, "period", 1, "Period, in seconds, between requests.")
@@ -28,7 +28,7 @@ func init() {
 var (
 	rrObjectType uint16
 	rrInstanceId uint32
-	rrPropertyId uint8
+	rrPropertyId uint16
 	rrRangeStart uint16
 	rrLength     int32
 	rrPeriod     int
