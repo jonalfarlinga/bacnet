@@ -47,6 +47,18 @@ func decodeTags(enc_obj *objects.Object, obj *objects.APDUPayload) (*objects.App
 			Length:    uint8(length),
 			Value:     value,
 		}, nil
+	case objects.TagBitString:
+		value, err := objects.DecBitString(*obj)
+		if err != nil {
+			return nil, errors.Wrap(err, "decode Application object case 5")
+		}
+		length := (*obj).MarshalLen()
+		return &objects.AppTag{
+			TagNumber: objects.TagBitString,
+			TagClass:  false,
+			Length:    uint8(length),
+			Value:     value,
+		}, nil
 	case objects.TagEnumerated:
 		value, err := objects.DecEnumerated(*obj)
 		if err != nil {

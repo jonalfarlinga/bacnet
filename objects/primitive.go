@@ -296,9 +296,25 @@ func DecDate(rawPayload APDUPayload) (time.Time, error) {
 	if date.Weekday() != weekday {
 		return time.Time{}, errors.Wrap(
 			common.ErrInvalidData,
-			fmt.Sprintf("failed to decode Date - weekday mismatch - %v %v", weekday, date.Weekday(),),
+			fmt.Sprintf("failed to decode Date - weekday mismatch - %v %v", weekday, date.Weekday()),
 		)
 	}
 
 	return date, nil
+}
+
+func DecBitString(rawPayload APDUPayload) (uint32, error) {
+	rawObject, ok := rawPayload.(*Object)
+	if !ok {
+		return 0, errors.Wrap(
+			common.ErrWrongPayload,
+			fmt.Sprintf("failed to decode BitString - %v", rawPayload),
+		)
+	}
+	unused := int(rawObject.Data[0])
+	var bits uint32
+	for i := len(rawObject.Data) - 1; i > 0; i-- {
+		bits = bits<<8 | uint32(rawObject.Data[i])
+	}
+	return bits >> unused, nil
 }

@@ -2,7 +2,6 @@ package services
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
@@ -177,54 +176,11 @@ func (c *ConfirmedReadRange) Decode() (ConfirmedReadRangeDec, error) {
 			}
 		} else {
 			// log.Println("TagNumber", enc_obj.TagNumber)
-			switch enc_obj.TagNumber {
-			case objects.TagUnsignedInteger:
-				value, err := objects.DecUnsignedInteger(obj)
-				if err != nil {
-					return decCRP, errors.Wrap(err, "decode Application object case 0")
-				}
-				objs = append(objs, &objects.AppTag{
-					TagNumber: objects.TagUnsignedInteger,
-					TagClass:  false,
-					Length:    uint8(obj.MarshalLen()),
-					Value:     value,
-				})
-			case objects.TagReal:
-				value, err := objects.DecReal(obj)
-				if err != nil {
-					return decCRP, errors.Wrap(err, "decode Application object case 4")
-				}
-				objs = append(objs, &objects.AppTag{
-					TagNumber: objects.TagReal,
-					TagClass:  false,
-					Length:    uint8(obj.MarshalLen()),
-					Value:     value,
-				})
-			case objects.TagCharacterString:
-				value, err := objects.DecString(obj)
-				if err != nil {
-					return decCRP, errors.Wrap(err, "decode Application object case 7")
-				}
-				objs = append(objs, &objects.AppTag{
-					TagNumber: objects.TagCharacterString,
-					TagClass:  false,
-					Length:    uint8(obj.MarshalLen()),
-					Value:     value,
-				})
-			case objects.TagBACnetObjectIdentifier:
-				objId, err := objects.DecObjectIdentifier(obj)
-				if err != nil {
-					return decCRP, errors.Wrap(err, "decode Context object case 0")
-				}
-				objs = append(objs, &objects.AppTag{
-					TagNumber: objects.TagBACnetObjectIdentifier,
-					TagClass:  false,
-					Length:    uint8(obj.MarshalLen()),
-					Value:     fmt.Sprintf("%d:%d", objId.ObjectType, objId.InstanceNumber),
-				})
-			default:
-				log.Printf("\tnot encoded tag class %t tag number %d\n", enc_obj.TagClass, enc_obj.TagNumber)
+			tag, err := decodeTags(enc_obj, &obj)
+			if err != nil {
+				return decCRP, errors.Wrap(err, "decode Application Tag")
 			}
+			objs = append(objs, tag)
 		}
 		decCRP.Tags = objs
 	}
