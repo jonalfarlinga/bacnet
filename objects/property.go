@@ -3,6 +3,7 @@ package objects
 import (
 	"encoding/binary"
 	"fmt"
+	"log"
 
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/pkg/errors"
@@ -19,6 +20,7 @@ func DecPropertyIdentifier(rawPayload APDUPayload) (uint16, error) {
 	if rawObject.Length == 1 {
 		return uint16(rawObject.Data[0]), nil
 	}
+	log.Printf("DecPropertyIdentifier: %+v\n", rawObject)
 	return binary.BigEndian.Uint16(rawObject.Data), nil
 }
 

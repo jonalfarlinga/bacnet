@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
@@ -161,10 +162,10 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 				fmt.Sprintf("ComplexACK object at index %d is not Object type", i),
 			)
 		}
-		// log.Printf(
-		// 	"\tObject i %d tagnum %d tagclass %v data %x\n",
-		// 	i, enc_obj.TagNumber, enc_obj.TagClass, enc_obj.Data,
-		// )
+		log.Printf(
+			"\tObject i %d tagnum %d tagclass %v data %x\n",
+			i, enc_obj.TagNumber, enc_obj.TagClass, enc_obj.Data,
+		)
 		if enc_obj.TagClass {
 			switch enc_obj.TagNumber {
 			case 0:

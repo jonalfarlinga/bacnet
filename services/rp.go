@@ -31,6 +31,19 @@ func ConfirmedReadPropertyObjects(objectType uint16, instN uint32, propertyId ui
 	return objs
 }
 
+func ConfirmedReadPropertyMultipleObjects(objectType uint16, instN uint32, propertyId []uint16) []objects.APDUPayload {
+	objs := make([]objects.APDUPayload, 0)
+
+	objs = append(objs, objects.EncObjectIdentifier(true, 0, objectType, instN))
+	objs = append(objs, objects.EncOpeningTag(1))
+	for _, p := range propertyId {
+		objs = append(objs, objects.EncPropertyIdentifier(true, 0, p))
+	}
+	objs = append(objs, objects.EncClosingTag(1))
+
+	return objs
+}
+
 func NewConfirmedReadProperty(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*ConfirmedReadProperty, uint8) {
 	c := &ConfirmedReadProperty{
 		BVLC: bvlc,

@@ -61,3 +61,28 @@ func printIAm(d *services.UnconfirmedIAmDec) {
 	)
 	log.Print(out)
 }
+
+func printPropM(d *services.ComplexACKRPMDec) {
+	out := "Decoded CACK reply:\n"
+
+	out += fmt.Sprintf(
+		"\n\tObject Type: %d\n\tInstance Id: %d\n",
+		d.ObjectType, d.InstanceId,
+	)
+
+	for i, t := range d.Tags {
+		if t.TagClass && t.TagNumber == 2 {
+			out += fmt.Sprintf("\n\tProperty %d\n", i/2)
+			propInt, ok := t.Value.(uint16)
+			if ok {
+				out += fmt.Sprintf("\t\tPropertyId: %s\n", objects.PropertyMap[propInt])
+			}
+		} else {
+			out += fmt.Sprintf(
+				"\t\tAppTag Type: %s\n\t\tValue: %v\n\t\tBinary Length: %d\n",
+				objects.TagToString(t), t.Value, t.Length,
+			)
+		}
+	}
+	log.Print(out)
+}

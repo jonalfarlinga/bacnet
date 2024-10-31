@@ -17,6 +17,7 @@ func init() {
 	rootCmd.AddCommand(IAmCmd)
 	rootCmd.AddCommand(ReadPropertyServerCmd)
 	rootCmd.AddCommand(ReadPropertyClientCmd)
+	rootCmd.AddCommand(ReadPropertyMClientCmd)
 	rootCmd.AddCommand(WritePropertyServerCmd)
 	rootCmd.AddCommand(WritePropertyClientCmd)
 	rootCmd.AddCommand(ReadRangeClientCmd)

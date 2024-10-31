@@ -94,6 +94,24 @@ func NewReadProperty(objectType uint16, instanceNumber uint32, propertyId uint16
 	return c.MarshalBinary()
 }
 
+func NewReadPropertyMultiple(objectType uint16, instanceNumber uint32, propertyIds []uint16) ([]byte, error) {
+	bvlc := plumbing.NewBVLC(plumbing.BVLCFuncUnicast)
+	npdu := plumbing.NewNPDU(false, false, false, true)
+
+	c, _ := services.NewConfirmedReadProperty(bvlc, npdu)
+
+	c.APDU.Service = services.ServiceConfirmedReadPropMultiple
+	c.APDU.MaxSeg = 7
+	c.APDU.MaxSize = 5
+	c.APDU.InvokeID = 1
+	c.APDU.Flags = 2
+	c.APDU.Objects = services.ConfirmedReadPropertyMultipleObjects(objectType, instanceNumber, propertyIds)
+
+	c.SetLength()
+
+	return c.MarshalBinary()
+}
+
 func NewReadRange(objectType uint16, instanceNumber uint32, propertyId uint16, rangeStart uint16, length int32) ([]byte, error) {
 	bvlc := plumbing.NewBVLC(plumbing.BVLCFuncUnicast)
 	npdu := plumbing.NewNPDU(false, false, false, true)
