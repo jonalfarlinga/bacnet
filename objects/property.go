@@ -1,6 +1,7 @@
 package objects
 
 import (
+	"encoding/binary"
 	"fmt"
 
 	"github.com/jonalfarlinga/bacnet/common"
@@ -15,10 +16,10 @@ func DecPropertyIdentifier(rawPayload APDUPayload) (uint16, error) {
 			fmt.Sprintf("failed to decode PropertyID - %v", rawPayload),
 		)
 	}
-	if rawObject.Length == 1{
+	if rawObject.Length == 1 {
 		return uint16(rawObject.Data[0]), nil
 	}
-	return uint16(rawObject.Data[0])<<8 + uint16(rawObject.Data[1]), nil
+	return binary.BigEndian.Uint16(rawObject.Data), nil
 }
 
 func EncPropertyIdentifier(contextTag bool, tagN uint8, propId uint16) *Object {

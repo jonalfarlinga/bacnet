@@ -223,7 +223,7 @@ func (c *ConfirmedReadRange) Decode() (ConfirmedReadRangeDec, error) {
 					Value:     fmt.Sprintf("%d:%d", objId.ObjectType, objId.InstanceNumber),
 				})
 			default:
-				log.Println("\tnot encoded")
+				log.Printf("\tnot encoded tag class %t tag number %d\n", enc_obj.TagClass, enc_obj.TagNumber)
 			}
 		}
 		decCRP.Tags = objs

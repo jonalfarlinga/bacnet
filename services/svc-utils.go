@@ -47,6 +47,18 @@ func decodeTags(enc_obj *objects.Object, obj *objects.APDUPayload) (*objects.App
 			Length:    uint8(length),
 			Value:     value,
 		}, nil
+	case objects.TagEnumerated:
+		value, err := objects.DecEnumerated(*obj)
+		if err != nil {
+			return nil, errors.Wrap(err, "decode Application object case 8")
+		}
+		length := (*obj).MarshalLen()
+		return &objects.AppTag{
+			TagNumber: objects.TagEnumerated,
+			TagClass:  false,
+			Length:    uint8(length),
+			Value:     value,
+		}, nil
 	case objects.TagDate:
 		value, err := objects.DecDate(*obj)
 		if err != nil {
@@ -84,7 +96,7 @@ func decodeTags(enc_obj *objects.Object, obj *objects.APDUPayload) (*objects.App
 			Value:     fmt.Sprintf("%d:%d", objId.ObjectType, objId.InstanceNumber),
 		}, nil
 	default:
-		log.Println("\tnot encoded")
+		log.Printf("\tnot encoded tag class %t tag number %d\n", enc_obj.TagClass, enc_obj.TagNumber)
 		return nil, errors.Wrap(common.ErrNotImplemented, "decode Application object case default")
 	}
 }
