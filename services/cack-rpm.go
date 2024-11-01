@@ -107,10 +107,6 @@ func (c *ComplexACKRPM) Decode() (ComplexACKRPMDec, error) {
 				fmt.Sprintf("ComplexACKRPM object at index %d is not Object type", i),
 			)
 		}
-		// log.Printf(
-		// 	"\tObject i %d tagnum %d tagclass %v data %x\n",
-		// 	i, enc_obj.TagNumber, enc_obj.TagClass, enc_obj.Data,
-		// )
 
 		// add or remove context based on opening and closing tags
 		if enc_obj.Length == 6 && enc_obj.Data == nil {
@@ -128,7 +124,6 @@ func (c *ComplexACKRPM) Decode() (ComplexACKRPMDec, error) {
 			continue
 		}
 
-		// log.Printf("%+v", objs)
 		if enc_obj.TagClass {
 			c := combine(context[len(context)-1], enc_obj.TagNumber)
 			switch c {
@@ -153,7 +148,6 @@ func (c *ComplexACKRPM) Decode() (ComplexACKRPMDec, error) {
 				})
 			}
 		} else {
-			// log.Println("TagNumber", enc_obj.TagNumber)
 			tag, err := decodeTags(enc_obj, &obj)
 			if err != nil {
 				return decCACK, errors.Wrap(err, "decode Application Tag")

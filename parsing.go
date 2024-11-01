@@ -12,13 +12,6 @@ import (
 const bacnetLenMin = 8
 
 func combine(t, s uint8) uint16 {
-	// 0001, 0010
-	// return:
-	// 0001 0000
-	// BINOR
-	// 0000 0010
-	// _________
-	// 0001 0010
 	return uint16(t)<<8 | uint16(s)
 }
 
@@ -37,23 +30,17 @@ func Parse(b []byte) (plumbing.BACnet, uint8, error) {
 	var bacnet plumbing.BACnet
 
 	offset := 0
-	// log.Println("parsing")
 	if err := bvlc.UnmarshalBinary(b); err != nil {
 		return nil, 0, errors.Wrap(err, fmt.Sprintf("Parsing BVLC %x", b))
 	}
-	// log.Println("bvlc done")
 	offset += bvlc.MarshalLen()
 
 	if err := npdu.UnmarshalBinary(b[offset:]); err != nil {
 		return nil, 0, errors.Wrap(err, fmt.Sprintf("Parsing NPDU %x", b[offset:]))
 	}
-	// log.Println("npdu done")
 	offset += npdu.MarshalLen()
 
 	var c uint16
-	// We can use b[offset] >> 4 & 0xF
-	// PDU Types are [0x0, ..., 0x7]
-	// We can copmplete the list of PDUs with 0x6 and 0x4
 	PDUType := b[offset] >> 4 & 0xFF
 	switch PDUType {
 	case plumbing.UnConfirmedReq:
@@ -96,6 +83,5 @@ func Parse(b []byte) (plumbing.BACnet, uint8, error) {
 		)
 	}
 
-	// log.Println("message parsed")
 	return bacnet, t, nil
 }
