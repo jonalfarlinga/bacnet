@@ -17,7 +17,7 @@ func printCACK(d *services.ComplexACKDec) {
 	)
 	for i, t := range d.Tags {
 		out += fmt.Sprintf(
-			"\tTag %d:\n\t\tAppTag Type: %s\n\t\tValue: %v\n\t\tBinary Length: %d\n",
+			"\tTag %d:\n\t\tAppTag Type: %s\n\t\tValue: %+v\n\t\tBinary Length: %d\n",
 			i, objects.TagToString(t), t.Value, t.Length,
 		)
 	}
@@ -41,7 +41,7 @@ func printLogBuffer(d *services.LogBufferCACKDec) {
 	)
 	for i, t := range d.Tags {
 		out += fmt.Sprintf(
-			"\tTag %d:\n\t\tAppTag Type: %s\n\t\tValue: %v\n\t\tData Length: %d\n",
+			"\tTag %d:\n\t\tAppTag Type: %s\n\t\tValue: %+v\n\t\tData Length: %d\n",
 			i, objects.TagToString(t), t.Value, t.Length,
 		)
 	}
@@ -79,7 +79,7 @@ func printPropM(d *services.ComplexACKRPMDec) {
 			}
 		} else {
 			out += fmt.Sprintf(
-				"\t\tAppTag Type: %s\n\t\tValue: %v\n\t\tBinary Length: %d\n",
+				"\t\tAppTag Type: %s\n\t\tValue: %+v\n\t\tBinary Length: %d\n",
 				objects.TagToString(t), t.Value, t.Length,
 			)
 		}

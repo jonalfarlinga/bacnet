@@ -1,10 +1,8 @@
 package services
 
 import (
-	"fmt"
 	"log"
 
-	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
 	"github.com/pkg/errors"
 )
@@ -103,10 +101,9 @@ func decodeTags(enc_obj *objects.Object, obj *objects.APDUPayload) (*objects.Obj
 			return nil, errors.Wrap(err, "decode Context object case 0")
 		}
 		length = (*obj).MarshalLen()
-		value = fmt.Sprintf("%d:%d", objId.ObjectType, objId.InstanceNumber)
+		value = objId
 	default:
 		log.Printf("\tnot encoded tag class %t tag number %d\n", enc_obj.TagClass, enc_obj.TagNumber)
-		return nil, errors.Wrap(common.ErrNotImplemented, "decode Application object case default")
 	}
 	return &objects.Object{
 		TagNumber: enc_obj.TagNumber,

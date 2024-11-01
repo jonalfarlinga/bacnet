@@ -2,7 +2,6 @@ package services
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
@@ -43,7 +42,7 @@ func ComplexACKObjects(objectType uint16, instN uint32, propertyId uint16, value
 		objs[3] = objects.EncString(v)
 	default:
 		panic(
-			fmt.Sprintf("Unsupported PresentValue type %T", value),
+			fmt.Sprintf("Unsupported PresentValue %v type %T\n", value, value),
 		)
 	}
 
@@ -64,13 +63,6 @@ func NewComplexACK(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*ComplexACK, uint8
 }
 
 func (c *ComplexACK) UnmarshalBinary(b []byte) error {
-	// if l := len(b); l < c.MarshalLen()-2 {
-	// 	return errors.Wrap(
-	// 		common.ErrTooShortToParse,
-	// 		fmt.Sprintf("failed to unmarshal CACK %v - marshal length %d binary length %d", c, c.MarshalLen(), l),
-	// 	)
-	// }
-
 	var offset int = 0
 	if err := c.BVLC.UnmarshalBinary(b[offset:]); err != nil {
 		return errors.Wrap(
@@ -94,7 +86,6 @@ func (c *ComplexACK) UnmarshalBinary(b []byte) error {
 			fmt.Sprintf("unmarshalling CACK %v", c),
 		)
 	}
-
 	return nil
 }
 
@@ -127,7 +118,6 @@ func (c *ComplexACK) MarshalTo(b []byte) error {
 	if err := c.APDU.MarshalTo(b[offset:]); err != nil {
 		return errors.Wrap(err, "marshalling CACK")
 	}
-
 	return nil
 }
 
@@ -162,10 +152,10 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 				fmt.Sprintf("ComplexACK object at index %d is not Object type", i),
 			)
 		}
-		log.Printf(
-			"\tObject i %d tagnum %d tagclass %v data %x\n",
-			i, enc_obj.TagNumber, enc_obj.TagClass, enc_obj.Data,
-		)
+		// log.Printf(
+		// 	"\tObject i %d tagnum %d tagclass %v data %x\n",
+		// 	i, enc_obj.TagNumber, enc_obj.TagClass, enc_obj.Data,
+		// )
 		if enc_obj.TagClass {
 			switch enc_obj.TagNumber {
 			case 0:
@@ -193,8 +183,8 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 			}
 			objs = append(objs, tag)
 		}
-		decCACK.Tags = objs
 	}
+	decCACK.Tags = objs
 
 	return decCACK, nil
 }

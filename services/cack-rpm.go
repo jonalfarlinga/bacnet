@@ -24,28 +24,7 @@ type ComplexACKRPMDec struct {
 
 func ComplexACKRPMObjects(objectType uint16, instN uint32, propertyId uint16, value interface{}) []objects.APDUPayload {
 	objs := make([]objects.APDUPayload, 5)
-	objs[0] = objects.EncObjectIdentifier(true, 0, objectType, instN)
-	objs[1] = objects.EncPropertyIdentifier(true, 1, propertyId)
-	objs[2] = objects.EncOpeningTag(3)
-
-	switch v := value.(type) {
-	case int:
-		objs[3] = objects.EncReal(float32(v))
-	case uint8:
-		objs[3] = objects.EncUnsignedInteger8(v)
-	case uint16:
-		objs[3] = objects.EncUnsignedInteger16(v)
-	case float32:
-		objs[3] = objects.EncReal(v)
-	case string:
-		objs[3] = objects.EncString(v)
-	default:
-		panic(
-			fmt.Sprintf("Unsupported PresentValue type %T", value),
-		)
-	}
-
-	objs[4] = objects.EncClosingTag(3)
+	// Not Implemented for ComplexACKRPM
 	return objs
 }
 
@@ -60,38 +39,8 @@ func NewComplexACKRPM(cack *ComplexACK) *ComplexACKRPM {
 }
 
 func (c *ComplexACKRPM) UnmarshalBinary(b []byte) error {
-	// if l := len(b); l < c.MarshalLen()-2 {
-	// 	return errors.Wrap(
-	// 		common.ErrTooShortToParse,
-	// 		fmt.Sprintf("failed to unmarshal CACK %v - marshal length %d binary length %d", c, c.MarshalLen(), l),
-	// 	)
-	// }
-
-	// var offset int = 0
-	// if err := c.BVLC.UnmarshalBinary(b[offset:]); err != nil {
-	// 	return errors.Wrap(
-	// 		err,
-	// 		fmt.Sprintf("unmarshalling CACK %v", c),
-	// 	)
-	// }
-	// offset += c.BVLC.MarshalLen()
-
-	// if err := c.NPDU.UnmarshalBinary(b[offset:]); err != nil {
-	// 	return errors.Wrap(
-	// 		err,
-	// 		fmt.Sprintf("unmarshalling CACK %v", c),
-	// 	)
-	// }
-	// offset += c.NPDU.MarshalLen()
-
-	// if err := c.APDU.UnmarshalBinary(b[offset:]); err != nil {
-	// 	return errors.Wrap(
-	// 		err,
-	// 		fmt.Sprintf("unmarshalling CACK %v", c),
-	// 	)
-	// }
-
-	return nil
+	// Use ComplexACK, then convert using NewComplexACKRPM()
+	return fmt.Errorf("UnmarshalBinary not implemented for ComplexACKRPM")
 }
 
 func (c *ComplexACKRPM) MarshalBinary() ([]byte, error) {
@@ -103,27 +52,26 @@ func (c *ComplexACKRPM) MarshalBinary() ([]byte, error) {
 }
 
 func (c *ComplexACKRPM) MarshalTo(b []byte) error {
-	// if len(b) < c.MarshalLen() {
-	// 	return errors.Wrap(
-	// 		common.ErrTooShortToMarshalBinary,
-	// 		fmt.Sprintf("failed to marshal CACK %x - marshal length too short", b),
-	// 	)
-	// }
-	// var offset = 0
-	// if err := c.BVLC.MarshalTo(b[offset:]); err != nil {
-	// 	return errors.Wrap(err, "marshalling CACK")
-	// }
-	// offset += c.BVLC.MarshalLen()
+	if len(b) < c.MarshalLen() {
+		return errors.Wrap(
+			common.ErrTooShortToMarshalBinary,
+			fmt.Sprintf("failed to marshal CACK %x - marshal length too short", b),
+		)
+	}
+	var offset = 0
+	if err := c.BVLC.MarshalTo(b[offset:]); err != nil {
+		return errors.Wrap(err, "marshalling CACK")
+	}
+	offset += c.BVLC.MarshalLen()
 
-	// if err := c.NPDU.MarshalTo(b[offset:]); err != nil {
-	// 	return errors.Wrap(err, "marshalling CACK")
-	// }
-	// offset += c.NPDU.MarshalLen()
+	if err := c.NPDU.MarshalTo(b[offset:]); err != nil {
+		return errors.Wrap(err, "marshalling CACK")
+	}
+	offset += c.NPDU.MarshalLen()
 
-	// if err := c.APDU.MarshalTo(b[offset:]); err != nil {
-	// 	return errors.Wrap(err, "marshalling CACK")
-	// }
-
+	if err := c.APDU.MarshalTo(b[offset:]); err != nil {
+		return errors.Wrap(err, "marshalling CACK")
+	}
 	return nil
 }
 
@@ -195,9 +143,6 @@ func (c *ComplexACKRPM) Decode() (ComplexACKRPMDec, error) {
 				propId, err := objects.DecPropertyIdentifier(obj)
 				if err != nil {
 					return decCACK, errors.Wrap(err, "decode Context object case 1")
-				}
-				if propId == objects.PropertyIdLogBuffer {
-					return decCACK, fmt.Errorf("PropertyIdLogBuffer")
 				}
 				objs = append(objs, &objects.Object{
 					TagNumber: 2,
