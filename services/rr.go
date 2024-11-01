@@ -20,7 +20,7 @@ type ConfirmedReadRangeDec struct {
 	ObjectType uint16
 	InstanceId uint32
 	PropertyId uint16
-	Tags       []*objects.AppTag
+	Tags       []*objects.Object
 }
 
 func ConfirmedReadRangeObjects(objectType uint16, instN uint32, property uint16, index uint16, count int32) []objects.APDUPayload {
@@ -145,7 +145,7 @@ func (c *ConfirmedReadRange) Decode() (ConfirmedReadRangeDec, error) {
 		)
 	}
 
-	objs := make([]*objects.AppTag, 0)
+	objs := make([]*objects.Object, 0)
 	for i, obj := range c.APDU.Objects {
 		enc_obj, ok := obj.(*objects.Object)
 		if !ok {

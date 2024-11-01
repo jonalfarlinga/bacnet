@@ -19,7 +19,7 @@ type ComplexACKRPM struct {
 type ComplexACKRPMDec struct {
 	ObjectType uint16
 	InstanceId uint32
-	Tags       []*objects.AppTag
+	Tags       []*objects.Object
 }
 
 func ComplexACKRPMObjects(objectType uint16, instN uint32, propertyId uint16, value interface{}) []objects.APDUPayload {
@@ -150,7 +150,7 @@ func (c *ComplexACKRPM) Decode() (ComplexACKRPMDec, error) {
 	}
 
 	context := []uint8{8}
-	objs := make([]*objects.AppTag, 0)
+	objs := make([]*objects.Object, 0)
 	for i, obj := range c.APDU.Objects {
 		enc_obj, ok := obj.(*objects.Object)
 		if !ok {
@@ -182,7 +182,6 @@ func (c *ComplexACKRPM) Decode() (ComplexACKRPMDec, error) {
 
 		// log.Printf("%+v", objs)
 		if enc_obj.TagClass {
-
 			c := combine(context[len(context)-1], enc_obj.TagNumber)
 			switch c {
 			case combine(8, 0):
@@ -200,10 +199,11 @@ func (c *ComplexACKRPM) Decode() (ComplexACKRPMDec, error) {
 				if propId == objects.PropertyIdLogBuffer {
 					return decCACK, fmt.Errorf("PropertyIdLogBuffer")
 				}
-				objs = append(objs, &objects.AppTag{
+				objs = append(objs, &objects.Object{
 					TagNumber: 2,
 					TagClass:  true,
 					Value:     propId,
+					Data:      enc_obj.Data,
 					Length:    enc_obj.Length,
 				})
 			}

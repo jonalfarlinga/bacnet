@@ -21,7 +21,7 @@ type ComplexACKDec struct {
 	ObjectType uint16
 	InstanceId uint32
 	PropertyId uint16
-	Tags       []*objects.AppTag
+	Tags       []*objects.Object
 }
 
 func ComplexACKObjects(objectType uint16, instN uint32, propertyId uint16, value interface{}) []objects.APDUPayload {
@@ -153,7 +153,7 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 		)
 	}
 
-	objs := make([]*objects.AppTag, 0)
+	objs := make([]*objects.Object, 0)
 	for i, obj := range c.APDU.Objects {
 		enc_obj, ok := obj.(*objects.Object)
 		if !ok {

@@ -254,7 +254,6 @@ func (a *APDU) MarshalTo(b []byte) error {
 			}
 		}
 	}
-
 	return nil
 }
 

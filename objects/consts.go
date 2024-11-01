@@ -35,7 +35,7 @@ const (
 	ErrorCodeServiceRequestDenied uint8 = 29
 )
 
-func TagToString(t *AppTag) string {
+func TagToString(t *Object) string {
 	if t.TagClass {
 		return fmt.Sprintf("Context %v", t.TagNumber)
 	}

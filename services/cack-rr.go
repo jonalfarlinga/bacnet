@@ -25,7 +25,7 @@ type LogBufferCACKDec struct {
 	LastItem   bool
 	MoreItems  bool
 	ItemCount  uint32
-	Tags       []*objects.AppTag
+	Tags       []*objects.Object
 }
 
 type StatusFlags struct {
@@ -176,7 +176,7 @@ func (c *LogBufferCACK) Decode() (LogBufferCACKDec, error) {
 	}
 
 	context := []uint8{8}
-	objs := make([]*objects.AppTag, 0)
+	objs := make([]*objects.Object, 0)
 	for i, obj := range c.APDU.Objects {
 		enc_obj, ok := obj.(*objects.Object)
 		if !ok {
@@ -241,7 +241,7 @@ func (c *LogBufferCACK) Decode() (LogBufferCACKDec, error) {
 				if err != nil {
 					return decCACK, errors.Wrap(err, "decode Context object case 2")
 				}
-				objs = append(objs, &objects.AppTag{
+				objs = append(objs, &objects.Object{
 					TagNumber: 2,
 					TagClass:  true,
 					Length:    uint8(obj.MarshalLen()),
@@ -252,7 +252,7 @@ func (c *LogBufferCACK) Decode() (LogBufferCACKDec, error) {
 				if err != nil {
 					return decCACK, errors.Wrap(err, "decode Context object case 2")
 				}
-				objs = append(objs, &objects.AppTag{
+				objs = append(objs, &objects.Object{
 					TagNumber: 2,
 					TagClass:  true,
 					Length:    uint8(obj.MarshalLen()),
@@ -263,7 +263,7 @@ func (c *LogBufferCACK) Decode() (LogBufferCACKDec, error) {
 				if err != nil {
 					return decCACK, errors.Wrap(err, "decode Context object case 0")
 				}
-				objs = append(objs, &objects.AppTag{
+				objs = append(objs, &objects.Object{
 					TagNumber: 0,
 					TagClass:  true,
 					Length:    uint8(obj.MarshalLen()),

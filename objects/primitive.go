@@ -66,6 +66,7 @@ func EncBoolean(value bool) *Object {
 
 	return &newObj
 }
+
 // TagNumber 2
 func DecUnsignedInteger(rawPayload APDUPayload) (uint32, error) {
 	rawObject, ok := rawPayload.(*Object)
@@ -140,6 +141,30 @@ func EncUnsignedInteger16(value uint16) *Object {
 }
 
 // TagNumber 3
+func DecSignedInteger(rawPayload APDUPayload) (int, error) {
+	rawObject, ok := rawPayload.(*Object)
+	if !ok {
+		return 0, errors.Wrap(
+			common.ErrWrongPayload,
+			fmt.Sprintf("failed to decode SignedInteger - %v", rawPayload),
+		)
+	}
+	switch rawObject.Length {
+	case 1:
+		return int(int8(rawObject.Data[0])), nil
+	case 2:
+		return int(int16(binary.BigEndian.Uint16(rawObject.Data))), nil
+	case 3:
+		return int(int32(uint32(rawObject.Data[0])<<16) | int32(binary.BigEndian.Uint16(rawObject.Data[1:]))), nil
+	case 4:
+		return int(binary.BigEndian.Uint32(rawObject.Data)), nil
+	}
+	return 0, errors.Wrap(
+		common.ErrNotImplemented,
+		fmt.Sprintf("failed to decode SignedInteger - %v", rawObject.Data),
+	)
+}
+
 func EncSignedInteger(value int) *Object {
 	newObj := Object{}
 
@@ -198,6 +223,55 @@ func EncReal(value float32) *Object {
 	newObj.TagClass = false
 	newObj.Data = data
 	newObj.Length = uint8(len(data))
+
+	return &newObj
+}
+
+// TagNumber 5
+func DecDouble(rawPayload APDUPayload) (float64, error) {
+	rawObject, ok := rawPayload.(*Object)
+	if !ok {
+		return 0, errors.Wrap(
+			common.ErrWrongPayload,
+			fmt.Sprintf("failed to decode Double - %v", rawPayload),
+		)
+	}
+	return math.Float64frombits(binary.BigEndian.Uint64(rawObject.Data)), nil
+}
+
+func EncDouble(value float64) *Object {
+	newObj := Object{}
+
+	data := make([]byte, 8)
+	binary.BigEndian.PutUint64(data[:], math.Float64bits(value))
+
+	newObj.TagNumber = TagDouble
+	newObj.TagClass = false
+	newObj.Data = data
+	newObj.Length = uint8(len(data))
+
+	return &newObj
+}
+
+// TagNumber 6
+func DecOctetString(rawPayload APDUPayload) ([]byte, error) {
+	rawObject, ok := rawPayload.(*Object)
+	if !ok {
+		return nil, errors.Wrap(
+			common.ErrWrongPayload,
+			fmt.Sprintf("failed to decode OctetString - %v", rawPayload),
+		)
+	}
+	return rawObject.Data, nil
+}
+
+func EncOctetString(value []byte) *Object {
+	newObj := Object{}
+
+	newObj.TagNumber = TagOctetString
+	newObj.TagClass = false
+	newObj.Data = value
+	newObj.Length = uint8(len(value))
 
 	return &newObj
 }
