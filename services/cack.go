@@ -143,6 +143,7 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 		)
 	}
 
+	context := make([]uint8, 8)
 	objs := make([]*objects.Object, 0)
 	for i, obj := range c.APDU.Objects {
 		enc_obj, ok := obj.(*objects.Object)
@@ -156,16 +157,34 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 		// 	"\tObject i %d tagnum %d tagclass %v data %x\n",
 		// 	i, enc_obj.TagNumber, enc_obj.TagClass, enc_obj.Data,
 		// )
+
+		// add or remove context based on opening and closing tags
+		if enc_obj.Length == 6 {
+			context = append(context, enc_obj.TagNumber)
+			continue
+		}
+		if enc_obj.Length == 7 {
+			if len(context) == 0 {
+				return decCACK, errors.Wrap(
+					common.ErrInvalidObjectType,
+					fmt.Sprintf("LogBufferCACK object at index %d has mismatched closing tag", i),
+				)
+			}
+			context = context[:len(context)-1]
+			continue
+		}
+
 		if enc_obj.TagClass {
-			switch enc_obj.TagNumber {
-			case 0:
+			c := combine(context[len(context)-1], enc_obj.TagNumber)
+			switch c {
+			case combine(8, 0):
 				objId, err := objects.DecObjectIdentifier(obj)
 				if err != nil {
 					return decCACK, errors.Wrap(err, "decode Context object case 0")
 				}
 				decCACK.ObjectType = objId.ObjectType
 				decCACK.InstanceId = objId.InstanceNumber
-			case 1:
+			case combine(8, 1):
 				propId, err := objects.DecPropertyIdentifier(obj)
 				if err != nil {
 					return decCACK, errors.Wrap(err, "decode Context object case 1")
@@ -174,6 +193,39 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 					return decCACK, fmt.Errorf("PropertyIdLogBuffer")
 				}
 				decCACK.PropertyId = propId
+			case combine(3, 0):
+				objId, err := objects.DecObjectIdentifier(obj)
+				if err != nil {
+					return decCACK, errors.Wrap(err, "decode Context object case 0")
+				}
+				objs = append(objs, &objects.Object{
+					TagNumber: 0,
+					TagClass:  true,
+					Length:    uint8(obj.MarshalLen()),
+					Value:     objId,
+				})
+			case combine(3, 1):
+				propId, err := objects.DecPropertyIdentifier(obj)
+				if err != nil {
+					return decCACK, errors.Wrap(err, "decode Context object case 1")
+				}
+				objs = append(objs, &objects.Object{
+					TagNumber: 1,
+					TagClass:  true,
+					Length:    uint8(obj.MarshalLen()),
+					Value:     propId,
+				})
+			case combine(3, 3):
+				objId, err := objects.DecObjectIdentifier(obj)
+				if err != nil {
+					return decCACK, errors.Wrap(err, "decode Context object case 0")
+				}
+				objs = append(objs, &objects.Object{
+					TagNumber: 3,
+					TagClass:  true,
+					Length:    uint8(obj.MarshalLen()),
+					Value:     objId,
+				})
 			}
 		} else {
 			// log.Println("TagNumber", enc_obj.TagNumber)

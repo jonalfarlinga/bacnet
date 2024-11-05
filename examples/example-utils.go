@@ -70,16 +70,18 @@ func printPropM(d *services.ComplexACKRPMDec) {
 		d.ObjectType, d.InstanceId,
 	)
 
-	for i, t := range d.Tags {
+	property := 0
+	for _, t := range d.Tags {
 		if t.TagClass && t.TagNumber == 2 {
-			out += fmt.Sprintf("\n\tProperty %d\n", i/2)
+			property++
+			out += fmt.Sprintf("\n\t%d - ", property)
 			propInt, ok := t.Value.(uint16)
 			if ok {
-				out += fmt.Sprintf("\t\tPropertyId: %s\n", objects.PropertyMap[propInt])
+				out += fmt.Sprintf("%s\n", objects.PropertyMap[propInt])
 			}
 		} else {
 			out += fmt.Sprintf(
-				"\t\tAppTag Type: %s\n\t\tValue: %+v\n\t\tBinary Length: %d\n",
+				"\n\t\tAppTag Type: %s\n\t\tValue: %+v\n\t\tBinary Length: %d\n",
 				objects.TagToString(t), t.Value, t.Length,
 			)
 		}

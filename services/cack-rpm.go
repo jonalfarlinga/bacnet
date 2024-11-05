@@ -151,6 +151,39 @@ func (c *ComplexACKRPM) Decode() (ComplexACKRPMDec, error) {
 					Data:      enc_obj.Data,
 					Length:    enc_obj.Length,
 				})
+			case combine(4, 0):
+				objId, err := objects.DecObjectIdentifier(obj)
+				if err != nil {
+					return decCACK, errors.Wrap(err, "decode Context object case 0")
+				}
+				objs = append(objs, &objects.Object{
+					TagNumber: 0,
+					TagClass:  true,
+					Value:     objId,
+					Length:    uint8(obj.MarshalLen()),
+				})
+			case combine(4, 1):
+				propId, err := objects.DecPropertyIdentifier(obj)
+				if err != nil {
+					return decCACK, errors.Wrap(err, "decode Context object case 1")
+				}
+				objs = append(objs, &objects.Object{
+					TagNumber: 1,
+					TagClass:  true,
+					Value:     propId,
+					Length:    uint8(obj.MarshalLen()),
+				})
+			case combine(4, 3):
+				objId, err := objects.DecObjectIdentifier(obj)
+				if err != nil {
+					return decCACK, errors.Wrap(err, "decode Context object case 0")
+				}
+				objs = append(objs, &objects.Object{
+					TagNumber: 3,
+					TagClass:  true,
+					Value:     objId,
+					Length:    uint8(obj.MarshalLen()),
+				})
 			}
 		} else {
 			// log.Println("TagNumber", enc_obj.TagNumber)
