@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
@@ -184,6 +185,8 @@ func (c *ComplexACKRPM) Decode() (ComplexACKRPMDec, error) {
 					Value:     objId,
 					Length:    uint8(obj.MarshalLen()),
 				})
+			default:
+				log.Println("context", context, "TagNumber", enc_obj.TagNumber)
 			}
 		} else {
 			// log.Println("TagNumber", enc_obj.TagNumber)
