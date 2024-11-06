@@ -29,12 +29,12 @@ func IAmObjects(insNum uint32, acceptedSize uint16, supportedSeg uint8, vendorID
 	objs := make([]objects.APDUPayload, 4)
 
 	objs[0] = objects.EncObjectIdentifier(false, 0, 20, 321)
-	objs[1] = objects.EncUnsignedInteger16(acceptedSize)
+	objs[1] = objects.EncUnsignedInteger(uint(acceptedSize))
 	objs[2] = objects.EncEnumerated(supportedSeg)
 	if vendorID < 256 {
-		objs[3] = objects.EncUnsignedInteger8(uint8(vendorID))
+		objs[3] = objects.EncUnsignedInteger(uint(vendorID))
 	} else {
-		objs[3] = objects.EncUnsignedInteger16(vendorID)
+		objs[3] = objects.EncUnsignedInteger(uint(vendorID))
 	}
 
 	return objs

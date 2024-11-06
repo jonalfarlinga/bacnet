@@ -15,6 +15,7 @@ func init() {
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(whoIsCmd)
 	rootCmd.AddCommand(IAmCmd)
+	rootCmd.AddCommand(Testclient)
 	rootCmd.AddCommand(ReadPropertyServerCmd)
 	rootCmd.AddCommand(ReadPropertyClientCmd)
 	rootCmd.AddCommand(ReadPropertyMClientCmd)

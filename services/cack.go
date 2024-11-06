@@ -33,9 +33,9 @@ func ComplexACKObjects(objectType uint16, instN uint32, propertyId uint16, value
 	case int:
 		objs[3] = objects.EncReal(float32(v))
 	case uint8:
-		objs[3] = objects.EncUnsignedInteger8(v)
+		objs[3] = objects.EncUnsignedInteger(uint(v))
 	case uint16:
-		objs[3] = objects.EncUnsignedInteger16(v)
+		objs[3] = objects.EncUnsignedInteger(uint(v))
 	case float32:
 		objs[3] = objects.EncReal(v)
 	case string:

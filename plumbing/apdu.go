@@ -2,6 +2,7 @@ package plumbing
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
@@ -51,7 +52,7 @@ func (a *APDU) UnmarshalBinary(b []byte) error {
 		offset++
 		if len(b) > 2 {
 			objs := []objects.APDUPayload{}
-			for {
+			for offset < len(b) {
 				o := objects.Object{
 					TagNumber: b[offset] >> 4,
 					TagClass:  common.IntToBool(int(b[offset]) & 0x8 >> 3),
@@ -70,9 +71,6 @@ func (a *APDU) UnmarshalBinary(b []byte) error {
 				o.Data = b[offset+1 : offset+int(o.Length)+1]
 				objs = append(objs, &o)
 				offset += int(o.Length) + 1
-				if offset >= len(b) {
-					break
-				}
 			}
 			a.Objects = objs
 		}

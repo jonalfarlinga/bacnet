@@ -88,3 +88,36 @@ func printPropM(d *services.ComplexACKRPMDec) {
 	}
 	log.Print(out)
 }
+
+func printCOVNot(d *services.UnconfirmedCOVNotificationDec) {
+	out := "Decoded COV Notification:\n"
+
+	out += fmt.Sprintf(
+		"\n\tDevice Type: %d\n\tInstance Id: %d",
+		d.DeviceType, d.DeviceId,
+	)
+	out += fmt.Sprintf(
+		"\n\tMonitored Object Type: %d\n\tMonitored Instance Id: %d\n",
+		d.ObjectType, d.ObjectID,
+	)
+	out += fmt.Sprintf(
+		"\n\tProcess Id: %d\tLifetime: %d secs", d.ProcessId, d.Lifetime,
+	)
+	property := 0
+	for _, t := range d.Tags {
+		if t.TagClass && t.TagNumber == 0 {
+			property++
+			out += fmt.Sprintf("\n\t%d - ", property)
+			propInt, ok := t.Value.(uint16)
+			if ok {
+				out += fmt.Sprintf("%s\n", objects.PropertyMap[propInt])
+			}
+		} else {
+			out += fmt.Sprintf(
+				"\n\t\tAppTag Type: %s\n\t\tValue: %+v\n\t\tBinary Length: %d\n",
+				objects.TagToString(t), t.Value, t.Length,
+			)
+		}
+	}
+	log.Print(out)
+}
