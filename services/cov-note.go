@@ -31,7 +31,8 @@ func NewUnconfirmedCOVNotification(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*U
 	u := &UnconfirmedCOVNotification{
 		BVLC: bvlc,
 		NPDU: npdu,
-		APDU: plumbing.NewAPDU(plumbing.UnConfirmedReq, ServiceConfirmedSubscribeCOV, COVObjects(1, 1024, 0, 1)),
+		APDU: plumbing.NewAPDU(plumbing.UnConfirmedReq, ServiceConfirmedSubscribeCOV,
+			COVObjects(1, 1024, 0, true, 1)),
 	}
 	u.SetLength()
 
@@ -113,12 +114,8 @@ func (u *UnconfirmedCOVNotification) MarshalTo(b []byte) error {
 // MarshalLen returns the serial length of UnconfirmedCOVNotification.
 func (u *UnconfirmedCOVNotification) MarshalLen() int {
 	l := u.BVLC.MarshalLen()
-	// m := l
 	l += u.NPDU.MarshalLen()
-	// n := l - m
 	l += u.APDU.MarshalLen()
-	// o := l - m - n
-	// fmt.Println("mlen", l, m, n, o)
 	return l
 }
 
@@ -130,7 +127,7 @@ func (u *UnconfirmedCOVNotification) SetLength() {
 func (u *UnconfirmedCOVNotification) Decode() (UnconfirmedCOVNotificationDec, error) {
 	decCOV := UnconfirmedCOVNotificationDec{}
 
-	context := make([]uint8, 8)
+	context := []uint8{8}
 	objs := make([]*objects.Object, 0)
 	for i, obj := range u.APDU.Objects {
 		enc_obj, ok := obj.(*objects.Object)
@@ -189,6 +186,7 @@ func (u *UnconfirmedCOVNotification) Decode() (UnconfirmedCOVNotificationDec, er
 				if err != nil {
 					return decCOV, errors.Wrap(err, "decode Lifetime")
 				}
+
 				decCOV.Lifetime = prop
 			case combine(4, 0):
 				prop, err := objects.DecPropertyIdentifier(enc_obj)

@@ -63,7 +63,6 @@ func EncBoolean(value bool) *Object {
 	} else {
 		newObj.Length = 0
 	}
-
 	return &newObj
 }
 
@@ -103,20 +102,19 @@ func DecUnsignedInteger(rawPayload APDUPayload) (uint32, error) {
 
 func EncUnsignedInteger(value uint) *Object {
 	newObj := Object{}
-
 	var data []byte
 	switch {
 	case value <= 255:
-		data := make([]byte, 1)
-		data[0] = uint8(value)
+		data = make([]byte, 1)
+		data[0] = byte(value)
 	case value <= 65535:
-		data := make([]byte, 2)
+		data = make([]byte, 2)
 		binary.BigEndian.PutUint16(data[:], uint16(value))
 	case value <= 4294967295:
-		data := make([]byte, 4)
+		data = make([]byte, 4)
 		binary.BigEndian.PutUint32(data[:], uint32(value))
 	default:
-		data := make([]byte, 8)
+		data = make([]byte, 8)
 		binary.BigEndian.PutUint64(data[:], uint64(value))
 	}
 	newObj.TagNumber = TagUnsignedInteger

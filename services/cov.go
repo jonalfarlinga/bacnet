@@ -17,31 +17,55 @@ type ConfirmedCOV struct {
 }
 
 type ConfirmedCOVDec struct {
-	ProcessId   uint32
-	MonitoredObjID uint16
-	MonitoredInstN uint32
+	ProcessId       uint32
+	MonitoredObjID  uint16
+	MonitoredInstN  uint32
 	ExpectConfirmed bool
-	Lifetime uint32
+	Lifetime        uint32
 }
 
 // IAmObjects creates an instance of ConfirmedCOV objects.
-func COVObjects(pid uint, oid uint16, instN uint32, life uint) []objects.APDUPayload {
+func COVObjects(pid uint, oid uint16, instN uint32, expect bool, life uint) []objects.APDUPayload {
 	objs := make([]objects.APDUPayload, 4)
 
-	objs[0] = objects.EncUnsignedInteger(pid)
-	objs[1] = objects.EncObjectIdentifier(true, 0, oid, instN)
-	objs[2] = objects.EncBoolean(true)
-	objs[3] = objects.EncUnsignedInteger(life)
+	obj := objects.EncUnsignedInteger(pid)
+	obj.TagClass = true
+	obj.TagNumber = 0
+	objs[0] = obj
+	objs[1] = objects.EncObjectIdentifier(true, 1, oid, instN)
+	obj = &objects.Object{
+		TagClass:  true,
+		TagNumber: 2,
+		Length:    1,
+		Data:      []byte{byte(common.BoolToInt(expect))},
+	}
+	objs[2] = obj
+	obj = objects.EncUnsignedInteger(life)
+	obj.TagClass = true
+	obj.TagNumber = 3
+	objs[3] = obj
 
 	return objs
 }
 
-// NewConfirmedCOV creates a ConfirmedCOV.
-func NewConfirmedCOV(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*ConfirmedCOV, uint8) {
+func CancelCOVOBjects(pid uint, oid uint16, instN uint32) []objects.APDUPayload {
+	objs := make([]objects.APDUPayload, 2)
+
+	obj := objects.EncUnsignedInteger(pid)
+	obj.TagClass = true
+	obj.TagNumber = 0
+	objs[0] = obj
+	objs[1] = objects.EncObjectIdentifier(true, 1, oid, instN)
+
+	return objs
+}
+
+// NewConfirmedSubscribeCOV creates a ConfirmedCOV.
+func NewConfirmedSubscribeCOV(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*ConfirmedCOV, uint8) {
 	u := &ConfirmedCOV{
 		BVLC: bvlc,
 		NPDU: npdu,
-		APDU: plumbing.NewAPDU(plumbing.UnConfirmedReq, ServiceConfirmedSubscribeCOV, COVObjects(1, 1024, 0, 1)),
+		APDU: plumbing.NewAPDU(plumbing.ConfirmedReq, ServiceConfirmedSubscribeCOV, COVObjects(1, 1024, 0, true, 1)),
 	}
 	u.SetLength()
 
@@ -57,7 +81,6 @@ func (u *ConfirmedCOV) UnmarshalBinary(b []byte) error {
 		)
 	}
 
-	// do I need to Unmarshal again?
 	var offset int = 0
 	if err := u.BVLC.UnmarshalBinary(b[offset:]); err != nil {
 		return errors.Wrap(

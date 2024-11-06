@@ -2,7 +2,6 @@ package plumbing
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
@@ -31,12 +30,6 @@ func NewAPDU(t, s uint8, objs []objects.APDUPayload) *APDU {
 
 // UnmarshalBinary sets the values retrieved from byte sequence in a APDU frame.
 func (a *APDU) UnmarshalBinary(b []byte) error {
-	// if l := len(b); l < a.MarshalLen()-2 {
-	// 	return errors.Wrap(
-	// 		common.ErrTooShortToParse,
-	// 		fmt.Sprintf("failed to unmarshal APDU - marshal length %d binary length %d", a.MarshalLen(), l),
-	// 	)
-	// }
 	a.Type = b[0] >> 4
 	a.Flags = b[0] & 0x7
 
@@ -58,6 +51,7 @@ func (a *APDU) UnmarshalBinary(b []byte) error {
 					TagClass:  common.IntToBool(int(b[offset]) & 0x8 >> 3),
 					Length:    b[offset] & 0x7,
 				}
+				
 				// Handle extended value case
 				if o.Length == 5 {
 					offset++

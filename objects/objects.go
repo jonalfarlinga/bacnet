@@ -88,5 +88,8 @@ func (o *Object) MarshalTo(b []byte) error {
 
 // MarshalLen returns the serial length of Object.
 func (o *Object) MarshalLen() int {
+	if !o.TagClass && (o.TagNumber == TagNull || o.TagNumber == TagBoolean) {
+		return 1
+	}
 	return 1 + int(o.Length)
 }

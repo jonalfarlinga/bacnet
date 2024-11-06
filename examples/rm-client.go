@@ -85,11 +85,11 @@ func ReadPropertyMClientExample(cmd *cobra.Command, args []string) {
 			if !ok {
 				log.Fatalf("we didn't receive a CACK reply...\n")
 			}
-			multiPropCACK := services.NewComplexACKRPM(cACKEnc)
+			// multiPropCACK := services.NewComplexACKRPM(cACKEnc)
 			log.Printf("unmarshalled BVLC: %#v\n", cACKEnc.BVLC)
 			log.Printf("unmarshalled NPDU: %#v\n", cACKEnc.NPDU)
 
-			decodedCACK, err := multiPropCACK.Decode()
+			decodedCACK, err := cACKEnc.DecodeRPM()
 			if err != nil {
 				log.Fatalf("couldn't decode the CACK reply: %v\n", err)
 			}

@@ -54,7 +54,6 @@ func NewComplexACK(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*ComplexACK, uint8
 	c := &ComplexACK{
 		BVLC: bvlc,
 		NPDU: npdu,
-		// TODO: Consider to implement parameter struct to an argment of New functions.
 		APDU: plumbing.NewAPDU(plumbing.ComplexAck, ServiceConfirmedReadProperty, ComplexACKObjects(
 			objects.ObjectTypeAnalogOutput, 1, objects.PropertyIdPresentValue, 0)),
 	}
@@ -143,7 +142,7 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 		)
 	}
 
-	context := make([]uint8, 8)
+	context := []uint8{8}
 	objs := make([]*objects.Object, 0)
 	for i, obj := range c.APDU.Objects {
 		enc_obj, ok := obj.(*objects.Object)

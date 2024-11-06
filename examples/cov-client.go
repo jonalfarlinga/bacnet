@@ -16,30 +16,36 @@ import (
 )
 
 func init() {
-	Testclient.Flags().Uint16Var(&testObjectType, "object-type", 0, "Object type to read.")
-	Testclient.Flags().Uint32Var(&testInstanceId, "instance-id", 0, "Instance ID to read.")  // Analog-input
-	Testclient.Flags().Uint16Var(&testPropertyId, "property-id", 85, "Property ID to read.") // Cutestent-value
-	Testclient.Flags().IntVar(&testPeriod, "period", 1, "Period, in seconds, between requests.")
-	Testclient.Flags().IntVar(&testN, "messages", 1, "Number of messages to send, being 0 unlimited.")
+	COVClient.Flags().Uint16Var(&covObjectType, "object-type", 0, "Object type to read.")
+	COVClient.Flags().Uint32Var(&covInstanceId, "instance-id", 0, "Instance ID to read.") // Analog-input
+	COVClient.Flags().UintVar(&covProcessId, "process-id", 85, "Property ID to read.")    // Cucovent-value
+	COVClient.Flags().UintVar(&covLifetime, "lifetime", 240, "Lifetime of subscription in minutes.")
+	COVClient.Flags().BoolVar(&covExpectConf, "expect-confirmed", true, "Expect a confirmed notification.")
+	COVClient.Flags().IntVar(&covPeriod, "period", 1, "Period, in seconds, between requests.")
+	COVClient.Flags().IntVar(&covN, "messages", 1, "Number of messages to send, being 0 unlimited.")
+	COVClient.Flags().BoolVar(&covCancellation, "cancel", false, "Cancel the subscription.")
 }
 
 var (
-	testObjectType uint16
-	testInstanceId uint32
-	testPropertyId uint16
-	testPeriod     int
-	testN          int
+	covObjectType   uint16
+	covInstanceId   uint32
+	covProcessId    uint
+	covPeriod       int
+	covN            int
+	covCancellation bool
+	covLifetime     uint
+	covExpectConf   bool
 
-	Testclient = &cobra.Command{
-		Use:   "testc",
+	COVClient = &cobra.Command{
+		Use:   "cov",
 		Short: "Send ReadRange requests.",
 		Long:  "There's not much more really. This command sends a configurable ReadProperty request.",
 		Args:  argValidation,
-		Run:   TestClientExample,
+		Run:   COVClientExample,
 	}
 )
 
-func TestClientExample(cmd *cobra.Command, args []string) {
+func COVClientExample(cmd *cobra.Command, args []string) {
 	remoteUDPAddr, err := net.ResolveUDPAddr("udp", rAddr)
 	if err != nil {
 		log.Fatalf("Failed to resolve UDP address: %s", err)
@@ -51,21 +57,14 @@ func TestClientExample(cmd *cobra.Command, args []string) {
 	}
 	defer listenConn.Close()
 
-	// mReadRange, err := bacnet.NewReadRange(testObjectType, rrInstanceId, rrPropertyId, rrRangeStart, rrLength)
-	// if err != nil {
-	// 	log.Fatalf("error generating initial ReadProperty: %v\n", err)
-	// }
-	message := []byte{
-		0x81, 0x0A, 0x00, 0x15, // BVLC length 21
-		0x01, 0x04, // NPDU version 1, control 4
-		0x00, 0x00, 0x01, 0x05, // APDU type 0, service 5
-		0x09, 0x01, 0x1C, 0x00, 0x00, 0x00, 0x00, 0x29, 0x00, 0x39, 0xF0, // Subscription request processId 1 - objId 0, 0 - TRUE - life 4 min
+	message, err := bacnet.NewSubscribeCOV(covObjectType, covInstanceId, covProcessId, covLifetime, covExpectConf, covCancellation)
+	if err != nil {
+		log.Fatalf("error generating initial ReadProperty: %v\n", err)
 	}
 
 	replyRaw := make([]byte, 2048)
 	sentRequests := 0
 	for {
-		listenConn.SetDeadline(time.Now().Add(5 * time.Second))
 		if _, err := listenConn.WriteTo(message, remoteUDPAddr); err != nil {
 			log.Fatalf("Failed to write the request: %s\n", err)
 		}
@@ -101,17 +100,24 @@ func TestClientExample(cmd *cobra.Command, args []string) {
 					log.Fatalf("couldn't decode the UnconfirmedCOVNotification reply: %v\n", err)
 				}
 				printCOVNot(&decodedUnConf)
-
+			case plumbing.SimpleAck:
+				sACK, ok := serviceMsg.(*services.SimpleACK)
+				if !ok {
+					log.Fatalf("we didn't receive a SACK reply...\n")
+				}
+				log.Printf("unmarshalled BVLC: %#v\n", sACK.BVLC)
+				log.Printf("unmarshalled NPDU: %#v\n", sACK.NPDU)
+				log.Printf("decoded SimpleACK reply:\n\n\tService Choice: %d\n\tInvoke ID: %d\n\n", sACK.APDU.Service, sACK.APDU.InvokeID)
 			case plumbing.ComplexAck:
 				cACK, ok := serviceMsg.(*services.ComplexACK)
 				if !ok {
 					log.Fatalf("we didn't receive a CACK reply...\n")
 				}
-				logBuffer := services.NewLogBufferCACK(cACK)
-				log.Printf("unmarshalled BVLC: %#v\n", logBuffer.BVLC)
-				log.Printf("unmarshalled NPDU: %#v\n", logBuffer.NPDU)
+				// logBuffer := services.NewLogBufferCACK(cACK)
+				log.Printf("unmarshalled BVLC: %#v\n", cACK.BVLC)
+				log.Printf("unmarshalled NPDU: %#v\n", cACK.NPDU)
 
-				decodedLogBuffer, err := logBuffer.Decode()
+				decodedLogBuffer, err := cACK.DecodeRR()
 				if err != nil {
 					log.Fatalf("couldn't decode the LogBuffer reply: %v\n", err)
 				}
@@ -136,10 +142,10 @@ func TestClientExample(cmd *cobra.Command, args []string) {
 
 		sentRequests++
 
-		if sentRequests == testN {
+		if sentRequests == covN {
 			break
 		}
 
-		time.Sleep(time.Duration(testPeriod) * time.Second)
+		time.Sleep(time.Duration(covPeriod) * time.Second)
 	}
 }

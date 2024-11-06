@@ -23,81 +23,73 @@ type ComplexACKRPMDec struct {
 	Tags       []*objects.Object
 }
 
-func ComplexACKRPMObjects(objectType uint16, instN uint32, propertyId uint16, value interface{}) []objects.APDUPayload {
-	objs := make([]objects.APDUPayload, 5)
-	// Not Implemented for ComplexACKRPM
-	return objs
-}
+// func ComplexACKRPMObjects(objectType uint16, instN uint32, propertyId uint16, value interface{}) []objects.APDUPayload {
+// 	objs := make([]objects.APDUPayload, 5)
+// 	// Not Implemented for ComplexACKRPM
+// 	return objs
+// }
 
-func NewComplexACKRPM(cack *ComplexACK) *ComplexACKRPM {
-	c := &ComplexACKRPM{
-		BVLC: cack.BVLC,
-		NPDU: cack.NPDU,
-		APDU: cack.APDU,
-	}
-	c.SetLength()
-	return c
-}
+// func NewComplexACKRPM(cack *ComplexACK) *ComplexACKRPM {
+// 	c := &ComplexACKRPM{
+// 		BVLC: cack.BVLC,
+// 		NPDU: cack.NPDU,
+// 		APDU: cack.APDU,
+// 	}
+// 	c.SetLength()
+// 	return c
+// }
 
-func (c *ComplexACKRPM) UnmarshalBinary(b []byte) error {
-	// Use ComplexACK, then convert using NewComplexACKRPM()
-	return fmt.Errorf("UnmarshalBinary not implemented for ComplexACKRPM")
-}
+// func (c *ComplexACKRPM) UnmarshalBinary(b []byte) error {
+// 	// Use ComplexACK, then convert using NewComplexACKRPM()
+// 	return fmt.Errorf("UnmarshalBinary not implemented for ComplexACKRPM")
+// }
 
-func (c *ComplexACKRPM) MarshalBinary() ([]byte, error) {
-	b := make([]byte, c.MarshalLen())
-	if err := c.MarshalTo(b); err != nil {
-		return nil, errors.Wrap(err, "failed to marshal binary")
-	}
-	return b, nil
-}
+// func (c *ComplexACKRPM) MarshalBinary() ([]byte, error) {
+// 	b := make([]byte, c.MarshalLen())
+// 	if err := c.MarshalTo(b); err != nil {
+// 		return nil, errors.Wrap(err, "failed to marshal binary")
+// 	}
+// 	return b, nil
+// }
 
-func (c *ComplexACKRPM) MarshalTo(b []byte) error {
-	if len(b) < c.MarshalLen() {
-		return errors.Wrap(
-			common.ErrTooShortToMarshalBinary,
-			fmt.Sprintf("failed to marshal CACK %x - marshal length too short", b),
-		)
-	}
-	var offset = 0
-	if err := c.BVLC.MarshalTo(b[offset:]); err != nil {
-		return errors.Wrap(err, "marshalling CACK")
-	}
-	offset += c.BVLC.MarshalLen()
+// func (c *ComplexACKRPM) MarshalTo(b []byte) error {
+// 	if len(b) < c.MarshalLen() {
+// 		return errors.Wrap(
+// 			common.ErrTooShortToMarshalBinary,
+// 			fmt.Sprintf("failed to marshal CACK %x - marshal length too short", b),
+// 		)
+// 	}
+// 	var offset = 0
+// 	if err := c.BVLC.MarshalTo(b[offset:]); err != nil {
+// 		return errors.Wrap(err, "marshalling CACK")
+// 	}
+// 	offset += c.BVLC.MarshalLen()
 
-	if err := c.NPDU.MarshalTo(b[offset:]); err != nil {
-		return errors.Wrap(err, "marshalling CACK")
-	}
-	offset += c.NPDU.MarshalLen()
+// 	if err := c.NPDU.MarshalTo(b[offset:]); err != nil {
+// 		return errors.Wrap(err, "marshalling CACK")
+// 	}
+// 	offset += c.NPDU.MarshalLen()
 
-	if err := c.APDU.MarshalTo(b[offset:]); err != nil {
-		return errors.Wrap(err, "marshalling CACK")
-	}
-	return nil
-}
+// 	if err := c.APDU.MarshalTo(b[offset:]); err != nil {
+// 		return errors.Wrap(err, "marshalling CACK")
+// 	}
+// 	return nil
+// }
 
-func (c *ComplexACKRPM) MarshalLen() int {
-	l := c.BVLC.MarshalLen()
-	l += c.NPDU.MarshalLen()
-	l += c.APDU.MarshalLen()
+// func (c *ComplexACKRPM) MarshalLen() int {
+// 	l := c.BVLC.MarshalLen()
+// 	l += c.NPDU.MarshalLen()
+// 	l += c.APDU.MarshalLen()
 
-	return l
-}
+// 	return l
+// }
 
-func (u *ComplexACKRPM) SetLength() {
-	u.BVLC.Length = uint16(u.MarshalLen())
-}
+// func (u *ComplexACKRPM) SetLength() {
+// 	u.BVLC.Length = uint16(u.MarshalLen())
+// }
 
-func (c *ComplexACKRPM) Decode() (ComplexACKRPMDec, error) {
+func (c *ComplexACK) DecodeRPM() (ComplexACKRPMDec, error) {
 	decCACK := ComplexACKRPMDec{}
-
-	if len(c.APDU.Objects) < 3 {
-		return decCACK, errors.Wrap(
-			common.ErrWrongObjectCount,
-			fmt.Sprintf("failed to decode CACK - objects count: %d", len(c.APDU.Objects)),
-		)
-	}
-
 	context := []uint8{8}
 	objs := make([]*objects.Object, 0)
 	for i, obj := range c.APDU.Objects {
@@ -129,7 +121,6 @@ func (c *ComplexACKRPM) Decode() (ComplexACKRPMDec, error) {
 			continue
 		}
 
-		// log.Printf("%+v", objs)
 		if enc_obj.TagClass {
 			c := combine(context[len(context)-1], enc_obj.TagNumber)
 			switch c {

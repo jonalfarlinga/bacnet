@@ -130,6 +130,28 @@ func NewReadRange(objectType uint16, instanceNumber uint32, propertyId uint16, r
 	return c.MarshalBinary()
 }
 
+func NewSubscribeCOV(objectType uint16, instanceNumber uint32, processId uint, lifetime uint, expect, cancel bool) ([]byte, error) {
+	bvlc := plumbing.NewBVLC(plumbing.BVLCFuncUnicast)
+	npdu := plumbing.NewNPDU(false, false, false, true)
+	c, _ := services.NewConfirmedSubscribeCOV(bvlc, npdu)
+
+	c.APDU.Service = services.ServiceConfirmedSubscribeCOV
+	c.APDU.MaxSeg = 7
+	c.APDU.MaxSize = 5
+	c.APDU.InvokeID = 1
+	c.APDU.Flags = 2
+	if cancel {
+		c.APDU.Objects = services.CancelCOVOBjects(
+			processId, objectType, instanceNumber)
+	} else {
+		c.APDU.Objects = services.COVObjects(
+			processId, objectType, instanceNumber, expect, lifetime)
+	}
+	c.SetLength()
+
+	return c.MarshalBinary()
+}
+
 func NewWriteProperty(objectType uint16, instanceNumber uint32, propertyId uint16, value float32) ([]byte, error) {
 	bvlc := plumbing.NewBVLC(plumbing.BVLCFuncUnicast)
 	npdu := plumbing.NewNPDU(false, false, false, true)
