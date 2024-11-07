@@ -10,7 +10,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// UnconfirmedIAm is a BACnet message.
+// ComplexACKRPM is a BACnet message.
 type ComplexACKRPM struct {
 	*plumbing.BVLC
 	*plumbing.NPDU
@@ -22,71 +22,6 @@ type ComplexACKRPMDec struct {
 	InstanceId uint32
 	Tags       []*objects.Object
 }
-
-// func ComplexACKRPMObjects(objectType uint16, instN uint32, propertyId uint16, value interface{}) []objects.APDUPayload {
-// 	objs := make([]objects.APDUPayload, 5)
-// 	// Not Implemented for ComplexACKRPM
-// 	return objs
-// }
-
-// func NewComplexACKRPM(cack *ComplexACK) *ComplexACKRPM {
-// 	c := &ComplexACKRPM{
-// 		BVLC: cack.BVLC,
-// 		NPDU: cack.NPDU,
-// 		APDU: cack.APDU,
-// 	}
-// 	c.SetLength()
-// 	return c
-// }
-
-// func (c *ComplexACKRPM) UnmarshalBinary(b []byte) error {
-// 	// Use ComplexACK, then convert using NewComplexACKRPM()
-// 	return fmt.Errorf("UnmarshalBinary not implemented for ComplexACKRPM")
-// }
-
-// func (c *ComplexACKRPM) MarshalBinary() ([]byte, error) {
-// 	b := make([]byte, c.MarshalLen())
-// 	if err := c.MarshalTo(b); err != nil {
-// 		return nil, errors.Wrap(err, "failed to marshal binary")
-// 	}
-// 	return b, nil
-// }
-
-// func (c *ComplexACKRPM) MarshalTo(b []byte) error {
-// 	if len(b) < c.MarshalLen() {
-// 		return errors.Wrap(
-// 			common.ErrTooShortToMarshalBinary,
-// 			fmt.Sprintf("failed to marshal CACK %x - marshal length too short", b),
-// 		)
-// 	}
-// 	var offset = 0
-// 	if err := c.BVLC.MarshalTo(b[offset:]); err != nil {
-// 		return errors.Wrap(err, "marshalling CACK")
-// 	}
-// 	offset += c.BVLC.MarshalLen()
-
-// 	if err := c.NPDU.MarshalTo(b[offset:]); err != nil {
-// 		return errors.Wrap(err, "marshalling CACK")
-// 	}
-// 	offset += c.NPDU.MarshalLen()
-
-// 	if err := c.APDU.MarshalTo(b[offset:]); err != nil {
-// 		return errors.Wrap(err, "marshalling CACK")
-// 	}
-// 	return nil
-// }
-
-// func (c *ComplexACKRPM) MarshalLen() int {
-// 	l := c.BVLC.MarshalLen()
-// 	l += c.NPDU.MarshalLen()
-// 	l += c.APDU.MarshalLen()
-
-// 	return l
-// }
-
-// func (u *ComplexACKRPM) SetLength() {
-// 	u.BVLC.Length = uint16(u.MarshalLen())
-// }
 
 func (c *ComplexACK) DecodeRPM() (ComplexACKRPMDec, error) {
 	decCACK := ComplexACKRPMDec{}
@@ -100,10 +35,6 @@ func (c *ComplexACK) DecodeRPM() (ComplexACKRPMDec, error) {
 				fmt.Sprintf("ComplexACKRPM object at index %d is not Object type", i),
 			)
 		}
-		// log.Printf(
-		// 	"\tObject i %d tagnum %d tagclass %v data %x\n",
-		// 	i, enc_obj.TagNumber, enc_obj.TagClass, enc_obj.Data,
-		// )
 
 		// add or remove context based on opening and closing tags
 		if enc_obj.Length == 6 && enc_obj.Data == nil {
@@ -180,7 +111,6 @@ func (c *ComplexACK) DecodeRPM() (ComplexACKRPMDec, error) {
 				log.Println("context", context, "TagNumber", enc_obj.TagNumber)
 			}
 		} else {
-			// log.Println("TagNumber", enc_obj.TagNumber)
 			tag, err := decodeTags(enc_obj, &obj)
 			if err != nil {
 				return decCACK, errors.Wrap(err, "decode Application Tag")

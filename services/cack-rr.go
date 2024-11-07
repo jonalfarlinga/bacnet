@@ -10,7 +10,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// UnconfirmedIAm is a BACnet message.
+// LogBufferCACK is a BACnet message.
 type LogBufferCACK struct {
 	*plumbing.BVLC
 	*plumbing.NPDU
@@ -35,71 +35,6 @@ type StatusFlags struct {
 	OutOfService bool
 }
 
-// func LogBufferCACKObjects(instN uint32, propertyId uint16, value interface{}) []objects.APDUPayload {
-// 	objs := make([]objects.APDUPayload, 5)
-// 	// Not implemented for LogBufferCACK
-// 	return objs
-// }
-
-// func NewLogBufferCACK(cack *ComplexACK) *LogBufferCACK {
-// 	c := &LogBufferCACK{
-// 		BVLC: cack.BVLC,
-// 		NPDU: cack.NPDU,
-// 		APDU: cack.APDU,
-// 	}
-// 	c.SetLength()
-// 	return c
-// }
-
-// func (c *LogBufferCACK) UnmarshalBinary(b []byte) error {
-// 	// Use ComplexACK, then convert using NewLogBufferCACK()
-// 	return fmt.Errorf("unmarshal binary not implemented for LogBufferCACK")
-// }
-
-// func (c *LogBufferCACK) MarshalBinary() ([]byte, error) {
-// 	b := make([]byte, c.MarshalLen())
-// 	if err := c.MarshalTo(b); err != nil {
-// 		return nil, errors.Wrap(err, "failed to marshal binary")
-// 	}
-// 	return b, nil
-// }
-
-// func (c *LogBufferCACK) MarshalTo(b []byte) error {
-// 	if len(b) < c.MarshalLen() {
-// 		return errors.Wrap(
-// 			common.ErrTooShortToMarshalBinary,
-// 			fmt.Sprintf("failed to marshal CACK %x - marshal length too short", b),
-// 		)
-// 	}
-// 	var offset = 0
-// 	if err := c.BVLC.MarshalTo(b[offset:]); err != nil {
-// 		return errors.Wrap(err, "marshalling CACK")
-// 	}
-// 	offset += c.BVLC.MarshalLen()
-
-// 	if err := c.NPDU.MarshalTo(b[offset:]); err != nil {
-// 		return errors.Wrap(err, "marshalling CACK")
-// 	}
-// 	offset += c.NPDU.MarshalLen()
-
-// 	if err := c.APDU.MarshalTo(b[offset:]); err != nil {
-// 		return errors.Wrap(err, "marshalling CACK")
-// 	}
-// 	return nil
-// }
-
-// func (c *LogBufferCACK) MarshalLen() int {
-// 	l := c.BVLC.MarshalLen()
-// 	l += c.NPDU.MarshalLen()
-// 	l += c.APDU.MarshalLen()
-
-// 	return l
-// }
-
-// func (u *LogBufferCACK) SetLength() {
-// 	u.BVLC.Length = uint16(u.MarshalLen())
-// }
-
 func (c *ComplexACK) DecodeRR() (LogBufferCACKDec, error) {
 	decCACK := LogBufferCACKDec{}
 
@@ -120,10 +55,6 @@ func (c *ComplexACK) DecodeRR() (LogBufferCACKDec, error) {
 				fmt.Sprintf("LogBufferCACK object at index %d is not Object type", i),
 			)
 		}
-		// log.Printf(
-		// 	"\tObject i %d tagnum %d tagclass %v data %x\n",
-		// 	i, enc_obj.TagNumber, enc_obj.TagClass, enc_obj.Data,
-		// )
 
 		// add or remove context based on opening and closing tags
 		if enc_obj.Length == 6 {
@@ -208,7 +139,6 @@ func (c *ComplexACK) DecodeRR() (LogBufferCACKDec, error) {
 				log.Printf("Unknown Context object tag class %t tag number %d\n", enc_obj.TagClass, enc_obj.TagNumber)
 			}
 		} else {
-			// log.Println("TagNumber", enc_obj.TagNumber)
 			tag, err := decodeTags(enc_obj, &obj)
 			if err != nil {
 				return decCACK, errors.Wrap(err, "decode Application Tag")

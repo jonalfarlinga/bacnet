@@ -154,10 +154,7 @@ func (c *ConfirmedReadRange) Decode() (ConfirmedReadRangeDec, error) {
 				fmt.Sprintf("ComplexACK object at index %d is not Object type", i),
 			)
 		}
-		// log.Printf(
-		// 	"\tObject i %d tagnum %d tagclass %v data %x\n",
-		// 	i, enc_obj.TagNumber, enc_obj.TagClass, enc_obj.Data,
-		// )
+
 		if enc_obj.TagClass {
 			switch enc_obj.TagNumber {
 			case 0:
@@ -175,7 +172,6 @@ func (c *ConfirmedReadRange) Decode() (ConfirmedReadRangeDec, error) {
 				decCRP.PropertyId = propId
 			}
 		} else {
-			// log.Println("TagNumber", enc_obj.TagNumber)
 			tag, err := decodeTags(enc_obj, &obj)
 			if err != nil {
 				return decCRP, errors.Wrap(err, "decode Application Tag")

@@ -110,3 +110,11 @@ func (u *UnconfirmedWhoIs) MarshalLen() int {
 func (u *UnconfirmedWhoIs) SetLength() {
 	u.BVLC.Length = uint16(u.MarshalLen())
 }
+
+func (u *UnconfirmedWhoIs) GetService() uint8 {
+	return u.APDU.Service
+}
+
+func (u *UnconfirmedWhoIs) GetType() uint8 {
+	return u.APDU.Type
+}

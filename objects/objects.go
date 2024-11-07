@@ -2,6 +2,7 @@ package objects
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/pkg/errors"
@@ -79,6 +80,8 @@ func (o *Object) MarshalTo(b []byte) error {
 			fmt.Sprintf("failed to marshal object - binary %x - marshal length too short", b),
 		)
 	}
+	log.Println(len(b), o.MarshalLen())
+	log.Printf("Object.MarshalTo: %+v", o)
 	b[0] = o.TagNumber<<4 | uint8(common.BoolToInt(o.TagClass))<<3 | o.Length
 	if o.Length > 0 {
 		copy(b[1:o.Length+1], o.Data)

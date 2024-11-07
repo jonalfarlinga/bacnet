@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
@@ -146,12 +147,8 @@ func (u *ConfirmedCOV) MarshalTo(b []byte) error {
 // MarshalLen returns the serial length of ConfirmedCOV.
 func (u *ConfirmedCOV) MarshalLen() int {
 	l := u.BVLC.MarshalLen()
-	// m := l
 	l += u.NPDU.MarshalLen()
-	// n := l - m
 	l += u.APDU.MarshalLen()
-	// o := l - m - n
-	// fmt.Println("mlen", l, m, n, o)
 	return l
 }
 
@@ -170,10 +167,67 @@ func (u *ConfirmedCOV) Decode() (ConfirmedCOVDec, error) {
 		)
 	}
 
-	// for i, obj := range u.APDU.Objects {
-	// 	switch i {
-	// 	case 0:
-	// 	}
-	// }
+	context := []uint8{8}
+	for i, obj := range u.APDU.Objects {
+		enc_obj, ok := obj.(*objects.Object)
+		if !ok {
+			return decCOV, errors.Wrap(
+				common.ErrInvalidObjectType,
+				fmt.Sprintf("ComplexACK object at index %d is not Object type", i),
+			)
+		}
+
+		// add or remove context based on opening and closing tags
+		if enc_obj.Length == 6 {
+			context = append(context, enc_obj.TagNumber)
+			continue
+		}
+		if enc_obj.Length == 7 {
+			if len(context) == 0 {
+				return decCOV, errors.Wrap(
+					common.ErrInvalidObjectType,
+					fmt.Sprintf("LogBufferCACK object at index %d has mismatched closing tag", i),
+				)
+			}
+			context = context[:len(context)-1]
+			continue
+		}
+
+		if enc_obj.TagClass {
+			c := combine(context[len(context)-1], enc_obj.TagNumber)
+			switch c {
+			case combine(8, 0):
+				proc, err := objects.DecUnsignedInteger(enc_obj)
+				if err != nil {
+					return decCOV, errors.Wrap(err, "decode ProcessId")
+				}
+				decCOV.ProcessId = proc
+			case combine(8, 1):
+				objId, err := objects.DecObjectIdentifier(enc_obj)
+				if err != nil {
+					return decCOV, errors.Wrap(err, "decode MonitoredObjID")
+				}
+				decCOV.MonitoredObjID = objId.ObjectType
+				decCOV.MonitoredInstN = objId.InstanceNumber
+			case combine(8, 2):
+				if len(enc_obj.Data) != 1 {
+					return decCOV, errors.Wrap(
+						common.ErrInvalidObjectType,
+						fmt.Sprintf("LogBufferCACK object at index %d has invalid data length", i),
+					)
+				}
+				decCOV.ExpectConfirmed = common.IntToBool(int(enc_obj.Data[0]))
+			case combine(8, 3):
+				life, err := objects.DecUnsignedInteger(enc_obj)
+				if err != nil {
+					return decCOV, errors.Wrap(err, "decode Lifetime")
+				}
+				decCOV.Lifetime = life
+			}
+		} else {
+			log.Printf("Not encoded object: %+v\n", enc_obj)
+		}
+	}
+
 	return decCOV, nil
 }

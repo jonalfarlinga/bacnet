@@ -61,26 +61,34 @@ func IAmExample(cmd *cobra.Command, args []string) {
 		log.Printf("read %d bytes from %s: %x\n", nBytes, remoteAddr, reqRaw[:nBytes])
 
 		serviceMsg, t, err := bacnet.Parse(reqRaw[:nBytes])
+		log.Println(t)
 		if err != nil {
 			log.Fatalf("error parsing the received message: %v\n", err)
 		}
-        // switch between recieved messages
-		switch t {
+		// switch between recieved messages
+		s := serviceMsg.GetService()
+		switch s {
+		case services.ServiceUnconfirmedWhoIs:
+			whoIsMessage, ok := serviceMsg.(*services.UnconfirmedWhoIs)
+			if !ok {
+				log.Printf("we didn't receive a WhoIs reply...\n")
+			}
 
-		}
-		whoIsMessage, ok := serviceMsg.(*services.UnconfirmedWhoIs)
-		if !ok {
-			log.Fatalf("we didn't receive a WhoIs reply...\n")
-		}
+			log.Printf("received a WhoIs request!\n")
+			log.Printf("message: %+v\n", whoIsMessage.APDU)
 
-		log.Printf("received a WhoIs request!\n")
+			if _, err := listenConn.WriteTo(mIAm, remoteUDPAddr); err != nil {
+				log.Fatalf("error sending our IAm response: %v\n", err)
+			}
+		case services.ServiceConfirmedReadPropMultiple:
+			readPropertyMessage, ok := serviceMsg.(*services.ConfirmedReadProperty)
+			if !ok {
+				log.Printf("we didn't receive a ReadPropertyMultiple request! Back to listening...\n")
+				continue
+			}
+			log.Printf("received a ReadPropertyMultiple request!\n")
+			log.Printf("message: %+v\n", readPropertyMessage.APDU)
 
-		log.Printf("\n\tunmarshalled WhoIs BVLC: %#v\n", whoIsMessage.BVLC)
-		log.Printf("\n\tunmarshalled WhoIs NPDU: %#v\n", whoIsMessage.NPDU)
-		log.Printf("\n\tunmarshalled WhoIs APDU: %#v\n", whoIsMessage.APDU)
-
-		if _, err := listenConn.WriteTo(mIAm, remoteUDPAddr); err != nil {
-			log.Fatalf("error sending our IAm response: %v\n", err)
 		}
 	}
 }

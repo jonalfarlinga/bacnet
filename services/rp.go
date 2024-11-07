@@ -58,6 +58,17 @@ func NewConfirmedReadProperty(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*Confir
 	return c, c.APDU.Type
 }
 
+func NewConfirmedReadPropertyMultiple(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*ConfirmedReadProperty, uint8) {
+	c := &ConfirmedReadProperty{
+		BVLC: bvlc,
+		NPDU: npdu,
+		APDU: plumbing.NewAPDU(plumbing.ConfirmedReq, ServiceConfirmedReadProperty, ConfirmedReadPropertyMultipleObjects(
+			objects.ObjectTypeAnalogOutput, 1, []uint16{objects.PropertyIdPresentValue, objects.PropertyIdStatusFlags})),
+	}
+	c.SetLength()
+	return c, c.APDU.Type
+}
+
 func (c *ConfirmedReadProperty) UnmarshalBinary(b []byte) error {
 	if l := len(b); l < c.MarshalLen() {
 		return errors.Wrap(
@@ -167,4 +178,12 @@ func (c *ConfirmedReadProperty) Decode() (ConfirmedReadPropertyDec, error) {
 	}
 
 	return decCRP, nil
+}
+
+func (u *ConfirmedReadProperty) GetService() uint8 {
+	return u.APDU.Service
+}
+
+func (u *ConfirmedReadProperty) GetType() uint8 {
+	return u.APDU.Type
 }

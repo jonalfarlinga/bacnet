@@ -51,7 +51,7 @@ func (a *APDU) UnmarshalBinary(b []byte) error {
 					TagClass:  common.IntToBool(int(b[offset]) & 0x8 >> 3),
 					Length:    b[offset] & 0x7,
 				}
-				
+
 				// Handle extended value case
 				if o.Length == 5 {
 					offset++
@@ -76,7 +76,7 @@ func (a *APDU) UnmarshalBinary(b []byte) error {
 		offset++
 		if len(b) > 2 {
 			objs := []objects.APDUPayload{}
-			for {
+			for len(b) > offset {
 				o := objects.Object{
 					TagNumber: b[offset] >> 4,
 					TagClass:  common.IntToBool(int(b[offset]) & 0x8 >> 3),

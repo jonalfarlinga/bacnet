@@ -115,12 +115,5 @@ func decodeTags(enc_obj *objects.Object, obj *objects.APDUPayload) (*objects.Obj
 }
 
 func combine(t, s uint8) uint16 {
-	// 0001, 0010
-	// return:
-	// 0001 0000
-	// BINOR
-	// 0000 0010
-	// _________
-	// 0001 0010
 	return uint16(t)<<8 | uint16(s)
 }

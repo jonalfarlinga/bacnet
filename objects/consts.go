@@ -23,6 +23,7 @@ const (
 const (
 	ObjectTypeAnalogInput  uint16 = 0
 	ObjectTypeAnalogOutput uint16 = 1
+	ObjectTypeAnalogValue  uint16 = 2
 	ObjectTypeDevice       uint16 = 8
 	ObjectTrendLog         uint16 = 20
 )

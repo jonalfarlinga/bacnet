@@ -48,6 +48,5 @@ func EncObjectIdentifier(contextTag bool, tagN uint8, objType uint16, instN uint
 	newObj.TagClass = contextTag
 	newObj.Data = data
 	newObj.Length = uint8(len(data))
-
 	return &newObj
 }

@@ -213,3 +213,11 @@ func (u *UnconfirmedCOVNotification) Decode() (UnconfirmedCOVNotificationDec, er
 	decCOV.Tags = objs
 	return decCOV, nil
 }
+
+func (u *UnconfirmedCOVNotification) GetService() uint8 {
+	return u.APDU.Service
+}
+
+func (u *UnconfirmedCOVNotification) GetType() uint8 {
+	return u.APDU.Type
+}

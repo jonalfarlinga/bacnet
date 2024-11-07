@@ -10,6 +10,8 @@ type Message interface {
 	MarshalTo([]byte) error
 	UnmarshalBinary([]byte) error
 	MarshalLen() int
+	GetService() uint8
+	GetType() uint8
 }
 
 // BACnet is an interface defines BACnet messages.
@@ -18,4 +20,6 @@ type BACnet interface {
 	MarshalTo([]byte) error
 	UnmarshalBinary([]byte) error
 	MarshalLen() int
+	GetType() uint8
+	GetService() uint8
 }

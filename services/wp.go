@@ -171,3 +171,11 @@ func (c *ConfirmedWriteProperty) Decode() (ConfirmedWritePropertyDec, error) {
 
 	return decCWP, nil
 }
+
+func (u *ConfirmedWriteProperty) GetService() uint8 {
+	return u.APDU.Service
+}
+
+func (u *ConfirmedWriteProperty) GetType() uint8 {
+	return u.APDU.Type
+}

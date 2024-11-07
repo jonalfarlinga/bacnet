@@ -152,10 +152,6 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 				fmt.Sprintf("ComplexACK object at index %d is not Object type", i),
 			)
 		}
-		// log.Printf(
-		// 	"\tObject i %d tagnum %d tagclass %v data %x\n",
-		// 	i, enc_obj.TagNumber, enc_obj.TagClass, enc_obj.Data,
-		// )
 
 		// add or remove context based on opening and closing tags
 		if enc_obj.Length == 6 {
@@ -227,7 +223,6 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 				})
 			}
 		} else {
-			// log.Println("TagNumber", enc_obj.TagNumber)
 			tag, err := decodeTags(enc_obj, &obj)
 			if err != nil {
 				return decCACK, errors.Wrap(err, "decode Application Tag")
@@ -238,4 +233,12 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 	decCACK.Tags = objs
 
 	return decCACK, nil
+}
+
+func (u *ComplexACK) GetService() uint8 {
+	return u.APDU.Service
+}
+
+func (u *ComplexACK) GetType() uint8 {
+	return u.APDU.Type
 }

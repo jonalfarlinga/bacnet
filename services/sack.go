@@ -8,7 +8,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// UnconfirmedIAm is a BACnet message.
+// SimpleACK is a BACnet message.
 type SimpleACK struct {
 	*plumbing.BVLC
 	*plumbing.NPDU
@@ -105,4 +105,12 @@ func (s *SimpleACK) MarshalLen() int {
 
 func (s *SimpleACK) SetLength() {
 	s.BVLC.Length = uint16(s.MarshalLen())
+}
+
+func (u *SimpleACK) GetService() uint8 {
+	return u.APDU.Service
+}
+
+func (u *SimpleACK) GetType() uint8 {
+	return u.APDU.Type
 }

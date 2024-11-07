@@ -28,7 +28,7 @@ type UnconfirmedIAmDec struct {
 func IAmObjects(insNum uint32, acceptedSize uint16, supportedSeg uint8, vendorID uint16) []objects.APDUPayload {
 	objs := make([]objects.APDUPayload, 4)
 
-	objs[0] = objects.EncObjectIdentifier(false, 0, 20, 321)
+	objs[0] = objects.EncObjectIdentifier(false, objects.TagBACnetObjectIdentifier, 8, 321)
 	objs[1] = objects.EncUnsignedInteger(uint(acceptedSize))
 	objs[2] = objects.EncEnumerated(supportedSeg)
 	if vendorID < 256 {
@@ -128,12 +128,8 @@ func (u *UnconfirmedIAm) MarshalTo(b []byte) error {
 // MarshalLen returns the serial length of UnconfirmedIAm.
 func (u *UnconfirmedIAm) MarshalLen() int {
 	l := u.BVLC.MarshalLen()
-	// m := l
 	l += u.NPDU.MarshalLen()
-	// n := l - m
 	l += u.APDU.MarshalLen()
-	// o := l - m - n
-	// fmt.Println("mlen", l, m, n, o)
 	return l
 }
 
@@ -183,4 +179,12 @@ func (u *UnconfirmedIAm) Decode() (UnconfirmedIAmDec, error) {
 	}
 
 	return decIAm, nil
+}
+
+func (u *UnconfirmedIAm) GetService() uint8 {
+	return u.APDU.Service
+}
+
+func (u *UnconfirmedIAm) GetType() uint8 {
+	return u.APDU.Type
 }

@@ -157,3 +157,11 @@ func (e *Error) Decode() (ErrorDec, error) {
 
 	return decErr, nil
 }
+
+func (u *Error) GetService() uint8 {
+	return u.APDU.Service
+}
+
+func (u *Error) GetType() uint8 {
+	return u.APDU.Type
+}
