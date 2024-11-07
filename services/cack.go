@@ -50,7 +50,7 @@ func ComplexACKObjects(objectType uint16, instN uint32, propertyId uint16, value
 	return objs
 }
 
-func NewComplexACK(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*ComplexACK, uint8) {
+func NewComplexACK(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *ComplexACK {
 	c := &ComplexACK{
 		BVLC: bvlc,
 		NPDU: npdu,
@@ -58,7 +58,7 @@ func NewComplexACK(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*ComplexACK, uint8
 			objects.ObjectTypeAnalogOutput, 1, objects.PropertyIdPresentValue, 0)),
 	}
 	c.SetLength()
-	return c, c.APDU.Type
+	return c
 }
 
 func (c *ComplexACK) UnmarshalBinary(b []byte) error {

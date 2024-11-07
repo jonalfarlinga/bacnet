@@ -30,7 +30,7 @@ func ErrorObjects(errClass, errCode uint8) []objects.APDUPayload {
 	return objs
 }
 
-func NewError(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*Error, uint8) {
+func NewError(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *Error {
 	e := &Error{
 		BVLC: bvlc,
 		NPDU: npdu,
@@ -39,7 +39,7 @@ func NewError(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*Error, uint8) {
 	}
 	e.SetLength()
 
-	return e, e.APDU.Type
+	return e
 }
 
 // UnmarshalBinary sets the values retrieved from byte sequence in a UnconfirmedIAm frame.

@@ -44,7 +44,7 @@ func ConfirmedReadPropertyMultipleObjects(objectType uint16, instN uint32, prope
 	return objs
 }
 
-func NewConfirmedReadProperty(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*ConfirmedReadProperty, uint8) {
+func NewConfirmedReadProperty(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *ConfirmedReadProperty {
 	c := &ConfirmedReadProperty{
 		BVLC: bvlc,
 		NPDU: npdu,
@@ -55,10 +55,10 @@ func NewConfirmedReadProperty(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*Confir
 	}
 	c.SetLength()
 
-	return c, c.APDU.Type
+	return c
 }
 
-func NewConfirmedReadPropertyMultiple(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*ConfirmedReadProperty, uint8) {
+func NewConfirmedReadPropertyMultiple(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *ConfirmedReadProperty {
 	c := &ConfirmedReadProperty{
 		BVLC: bvlc,
 		NPDU: npdu,
@@ -66,7 +66,7 @@ func NewConfirmedReadPropertyMultiple(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) 
 			objects.ObjectTypeAnalogOutput, 1, []uint16{objects.PropertyIdPresentValue, objects.PropertyIdStatusFlags})),
 	}
 	c.SetLength()
-	return c, c.APDU.Type
+	return c
 }
 
 func (c *ConfirmedReadProperty) UnmarshalBinary(b []byte) error {

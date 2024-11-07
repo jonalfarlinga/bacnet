@@ -27,7 +27,7 @@ type testCase struct {
 
 func TestUnconfirmedWhoIs(t *testing.T) {
 	t.Helper()
-	str, _ := services.NewUnconfirmedWhoIs(
+	str := services.NewUnconfirmedWhoIs(
 		plumbing.NewBVLC(plumbing.BVLCFuncBroadcast),
 		plumbing.NewNPDU(false, false, false, false),
 	)
@@ -46,7 +46,7 @@ func TestUnconfirmedWhoIs(t *testing.T) {
 	for _, c := range testcases {
 		t.Run(c.description, func(t *testing.T) {
 			t.Run("Decode", func(t *testing.T) {
-				msg, _, err := bacnet.Parse(c.serialized)
+				msg, err := bacnet.Parse(c.serialized)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -72,7 +72,7 @@ func TestUnconfirmedWhoIs(t *testing.T) {
 
 func TestUnconfirmedIAm(t *testing.T) {
 	t.Helper()
-	str, _ := services.NewUnconfirmedIAm(
+	str := services.NewUnconfirmedIAm(
 		plumbing.NewBVLC(plumbing.BVLCFuncBroadcast),
 		plumbing.NewNPDU(false, false, false, false),
 	)
@@ -95,7 +95,7 @@ func TestUnconfirmedIAm(t *testing.T) {
 	for _, c := range testcases {
 		t.Run(c.description, func(t *testing.T) {
 			t.Run("Decode", func(t *testing.T) {
-				msg, _, err := bacnet.Parse(c.serialized)
+				msg, err := bacnet.Parse(c.serialized)
 				if err != nil {
 					t.Fatal(err)
 				}

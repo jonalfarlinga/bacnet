@@ -17,7 +17,7 @@ import (
 
 func init() {
 	ReadPropertyMClientCmd.Flags().Uint16Var(&rmObjectType, "object-type", 0, "Object type to read.")
-	ReadPropertyMClientCmd.Flags().Uint32Var(&rmInstanceId, "instance-id", 0, "Instance ID to read.") // Analog-input
+	ReadPropertyMClientCmd.Flags().Uint32Var(&rmInstanceId, "instance-id", 0, "Instance ID to read.")  // Analog-input
 	ReadPropertyMClientCmd.Flags().Uint16Var(&rmPropertyId, "property-id", 85, "Property ID to read.") // Current-value
 	ReadPropertyMClientCmd.Flags().IntVar(&rmPeriod, "period", 1, "Period, in seconds, between requests.")
 	ReadPropertyMClientCmd.Flags().IntVar(&rmN, "messages", 1, "Number of messages to send, being 0 unlimited.")
@@ -73,12 +73,13 @@ func ReadPropertyMClientExample(cmd *cobra.Command, args []string) {
 
 		log.Printf("read %d bytes from %s: %x\n", nBytes, remoteAddr, replyRaw[:nBytes])
 
-		serviceMsg, t, err := bacnet.Parse(replyRaw[:nBytes])
+		serviceMsg, err := bacnet.Parse(replyRaw[:nBytes])
 		if err != nil {
 			log.Fatalf("error parsing the received message: %v\n", err)
 		}
 
 		// switch between recieved message type
+		t := serviceMsg.GetType()
 		switch t {
 		case plumbing.ComplexAck:
 			cACKEnc, ok := serviceMsg.(*services.ComplexACK)

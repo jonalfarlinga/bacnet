@@ -15,7 +15,7 @@ type SimpleACK struct {
 	*plumbing.APDU
 }
 
-func NewSimpleACK(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*SimpleACK, uint8) {
+func NewSimpleACK(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *SimpleACK {
 	s := &SimpleACK{
 		BVLC: bvlc,
 		NPDU: npdu,
@@ -24,7 +24,7 @@ func NewSimpleACK(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*SimpleACK, uint8) 
 	}
 	s.SetLength()
 
-	return s, s.APDU.Type
+	return s
 }
 
 func (s *SimpleACK) UnmarshalBinary(b []byte) error {

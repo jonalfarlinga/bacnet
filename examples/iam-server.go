@@ -60,8 +60,7 @@ func IAmExample(cmd *cobra.Command, args []string) {
 
 		log.Printf("read %d bytes from %s: %x\n", nBytes, remoteAddr, reqRaw[:nBytes])
 
-		serviceMsg, t, err := bacnet.Parse(reqRaw[:nBytes])
-		log.Println(t)
+		serviceMsg, err := bacnet.Parse(reqRaw[:nBytes])
 		if err != nil {
 			log.Fatalf("error parsing the received message: %v\n", err)
 		}

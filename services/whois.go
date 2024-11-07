@@ -16,14 +16,14 @@ type UnconfirmedWhoIs struct {
 }
 
 // NewUnconfirmedWhoIs creates a UnconfirmedWhoIs.
-func NewUnconfirmedWhoIs(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*UnconfirmedWhoIs, uint8) {
+func NewUnconfirmedWhoIs(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *UnconfirmedWhoIs {
 	u := &UnconfirmedWhoIs{
 		BVLC: bvlc,
 		NPDU: npdu,
 		APDU: plumbing.NewAPDU(plumbing.UnConfirmedReq, ServiceUnconfirmedWhoIs, nil),
 	}
 	u.SetLength()
-	return u, u.APDU.Type
+	return u
 }
 
 // UnmarshalBinary sets the values retrieved from byte sequence in a UnconfirmedWhoIs frame.

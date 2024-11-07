@@ -77,12 +77,13 @@ func ReadRangeClientExample(cmd *cobra.Command, args []string) {
 
 		log.Printf("read %d bytes from %s: %x\n", nBytes, remoteAddr, replyRaw[:nBytes])
 
-		serviceMsg, t, err := bacnet.Parse(replyRaw[:nBytes])
+		serviceMsg, err := bacnet.Parse(replyRaw[:nBytes])
 		if err != nil {
 			log.Fatalf("error parsing the received message: %v\n", err)
 		}
 
 		// switch between recieved message type
+		t := serviceMsg.GetType()
 		switch t {
 		case plumbing.ComplexAck:
 			cACK, ok := serviceMsg.(*services.ComplexACK)

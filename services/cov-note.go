@@ -27,7 +27,7 @@ type UnconfirmedCOVNotificationDec struct {
 }
 
 // NewConfirmedCOV creates a UnconfirmedCOVNotification.
-func NewUnconfirmedCOVNotification(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*UnconfirmedCOVNotification, uint8) {
+func NewUnconfirmedCOVNotification(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *UnconfirmedCOVNotification {
 	u := &UnconfirmedCOVNotification{
 		BVLC: bvlc,
 		NPDU: npdu,
@@ -36,7 +36,7 @@ func NewUnconfirmedCOVNotification(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*U
 	}
 	u.SetLength()
 
-	return u, u.APDU.Type
+	return u
 }
 
 // UnmarshalBinary sets the values retrieved from byte sequence in a UnconfirmedCOVNotification frame.
