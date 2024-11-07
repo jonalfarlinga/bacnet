@@ -1,11 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net"
 
 	"github.com/jonalfarlinga/bacnet"
 	"github.com/jonalfarlinga/bacnet/common"
+	"github.com/jonalfarlinga/bacnet/objects"
 	"github.com/jonalfarlinga/bacnet/services"
 	"github.com/spf13/cobra"
 )
@@ -74,7 +76,13 @@ func IAmExample(cmd *cobra.Command, args []string) {
 			}
 
 			log.Printf("received a WhoIs request!\n")
-			log.Printf("message: %+v\n", whoIsMessage.APDU)
+			decodedWhoIsMessage, err := whoIsMessage.Decode()
+			if err != nil {
+				log.Fatalf("couldn't decode the WhoIs request: %v\n", err)
+			}
+			for _, obj := range decodedWhoIsMessage.Tags {
+				log.Printf("object: %+v\n", obj)
+			}
 
 			if _, err := listenConn.WriteTo(mIAm, remoteUDPAddr); err != nil {
 				log.Fatalf("error sending our IAm response: %v\n", err)
@@ -86,8 +94,22 @@ func IAmExample(cmd *cobra.Command, args []string) {
 				continue
 			}
 			log.Printf("received a ReadPropertyMultiple request!\n")
-			log.Printf("message: %+v\n", readPropertyMessage.APDU)
-
+			decodedReadPropertyMessage, err := readPropertyMessage.DecodeRPM()
+			if err != nil {
+				log.Fatalf("error decoding the ReadPropertyMultiple message: %v\n", err)
+			}
+			out := "Decoded ReadPropertyMultiple message:\n"
+			out += fmt.Sprintf(
+				"\n\tObject Type: %d\n\tInstance Id: %d\n",
+				decodedReadPropertyMessage.ObjectType, decodedReadPropertyMessage.InstanceId,
+			)
+			for i, t := range decodedReadPropertyMessage.Tags {
+				out += fmt.Sprintf(
+					"\tTag %d:\n\t\tAppTag Type: %s\n\t\tValue: %+v\n\t\tData Length: %d\n",
+					i, objects.TagToString(t), t.Value, t.Length,
+				)
+			}
+			log.Print(out)
 		}
 	}
 }

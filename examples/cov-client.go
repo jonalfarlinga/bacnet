@@ -70,8 +70,7 @@ func COVClientExample(cmd *cobra.Command, args []string) {
 		}
 
 		log.Printf("sent: %x", message)
-		always := true
-		for always {
+		for err == nil {
 			listenConn.SetDeadline(time.Now().Add(1 * time.Second))
 			nBytes, remoteAddr, err := listenConn.ReadFrom(replyRaw)
 			if err != nil {
@@ -114,7 +113,6 @@ func COVClientExample(cmd *cobra.Command, args []string) {
 				if !ok {
 					log.Fatalf("we didn't receive a CACK reply...\n")
 				}
-				// logBuffer := services.NewLogBufferCACK(cACK)
 				log.Printf("unmarshalled BVLC: %#v\n", cACK.BVLC)
 				log.Printf("unmarshalled NPDU: %#v\n", cACK.NPDU)
 

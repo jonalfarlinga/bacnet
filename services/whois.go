@@ -2,8 +2,10 @@ package services
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/jonalfarlinga/bacnet/common"
+	"github.com/jonalfarlinga/bacnet/objects"
 	"github.com/jonalfarlinga/bacnet/plumbing"
 	"github.com/pkg/errors"
 )
@@ -13,6 +15,10 @@ type UnconfirmedWhoIs struct {
 	*plumbing.BVLC
 	*plumbing.NPDU
 	*plumbing.APDU
+}
+
+type UnconfirmedWhoIsDec struct {
+	Tags []*objects.Object
 }
 
 // NewUnconfirmedWhoIs creates a UnconfirmedWhoIs.
@@ -104,6 +110,77 @@ func (u *UnconfirmedWhoIs) MarshalLen() int {
 	l += u.APDU.MarshalLen()
 
 	return l
+}
+
+func (u *UnconfirmedWhoIs) Decode() (UnconfirmedWhoIsDec, error) {
+	decWhois := UnconfirmedWhoIsDec{}
+
+	context := []uint8{8}
+	objs := make([]*objects.Object, 0)
+	for i, obj := range u.APDU.Objects {
+		enc_obj, ok := obj.(*objects.Object)
+		if !ok {
+			return decWhois, errors.Wrap(
+				common.ErrInvalidObjectType,
+				fmt.Sprintf("ComplexACK object at index %d is not Object type", i),
+			)
+		}
+
+		// add or remove context based on opening and closing tags
+		if enc_obj.Length == 6 {
+			context = append(context, enc_obj.TagNumber)
+			continue
+		}
+		if enc_obj.Length == 7 {
+			if len(context) == 0 {
+				return decWhois, errors.Wrap(
+					common.ErrInvalidObjectType,
+					fmt.Sprintf("LogBufferCACK object at index %d has mismatched closing tag", i),
+				)
+			}
+			context = context[:len(context)-1]
+			continue
+		}
+
+		if enc_obj.TagClass {
+			c := combine(context[len(context)-1], enc_obj.TagNumber)
+			switch c {
+			case combine(8, 0):
+				lowRange, err := objects.DecUnsignedInteger(obj)
+				if err != nil {
+					return decWhois, errors.Wrap(err, "decode Context object case 0")
+				}
+				objs = append(objs, &objects.Object{
+					TagNumber: 0,
+					TagClass:  true,
+					Value:     lowRange,
+					Length:    uint8(obj.MarshalLen()),
+				})
+			case combine(8, 1):
+				highRange, err := objects.DecUnsignedInteger(obj)
+				if err != nil {
+					return decWhois, errors.Wrap(err, "decode Context object case 1")
+				}
+				objs = append(objs, &objects.Object{
+					TagNumber: 1,
+					TagClass:  true,
+					Value:     highRange,
+					Length:    uint8(obj.MarshalLen()),
+				})
+			default:
+				log.Printf("Unknown tag %+v\n", enc_obj)
+			}
+		} else {
+			tag, err := decodeTags(enc_obj, &obj)
+			if err != nil {
+				return decWhois, errors.Wrap(err, "decode Application Tag")
+			}
+			objs = append(objs, tag)
+		}
+	}
+	decWhois.Tags = objs
+
+	return decWhois, nil
 }
 
 // SetLength sets the length in Length field.
