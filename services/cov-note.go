@@ -9,14 +9,14 @@ import (
 	"github.com/pkg/errors"
 )
 
-// UnconfirmedCOVNotification is a BACnet message.
-type UnconfirmedCOVNotification struct {
+// COVNotification is a BACnet message.
+type COVNotification struct {
 	*plumbing.BVLC
 	*plumbing.NPDU
 	*plumbing.APDU
 }
 
-type UnconfirmedCOVNotificationDec struct {
+type COVNotificationDec struct {
 	ProcessId      uint32
 	DeviceType     uint16
 	DevInstanceNum uint32
@@ -27,11 +27,23 @@ type UnconfirmedCOVNotificationDec struct {
 }
 
 // NewConfirmedCOV creates a UnconfirmedCOVNotification.
-func NewUnconfirmedCOVNotification(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *UnconfirmedCOVNotification {
-	u := &UnconfirmedCOVNotification{
+func NewUnconfirmedCOVNotification(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *COVNotification {
+	u := &COVNotification{
 		BVLC: bvlc,
 		NPDU: npdu,
-		APDU: plumbing.NewAPDU(plumbing.UnConfirmedReq, ServiceConfirmedSubscribeCOV,
+		APDU: plumbing.NewAPDU(plumbing.UnConfirmedReq, ServiceUnconfirmedCOVNotification,
+			COVObjects(1, 1024, 0, true, 1)),
+	}
+	u.SetLength()
+
+	return u
+}
+
+func NewConfirmedCOVNotification(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *COVNotification {
+	u := &COVNotification{
+		BVLC: bvlc,
+		NPDU: npdu,
+		APDU: plumbing.NewAPDU(plumbing.ConfirmedReq, ServiceConfirmedCOVNotification,
 			COVObjects(1, 1024, 0, true, 1)),
 	}
 	u.SetLength()
@@ -40,7 +52,7 @@ func NewUnconfirmedCOVNotification(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *Un
 }
 
 // UnmarshalBinary sets the values retrieved from byte sequence in a UnconfirmedCOVNotification frame.
-func (u *UnconfirmedCOVNotification) UnmarshalBinary(b []byte) error {
+func (u *COVNotification) UnmarshalBinary(b []byte) error {
 	if l := len(b); l < u.MarshalLen() {
 		return errors.Wrap(
 			common.ErrTooShortToParse,
@@ -77,7 +89,7 @@ func (u *UnconfirmedCOVNotification) UnmarshalBinary(b []byte) error {
 }
 
 // MarshalBinary returns the byte sequence generated from a UnconfirmedCOVNotification instance.
-func (u *UnconfirmedCOVNotification) MarshalBinary() ([]byte, error) {
+func (u *COVNotification) MarshalBinary() ([]byte, error) {
 	b := make([]byte, u.MarshalLen())
 	if err := u.MarshalTo(b); err != nil {
 		return nil, errors.Wrap(err, "failed to marshal binary")
@@ -86,7 +98,7 @@ func (u *UnconfirmedCOVNotification) MarshalBinary() ([]byte, error) {
 }
 
 // MarshalTo puts the byte sequence in the byte array given as b.
-func (u *UnconfirmedCOVNotification) MarshalTo(b []byte) error {
+func (u *COVNotification) MarshalTo(b []byte) error {
 	if len(b) < u.MarshalLen() {
 		return errors.Wrap(
 			common.ErrTooShortToMarshalBinary,
@@ -112,7 +124,7 @@ func (u *UnconfirmedCOVNotification) MarshalTo(b []byte) error {
 }
 
 // MarshalLen returns the serial length of UnconfirmedCOVNotification.
-func (u *UnconfirmedCOVNotification) MarshalLen() int {
+func (u *COVNotification) MarshalLen() int {
 	l := u.BVLC.MarshalLen()
 	l += u.NPDU.MarshalLen()
 	l += u.APDU.MarshalLen()
@@ -120,12 +132,12 @@ func (u *UnconfirmedCOVNotification) MarshalLen() int {
 }
 
 // SetLength sets the length in Length field.
-func (u *UnconfirmedCOVNotification) SetLength() {
+func (u *COVNotification) SetLength() {
 	u.BVLC.Length = uint16(u.MarshalLen())
 }
 
-func (u *UnconfirmedCOVNotification) Decode() (UnconfirmedCOVNotificationDec, error) {
-	decCOV := UnconfirmedCOVNotificationDec{}
+func (u *COVNotification) Decode() (COVNotificationDec, error) {
+	decCOV := COVNotificationDec{}
 
 	context := []uint8{8}
 	objs := make([]*objects.Object, 0)
@@ -137,10 +149,6 @@ func (u *UnconfirmedCOVNotification) Decode() (UnconfirmedCOVNotificationDec, er
 				fmt.Sprintf("ComplexACK object at index %d is not Object type", i),
 			)
 		}
-		// log.Printf(
-		// 	"\tObject i %d tagnum %d tagclass %v data %x\n",
-		// 	i, enc_obj.TagNumber, enc_obj.TagClass, enc_obj.Data,
-		// )
 
 		// add or remove context based on opening and closing tags
 		if enc_obj.Length == 6 {
@@ -214,10 +222,10 @@ func (u *UnconfirmedCOVNotification) Decode() (UnconfirmedCOVNotificationDec, er
 	return decCOV, nil
 }
 
-func (u *UnconfirmedCOVNotification) GetService() uint8 {
+func (u *COVNotification) GetService() uint8 {
 	return u.APDU.Service
 }
 
-func (u *UnconfirmedCOVNotification) GetType() uint8 {
+func (u *COVNotification) GetType() uint8 {
 	return u.APDU.Type
 }

@@ -89,7 +89,7 @@ func printPropM(d *services.ComplexACKRPMDec) {
 	log.Print(out)
 }
 
-func printCOVNot(d *services.UnconfirmedCOVNotificationDec) {
+func printCOVNot(d *services.COVNotificationDec) {
 	out := "Decoded COV Notification:\n"
 
 	out += fmt.Sprintf(

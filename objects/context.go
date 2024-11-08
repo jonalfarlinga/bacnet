@@ -17,3 +17,11 @@ func EncContextBool(tagNumber uint8, value bool) *Object {
 	}
 	return obj
 }
+
+func DecContextBool(rawPayload APDUPayload) (bool, error) {
+	encObj, ok := rawPayload.(*Object)
+	if !ok {
+		return false, common.ErrInvalidObjectType
+	}
+	return common.IntToBool(int(encObj.Data[0] & 0x01)), nil
+}

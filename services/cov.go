@@ -32,7 +32,7 @@ func COVObjects(pid uint, oid uint16, instN uint32, expect bool, life uint) []ob
 	objs[0] = objects.ContextTag(0, objects.EncUnsignedInteger(pid))
 	objs[1] = objects.EncObjectIdentifier(true, 1, oid, instN)
 	objs[2] = objects.EncContextBool(2, expect)
-	objs[3] = objects.ContextTag(8, objects.EncUnsignedInteger(life))
+	objs[3] = objects.ContextTag(3, objects.EncUnsignedInteger(life))
 
 	return objs
 }

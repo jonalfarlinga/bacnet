@@ -88,7 +88,7 @@ func COVClientExample(cmd *cobra.Command, args []string) {
 			t := serviceMsg.GetType()
 			switch t {
 			case plumbing.UnConfirmedReq:
-				unConf, ok := serviceMsg.(*services.UnconfirmedCOVNotification)
+				unConf, ok := serviceMsg.(*services.COVNotification)
 				if !ok {
 					log.Fatalf("we didn't receive an UnconfirmedCOVNotification reply...\n")
 				}
@@ -136,6 +136,18 @@ func COVClientExample(cmd *cobra.Command, args []string) {
 				log.Printf("decoded Error reply:\n\tError Class: %d\n\tError Code: %d\n",
 					decodedErr.ErrorClass, decodedErr.ErrorCode,
 				)
+			case plumbing.ConfirmedReq:
+				cReq, ok := serviceMsg.(*services.COVNotification)
+				if !ok {
+					log.Fatalf("we didn't receive a ConfirmedRequest reply...\n")
+				}
+				log.Printf("unmarshalled BVLC: %#v\n", cReq.BVLC)
+				log.Printf("unmarshalled NPDU: %#v\n", cReq.NPDU)
+				decodedCOVNot, err := cReq.Decode()
+				if err != nil {
+					log.Fatalf("couldn't decode the ConfirmedRequest reply: %v\n", err)
+				}
+				printCOVNot(&decodedCOVNot)
 			}
 		}
 

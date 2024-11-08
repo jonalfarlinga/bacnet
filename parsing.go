@@ -58,6 +58,8 @@ func Parse(b []byte) (plumbing.BACnet, error) {
 		bacnet = services.NewUnconfirmedIAm(&bvlc, &npdu)
 	case combine(plumbing.UnConfirmedReq<<4, services.ServiceUnconfirmedCOVNotification):
 		bacnet = services.NewUnconfirmedCOVNotification(&bvlc, &npdu)
+	case combine(plumbing.ConfirmedReq<<4, services.ServiceConfirmedCOVNotification):
+		bacnet = services.NewConfirmedCOVNotification(&bvlc, &npdu)
 	case combine(plumbing.ConfirmedReq<<4, services.ServiceConfirmedReadProperty):
 		bacnet = services.NewConfirmedReadProperty(&bvlc, &npdu)
 	case combine(plumbing.ConfirmedReq<<4, services.ServiceConfirmedReadPropMultiple):
