@@ -18,7 +18,7 @@ func printCACK(d *services.ComplexACKDec) {
 	for i, t := range d.Tags {
 		out += fmt.Sprintf(
 			"\tTag %d:\n\t\tAppTag Type: %s\n\t\tValue: %+v\n\t\tBinary Length: %d\n",
-			i, objects.TagToString(t), t.Value, t.Length,
+			i, objects.TagMap[t.TagNumber], t.Value, t.Length,
 		)
 	}
 	log.Print(out)
@@ -42,7 +42,7 @@ func printLogBuffer(d *services.LogBufferCACKDec) {
 	for i, t := range d.Tags {
 		out += fmt.Sprintf(
 			"\tTag %d:\n\t\tAppTag Type: %s\n\t\tValue: %+v\n\t\tData Length: %d\n",
-			i, objects.TagToString(t), t.Value, t.Length,
+			i, objects.TagMap[t.TagNumber], t.Value, t.Length,
 		)
 	}
 	log.Print(out)
@@ -82,7 +82,7 @@ func printPropM(d *services.ComplexACKRPMDec) {
 		} else {
 			out += fmt.Sprintf(
 				"\n\t\tAppTag Type: %s\n\t\tValue: %+v\n\t\tBinary Length: %d\n",
-				objects.TagToString(t), t.Value, t.Length,
+				objects.TagMap[t.TagNumber], t.Value, t.Length,
 			)
 		}
 	}
@@ -115,7 +115,7 @@ func printCOVNot(d *services.COVNotificationDec) {
 		} else {
 			out += fmt.Sprintf(
 				"\n\t\tAppTag Type: %s\n\t\tValue: %+v\n\t\tBinary Length: %d\n",
-				objects.TagToString(t), t.Value, t.Length,
+				objects.TagMap[t.TagNumber], t.Value, t.Length,
 			)
 		}
 	}

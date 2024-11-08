@@ -8,6 +8,7 @@ type LogStatus struct {
 	LogFull      bool
 }
 
+// Log Status tags for TrendLogs
 func DecLogStatus(obj APDUPayload) (*LogStatus, error) {
 	enc_obj, ok := obj.(*Object)
 	if !ok {

@@ -10,6 +10,22 @@ import (
 	"github.com/pkg/errors"
 )
 
+var TagMap = map[uint8]string{
+	TagNull:                   "Null",
+	TagBoolean:                "Boolean",
+	TagUnsignedInteger:        "UnsignedInteger",
+	TagSignedInteger:          "SignedInteger",
+	TagReal:                   "Real",
+	TagDouble:                 "Double",
+	TagOctetString:            "OctetString",
+	TagCharacterString:        "CharacterString",
+	TagBitString:              "BitString",
+	TagEnumerated:             "Enumerated",
+	TagDate:                   "Date",
+	TagTime:                   "Time",
+	TagBACnetObjectIdentifier: "BACnetObjectIdentifier",
+}
+
 // TagNumber 0
 func DecNull(rawPayload APDUPayload) error {
 	rawObject, ok := rawPayload.(*Object)

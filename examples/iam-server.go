@@ -106,7 +106,7 @@ func IAmExample(cmd *cobra.Command, args []string) {
 			for i, t := range decodedReadPropertyMessage.Tags {
 				out += fmt.Sprintf(
 					"\tTag %d:\n\t\tAppTag Type: %s\n\t\tValue: %+v\n\t\tData Length: %d\n",
-					i, objects.TagToString(t), t.Value, t.Length,
+					i, objects.TagMap[t.TagNumber], t.Value, t.Length,
 				)
 			}
 			log.Print(out)

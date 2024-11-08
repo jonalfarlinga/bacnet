@@ -1,8 +1,6 @@
 package objects
 
-import "fmt"
-
-// Tag number
+// Application Tag number
 const (
 	TagNull uint8 = iota
 	TagBoolean
@@ -19,8 +17,9 @@ const (
 	TagBACnetObjectIdentifier
 )
 
+// Object types
 const (
-	ObjectTypeAnalogInput  uint16 = iota
+	ObjectTypeAnalogInput uint16 = iota
 	ObjectTypeAnalogOutput
 	ObjectTypeAnalogValue
 	ObjectTypeBinaryInput
@@ -62,45 +61,18 @@ const (
 )
 
 const (
-	ErrorClassObject  uint8 = 1
-	ErrorClassService uint8 = 5
+	ErrorClassDevice   uint8 = iota
+	ErrorClassObject
+	ErrorClassProperty
+	ErrorClassResources
+	ErrorClassSecurity
+	ErrorClassServices
+	ErrorClassVT
+	ErrorClassCommunication
+	ErrorClassVendor
+)
 
+const (
 	ErrorCodeUnknownObject        uint8 = 31
 	ErrorCodeServiceRequestDenied uint8 = 29
 )
-
-func TagToString(t *Object) string {
-	if t.TagClass {
-		return fmt.Sprintf("Context %v", t.TagNumber)
-	}
-	switch t.TagNumber {
-	case TagNull:
-		return "Null"
-	case TagBoolean:
-		return "Boolean"
-	case TagUnsignedInteger:
-		return "UnsignedInteger"
-	case TagSignedInteger:
-		return "SignedInteger"
-	case TagReal:
-		return "Real"
-	case TagDouble:
-		return "Double"
-	case TagOctetString:
-		return "OctetString"
-	case TagCharacterString:
-		return "CharacterString"
-	case TagBitString:
-		return "BitString"
-	case TagEnumerated:
-		return "Enumerated"
-	case TagDate:
-		return "Date"
-	case TagTime:
-		return "Time"
-	case TagBACnetObjectIdentifier:
-		return "BACnetObjectIdentifier"
-	default:
-		return "Unknown"
-	}
-}
