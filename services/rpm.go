@@ -56,7 +56,7 @@ func (c *ConfirmedReadProperty) DecodeRPM() (ConfirmedReadPropMultDec, error) {
 				decRPM.ObjectType = objId.ObjectType
 				decRPM.InstanceNum = objId.InstanceNumber
 			case combine(1, 0):
-				propId, err := objects.DecPropertyIdentifier(obj)
+				propId, err := objects.DecUnsignedInteger(obj)
 				if err != nil {
 					return decRPM, errors.Wrap(err, "decode Context object case 0")
 				}

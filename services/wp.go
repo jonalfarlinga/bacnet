@@ -22,6 +22,7 @@ type ConfirmedWritePropertyDec struct {
 	PropertyId  uint16
 	Value       float32
 	Priority    uint8
+	Tags		[]*objects.Object
 }
 
 func ConfirmedWritePropertyObjects(objectType uint16, instN uint32, propertyId uint16, data interface{}) []objects.APDUPayload {
@@ -32,14 +33,14 @@ func ConfirmedWritePropertyObjects(objectType uint16, instN uint32, propertyId u
 	objs[2] = objects.EncOpeningTag(3)
 	switch data := data.(type) {
 	case float32:
-		objs[3] = objects.ContextTag(3, objects.EncReal(data))
+		objs[3] = objects.EncReal(data)
 	case uint:
-		objs[3] = objects.ContextTag(3, objects.EncUnsignedInteger(data))
+		objs[3] = objects.EncUnsignedInteger(data)
 	case string:
-		objs[3] = objects.ContextTag(3, objects.EncString(data))
+		objs[3] = objects.EncString(data)
 	}
 	objs[4] = objects.EncClosingTag(3)
-	objs[5] = objects.EncPriority(true, 4, 16)
+	objs[5] = objects.ContextTag(4, objects.EncUnsignedInteger(16))
 
 	return objs
 }
@@ -145,35 +146,65 @@ func (c *ConfirmedWriteProperty) Decode() (ConfirmedWritePropertyDec, error) {
 		)
 	}
 
+	context := []uint8{8}
+	objs := make([]*objects.Object, 0)
 	for i, obj := range c.APDU.Objects {
-		switch i {
-		case 0:
-			objId, err := objects.DecObjectIdentifier(obj)
-			if err != nil {
-				return decCWP, errors.Wrap(err, "decoding ConfirmedWP")
+		enc_obj, ok := obj.(*objects.Object)
+		if !ok {
+			return decCWP, errors.Wrap(
+				common.ErrInvalidObjectType,
+				fmt.Sprintf("ComplexACK object at index %d is not Object type", i),
+			)
+		}
+
+		// add or remove context based on opening and closing tags
+		if enc_obj.Length == 6 {
+			context = append(context, enc_obj.TagNumber)
+			continue
+		}
+		if enc_obj.Length == 7 {
+			if len(context) == 0 {
+				return decCWP, errors.Wrap(
+					common.ErrInvalidObjectType,
+					fmt.Sprintf("LogBufferCACK object at index %d has mismatched closing tag", i),
+				)
 			}
-			decCWP.ObjectType = objId.ObjectType
-			decCWP.InstanceNum = objId.InstanceNumber
-		case 1:
-			propId, err := objects.DecPropertyIdentifier(obj)
-			if err != nil {
-				return decCWP, errors.Wrap(err, "decoding ConfirmedWP")
+			context = context[:len(context)-1]
+			continue
+		}
+
+		if enc_obj.TagClass {
+			c := combine(context[len(context)-1], enc_obj.TagNumber)
+			switch c {
+			case combine(8, 0):
+				objId, err := objects.DecObjectIdentifier(obj)
+				if err != nil {
+					return decCWP, errors.Wrap(err, "decoding ConfirmedWP")
+				}
+				decCWP.ObjectType = objId.ObjectType
+				decCWP.InstanceNum = objId.InstanceNumber
+			case combine(8, 1):
+				propId, err := objects.DecUnsignedInteger(obj)
+				if err != nil {
+					return decCWP, errors.Wrap(err, "decoding ConfirmedWP")
+				}
+				decCWP.PropertyId = uint16(propId)
+			case combine(8, 4):
+				priority, err := objects.DecUnsignedInteger(obj)
+				if err != nil {
+					return decCWP, errors.Wrap(err, "decoding ConfirmedWP")
+				}
+				decCWP.Priority = uint8(priority)
 			}
-			decCWP.PropertyId = propId
-		case 2:
-			value, err := objects.DecReal(obj)
+		} else {
+			tag, err := decodeTags(enc_obj, &obj)
 			if err != nil {
-				return decCWP, errors.Wrap(err, "decoding ConfirmedWP")
+				return decCWP, errors.Wrap(err, "decode Application Tag")
 			}
-			decCWP.Value = value
-		case 4:
-			priority, err := objects.DecPriority(obj)
-			if err != nil {
-				return decCWP, errors.Wrap(err, "decoding ConfirmedWP")
-			}
-			decCWP.Priority = priority
+			objs = append(objs, tag)
 		}
 	}
+	decCWP.Tags = objs
 
 	return decCWP, nil
 }

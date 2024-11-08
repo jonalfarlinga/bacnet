@@ -83,10 +83,11 @@ func (c *ComplexACK) DecodeRR() (LogBufferCACKDec, error) {
 				decCACK.ObjectType = objId.ObjectType
 				decCACK.InstanceId = objId.InstanceNumber
 			case combine(8, 1):
-				propId, err := objects.DecPropertyIdentifier(obj)
+				value, err := objects.DecUnsignedInteger(obj)
 				if err != nil {
 					return decCACK, errors.Wrap(err, "decode Context object case 1")
 				}
+				propId := uint16(value)
 				decCACK.PropertyId = propId
 			case combine(8, 3):
 				first, last, more, err := decResultsFlag(obj)

@@ -165,10 +165,11 @@ func (c *ConfirmedReadRange) Decode() (ConfirmedReadRangeDec, error) {
 				decCRP.ObjectType = objId.ObjectType
 				decCRP.InstanceNum = objId.InstanceNumber
 			case 1:
-				propId, err := objects.DecPropertyIdentifier(obj)
+				value, err := objects.DecUnsignedInteger(obj)
 				if err != nil {
 					return decCRP, errors.Wrap(err, "decode Context object case 1")
 				}
+				propId := uint16(value)
 				decCRP.PropertyId = propId
 			}
 		} else {

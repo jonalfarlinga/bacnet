@@ -63,7 +63,7 @@ func (c *ComplexACK) DecodeRPM() (ComplexACKRPMDec, error) {
 				decCACK.ObjectType = objId.ObjectType
 				decCACK.InstanceId = objId.InstanceNumber
 			case combine(1, 2):
-				propId, err := objects.DecPropertyIdentifier(obj)
+				propId, err := objects.DecUnsignedInteger(obj)
 				if err != nil {
 					return decCACK, errors.Wrap(err, "decode Context object case 1")
 				}
@@ -86,10 +86,11 @@ func (c *ComplexACK) DecodeRPM() (ComplexACKRPMDec, error) {
 					Length:    uint8(obj.MarshalLen()),
 				})
 			case combine(4, 1):
-				propId, err := objects.DecPropertyIdentifier(obj)
+				value, err := objects.DecUnsignedInteger(obj)
 				if err != nil {
 					return decCACK, errors.Wrap(err, "decode Context object case 1")
 				}
+				propId := uint16(value)
 				objs = append(objs, &objects.Object{
 					TagNumber: 1,
 					TagClass:  true,

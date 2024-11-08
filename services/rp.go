@@ -66,7 +66,7 @@ func NewConfirmedReadPropertyMultiple(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) 
 			objects.ObjectTypeAnalogOutput, 1, []uint16{})),
 	}
 	c.SetLength()
-	
+
 	return c
 }
 
@@ -170,10 +170,11 @@ func (c *ConfirmedReadProperty) Decode() (ConfirmedReadPropertyDec, error) {
 			decCRP.ObjectType = objId.ObjectType
 			decCRP.InstanceNum = objId.InstanceNumber
 		case 1:
-			propId, err := objects.DecPropertyIdentifier(obj)
+			value, err := objects.DecUnsignedInteger(obj)
 			if err != nil {
 				return decCRP, errors.Wrap(err, "decoding ConfirmedRP")
 			}
+			propId := uint16(value)
 			decCRP.PropertyId = propId
 		}
 	}

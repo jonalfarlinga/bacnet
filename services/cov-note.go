@@ -189,7 +189,7 @@ func (u *UnconfirmedCOVNotification) Decode() (UnconfirmedCOVNotificationDec, er
 
 				decCOV.Lifetime = prop
 			case combine(4, 0):
-				prop, err := objects.DecPropertyIdentifier(enc_obj)
+				prop, err := objects.DecUnsignedInteger(enc_obj)
 				if err != nil {
 					return decCOV, errors.Wrap(err, "decode PropertyId")
 				}
