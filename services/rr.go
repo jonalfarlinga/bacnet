@@ -17,10 +17,10 @@ type ConfirmedReadRange struct {
 }
 
 type ConfirmedReadRangeDec struct {
-	ObjectType uint16
-	InstanceId uint32
-	PropertyId uint16
-	Tags       []*objects.Object
+	ObjectType  uint16
+	InstanceNum uint32
+	PropertyId  uint16
+	Tags        []*objects.Object
 }
 
 func ConfirmedReadRangeObjects(objectType uint16, instN uint32, property uint16, index uint16, count int32) []objects.APDUPayload {
@@ -163,7 +163,7 @@ func (c *ConfirmedReadRange) Decode() (ConfirmedReadRangeDec, error) {
 					return decCRP, errors.Wrap(err, "decode Context object case 0")
 				}
 				decCRP.ObjectType = objId.ObjectType
-				decCRP.InstanceId = objId.InstanceNumber
+				decCRP.InstanceNum = objId.InstanceNumber
 			case 1:
 				propId, err := objects.DecPropertyIdentifier(obj)
 				if err != nil {

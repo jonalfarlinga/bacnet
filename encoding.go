@@ -152,7 +152,7 @@ func NewSubscribeCOV(objectType uint16, instanceNumber uint32, processId uint, l
 	return c.MarshalBinary()
 }
 
-func NewWriteProperty(objectType uint16, instanceNumber uint32, propertyId uint16, value float32) ([]byte, error) {
+func NewWriteProperty(objectType uint16, instanceNumber uint32, propertyId uint16, data interface{}) ([]byte, error) {
 	bvlc := plumbing.NewBVLC(plumbing.BVLCFuncUnicast)
 	npdu := plumbing.NewNPDU(false, false, false, true)
 
@@ -161,7 +161,7 @@ func NewWriteProperty(objectType uint16, instanceNumber uint32, propertyId uint1
 	c.APDU.Service = services.ServiceConfirmedWriteProperty
 	c.APDU.MaxSize = 5
 	c.APDU.InvokeID = 1
-	c.APDU.Objects = services.ConfirmedWritePropertyObjects(objectType, instanceNumber, propertyId, value)
+	c.APDU.Objects = services.ConfirmedWritePropertyObjects(objectType, instanceNumber, propertyId, data)
 
 	c.SetLength()
 

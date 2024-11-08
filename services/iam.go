@@ -17,7 +17,7 @@ type UnconfirmedIAm struct {
 }
 
 type UnconfirmedIAmDec struct {
-	InstanceNumber        uint32
+	InstanceNum           uint32
 	DeviceType            uint16
 	MaxAPDULength         uint16
 	SegmentationSupported uint8
@@ -25,17 +25,13 @@ type UnconfirmedIAmDec struct {
 }
 
 // IAmObjects creates an instance of UnconfirmedIAm objects.
-func IAmObjects(insNum uint32, acceptedSize uint16, supportedSeg uint8, vendorID uint16) []objects.APDUPayload {
+func IAmObjects(instN uint32, acceptedSize uint16, supportedSeg uint8, vendorID uint16) []objects.APDUPayload {
 	objs := make([]objects.APDUPayload, 4)
 
-	objs[0] = objects.EncObjectIdentifier(false, objects.TagBACnetObjectIdentifier, 8, 321)
+	objs[0] = objects.EncObjectIdentifier(false, objects.TagBACnetObjectIdentifier, 8, instN)
 	objs[1] = objects.EncUnsignedInteger(uint(acceptedSize))
 	objs[2] = objects.EncEnumerated(supportedSeg)
-	if vendorID < 256 {
-		objs[3] = objects.EncUnsignedInteger(uint(vendorID))
-	} else {
-		objs[3] = objects.EncUnsignedInteger(uint(vendorID))
-	}
+	objs[3] = objects.EncUnsignedInteger(uint(vendorID))
 
 	return objs
 }
@@ -45,7 +41,6 @@ func NewUnconfirmedIAm(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *UnconfirmedIAm
 	u := &UnconfirmedIAm{
 		BVLC: bvlc,
 		NPDU: npdu,
-		// TODO: Consider to implement parameter struct to an argment of New functions.
 		APDU: plumbing.NewAPDU(plumbing.UnConfirmedReq, ServiceUnconfirmedIAm, IAmObjects(1, 1024, 0, 1)),
 	}
 	u.SetLength()
@@ -156,7 +151,7 @@ func (u *UnconfirmedIAm) Decode() (UnconfirmedIAmDec, error) {
 				return decIAm, errors.Wrap(err, "decoding UnconfirmedIAm")
 			}
 			decIAm.DeviceType = objId.ObjectType
-			decIAm.InstanceNumber = objId.InstanceNumber
+			decIAm.InstanceNum = objId.InstanceNumber
 		case 1:
 			maxLen, err := objects.DecUnsignedInteger(obj)
 			if err != nil {

@@ -53,7 +53,7 @@ func printIAm(d *services.UnconfirmedIAmDec) {
 
 	out += fmt.Sprintf(
 		"\n\tObject Type: %d\n\tInstance Id: %d\n\tMax APDU Length: %d\n",
-		d.DeviceType, d.InstanceNumber, d.MaxAPDULength,
+		d.DeviceType, d.InstanceNum, d.MaxAPDULength,
 	)
 	out += fmt.Sprintf(
 		"\tSegmentation Supported: %d\n\tVendor Id: %d\n",
@@ -94,11 +94,11 @@ func printCOVNot(d *services.UnconfirmedCOVNotificationDec) {
 
 	out += fmt.Sprintf(
 		"\n\tDevice Type: %d\n\tInstance Id: %d",
-		d.DeviceType, d.DeviceId,
+		d.DeviceType, d.DevInstanceNum,
 	)
 	out += fmt.Sprintf(
 		"\n\tMonitored Object Type: %d\n\tMonitored Instance Id: %d\n",
-		d.ObjectType, d.ObjectID,
+		d.ObjectType, d.ObjInstanceNum,
 	)
 	out += fmt.Sprintf(
 		"\n\tProcess Id: %d\tLifetime: %d secs", d.ProcessId, d.Lifetime,

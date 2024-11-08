@@ -19,13 +19,46 @@ const (
 	TagBACnetObjectIdentifier
 )
 
-// Be sure to check ../bacnet-stack/src/bacnet/bacenum.h for more!
 const (
-	ObjectTypeAnalogInput  uint16 = 0
-	ObjectTypeAnalogOutput uint16 = 1
-	ObjectTypeAnalogValue  uint16 = 2
-	ObjectTypeDevice       uint16 = 8
-	ObjectTrendLog         uint16 = 20
+	ObjectTypeAnalogInput  uint16 = iota
+	ObjectTypeAnalogOutput
+	ObjectTypeAnalogValue
+	ObjectTypeBinaryInput
+	ObjectTypeBinaryOutput
+	ObjectTypeBinaryValue
+	ObjectTypeCalendar
+	ObjectTypeCommand
+	ObjectTypeDevice
+	ObjectTypeEventEnrollment
+	ObjectTypeFile
+	ObjectTypeGroup
+	ObjectTypeLoop
+	ObjectTypeMultiStateInput
+	ObjectTypeMultiStateOutput
+	ObjectTypeNotificationClass
+	ObjectTypeProgram
+	ObjectTypeSchedule
+	ObjectTypeAveraging
+	ObjectTypeMultiStateValue
+	ObjectTypeTrendLog
+	ObjectTypeLifeSafetyPoint
+	ObjectTypeLifeSafetyZone
+	ObjectTypeAccumulator
+	ObjectTypePulseConverter
+	ObjectTypeEventLog
+	ObjectTypeGlobalGroup
+	ObjectTypeTrendLogMultiple
+	ObjectTypeLoadControl
+	ObjectTypeStructuredView
+	ObjectTypeAccessDoor
+	ObjectTypeTimer
+	ObjectTypeAccessCredential
+	ObjectTypeAccessPoint
+	ObjectTypeAccessRights
+	ObjectTypeAccessUser
+	ObjectTypeAccessZone
+	ObjectTypeCredentialDataInput
+	ObjectTypeNetworkSecurity
 )
 
 const (

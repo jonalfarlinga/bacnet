@@ -10,9 +10,9 @@ import (
 )
 
 type ConfirmedReadPropMultDec struct {
-	ObjectType uint16
-	InstanceId uint32
-	Tags       []*objects.Object
+	ObjectType  uint16
+	InstanceNum uint32
+	Tags        []*objects.Object
 }
 
 func (c *ConfirmedReadProperty) DecodeRPM() (ConfirmedReadPropMultDec, error) {
@@ -54,7 +54,7 @@ func (c *ConfirmedReadProperty) DecodeRPM() (ConfirmedReadPropMultDec, error) {
 					return decRPM, errors.Wrap(err, "decode Context object case 0")
 				}
 				decRPM.ObjectType = objId.ObjectType
-				decRPM.InstanceId = objId.InstanceNumber
+				decRPM.InstanceNum = objId.InstanceNumber
 			case combine(1, 0):
 				propId, err := objects.DecPropertyIdentifier(obj)
 				if err != nil {

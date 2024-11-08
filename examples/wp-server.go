@@ -61,7 +61,7 @@ func WritePropertyServerExample(cmd *cobra.Command, args []string) {
 		if err != nil {
 			log.Fatalf("error parsing the received message: %v\n", err)
 		}
-        // switch between recieved messages
+		// switch between recieved messages
 		t := serviceMsg.GetType()
 		switch t {
 
@@ -88,10 +88,10 @@ func WritePropertyServerExample(cmd *cobra.Command, args []string) {
 
 		log.Printf(
 			"decoded WriteProperty message:\n\tObjectType: %d\n\tInstance ID: %d\n\tProperty ID: %d\n\tValue: %f\n",
-			decodedWritePropertyMessage.ObjectType, decodedWritePropertyMessage.InstanceId,
+			decodedWritePropertyMessage.ObjectType, decodedWritePropertyMessage.InstanceNum,
 			decodedWritePropertyMessage.PropertyId, decodedWritePropertyMessage.Value)
 
-		if decodedWritePropertyMessage.InstanceId >= uint32(len(storedValues)) {
+		if decodedWritePropertyMessage.InstanceNum >= uint32(len(storedValues)) {
 			bErr, err := bacnet.NewError(
 				services.ServiceConfirmedWriteProperty, objects.ErrorClassObject, objects.ErrorCodeUnknownObject)
 			if err != nil {
@@ -104,7 +104,7 @@ func WritePropertyServerExample(cmd *cobra.Command, args []string) {
 			continue
 		}
 
-		storedValues[decodedWritePropertyMessage.InstanceId] = decodedWritePropertyMessage.Value
+		storedValues[decodedWritePropertyMessage.InstanceNum] = decodedWritePropertyMessage.Value
 
 		if _, err := listenConn.WriteTo(sACK, remoteAddr); err != nil {
 			log.Fatalf("error sending our CACK reply: %v\n", err)

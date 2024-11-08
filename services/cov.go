@@ -18,11 +18,11 @@ type ConfirmedCOV struct {
 }
 
 type ConfirmedCOVDec struct {
-	ProcessId       uint32
-	MonitoredObjID  uint16
-	MonitoredInstN  uint32
-	ExpectConfirmed bool
-	Lifetime        uint32
+	ProcessId        uint32
+	MonitoredObjType uint16
+	MonitoredInstNum uint32
+	ExpectConfirmed  bool
+	Lifetime         uint32
 }
 
 // IAmObjects creates an instance of ConfirmedCOV objects.
@@ -207,8 +207,8 @@ func (u *ConfirmedCOV) Decode() (ConfirmedCOVDec, error) {
 				if err != nil {
 					return decCOV, errors.Wrap(err, "decode MonitoredObjID")
 				}
-				decCOV.MonitoredObjID = objId.ObjectType
-				decCOV.MonitoredInstN = objId.InstanceNumber
+				decCOV.MonitoredObjType = objId.ObjectType
+				decCOV.MonitoredInstNum = objId.InstanceNumber
 			case combine(8, 2):
 				if len(enc_obj.Data) != 1 {
 					return decCOV, errors.Wrap(

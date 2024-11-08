@@ -17,23 +17,33 @@ type ConfirmedWriteProperty struct {
 }
 
 type ConfirmedWritePropertyDec struct {
-	ObjectType uint16
-	InstanceId uint32
-	PropertyId uint16
-	Value      float32
-	Priority   uint8
+	ObjectType  uint16
+	InstanceNum uint32
+	PropertyId  uint16
+	Value       float32
+	Priority    uint8
 }
 
-func ConfirmedWritePropertyObjects(objectType uint16, instN uint32, propertyId uint16, value float32) []objects.APDUPayload {
-	objs := make([]objects.APDUPayload, 7)
+func ConfirmedWritePropertyObjects(objectType uint16, instN uint32, propertyId uint16, data interface{}) []objects.APDUPayload {
+	objs := make([]objects.APDUPayload, 6)
 
 	objs[0] = objects.EncObjectIdentifier(true, 0, objectType, instN)
 	objs[1] = objects.EncPropertyIdentifier(true, 1, propertyId)
 	objs[2] = objects.EncOpeningTag(3)
-	objs[3] = objects.EncReal(value)
-	objs[4] = objects.EncNull()
-	objs[5] = objects.EncClosingTag(3)
-	objs[6] = objects.EncPriority(true, 4, 16)
+	var obj *objects.Object
+	switch data := data.(type) {
+	case float32:
+		obj = objects.EncReal(data)
+	case uint:
+		obj = objects.EncUnsignedInteger(data)
+	case string:
+		obj = objects.EncString(data)
+	}
+	obj.TagClass = true
+	obj.TagNumber = 3
+	objs[3] = obj
+	objs[4] = objects.EncClosingTag(3)
+	objs[5] = objects.EncPriority(true, 4, 16)
 
 	return objs
 }
@@ -147,7 +157,7 @@ func (c *ConfirmedWriteProperty) Decode() (ConfirmedWritePropertyDec, error) {
 				return decCWP, errors.Wrap(err, "decoding ConfirmedWP")
 			}
 			decCWP.ObjectType = objId.ObjectType
-			decCWP.InstanceId = objId.InstanceNumber
+			decCWP.InstanceNum = objId.InstanceNumber
 		case 1:
 			propId, err := objects.DecPropertyIdentifier(obj)
 			if err != nil {

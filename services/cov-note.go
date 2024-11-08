@@ -17,13 +17,13 @@ type UnconfirmedCOVNotification struct {
 }
 
 type UnconfirmedCOVNotificationDec struct {
-	ProcessId  uint32
-	DeviceType uint16
-	DeviceId   uint32
-	ObjectType uint16
-	ObjectID   uint32
-	Lifetime   uint32
-	Tags       []*objects.Object
+	ProcessId      uint32
+	DeviceType     uint16
+	DevInstanceNum uint32
+	ObjectType     uint16
+	ObjInstanceNum uint32
+	Lifetime       uint32
+	Tags           []*objects.Object
 }
 
 // NewConfirmedCOV creates a UnconfirmedCOVNotification.
@@ -173,14 +173,14 @@ func (u *UnconfirmedCOVNotification) Decode() (UnconfirmedCOVNotificationDec, er
 					return decCOV, errors.Wrap(err, "decode MonitoredObjID")
 				}
 				decCOV.DeviceType = prop.ObjectType
-				decCOV.DeviceId = prop.InstanceNumber
+				decCOV.DevInstanceNum = prop.InstanceNumber
 			case combine(8, 2):
 				prop, err := objects.DecObjectIdentifier(enc_obj)
 				if err != nil {
 					return decCOV, errors.Wrap(err, "decode MonitoredObjID")
 				}
 				decCOV.ObjectType = prop.ObjectType
-				decCOV.ObjectID = prop.InstanceNumber
+				decCOV.ObjInstanceNum = prop.InstanceNumber
 			case combine(8, 3):
 				prop, err := objects.DecUnsignedInteger(enc_obj)
 				if err != nil {

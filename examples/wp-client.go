@@ -16,9 +16,11 @@ import (
 
 func init() {
 	WritePropertyClientCmd.Flags().Uint16Var(&wpObjectType, "object-type", 1, "Object type to read.")
-	WritePropertyClientCmd.Flags().Uint32Var(&wpInstanceId, "instance-id", 0, "Instance ID to read.") // Analog-input
+	WritePropertyClientCmd.Flags().Uint32Var(&wpInstanceId, "instance-id", 0, "Instance ID to read.")  // Analog-input
 	WritePropertyClientCmd.Flags().Uint16Var(&wpPropertyId, "property-id", 85, "Property ID to read.") // Current-value
-	WritePropertyClientCmd.Flags().Float32Var(&wpValue, "value", 1.1, "Value to write.")
+	WritePropertyClientCmd.Flags().Float32Var(&wpReal, "real", 0.0, "Real value to write.")
+	WritePropertyClientCmd.Flags().StringVar(&wpString, "string", "", "String value to write.")
+	WritePropertyClientCmd.Flags().StringVar(&wpValue, "value", "string", "Value to write.")
 	WritePropertyClientCmd.Flags().IntVar(&wpPeriod, "period", 1, "Period, in seconds, between requests.")
 	WritePropertyClientCmd.Flags().IntVar(&wpN, "messages", 1, "Number of requests to send, being 0 unlimited.")
 }
@@ -27,7 +29,9 @@ var (
 	wpObjectType uint16
 	wpInstanceId uint32
 	wpPropertyId uint16
-	wpValue      float32
+	wpReal       float32
+	wpString     string
+	wpValue      string
 	wpPeriod     int
 	wpN          int
 
@@ -52,7 +56,15 @@ func WritePropertyClientExample(cmd *cobra.Command, args []string) {
 	}
 	defer listenConn.Close()
 
-	mWriteProperty, err := bacnet.NewWriteProperty(wpObjectType, wpInstanceId, wpPropertyId, wpValue)
+	var data interface{}
+	switch wpValue{
+		case "real":
+			data = wpReal
+		case "string":
+			data = wpString
+	}
+
+	mWriteProperty, err := bacnet.NewWriteProperty(wpObjectType, wpInstanceId, wpPropertyId, data)
 	if err != nil {
 		log.Fatalf("error generating initial WriteProperty: %v\n", err)
 	}
@@ -77,7 +89,7 @@ func WritePropertyClientExample(cmd *cobra.Command, args []string) {
 		if err != nil {
 			log.Fatalf("error parsing the received message: %v\n", err)
 		}
-        // switch between recieved messages
+		// switch between recieved messages
 		t := serviceMsg.GetType()
 		switch t {
 

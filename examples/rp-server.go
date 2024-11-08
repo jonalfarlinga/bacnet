@@ -59,7 +59,7 @@ func ReadPropertyServerExample(cmd *cobra.Command, args []string) {
 		if err != nil {
 			log.Fatalf("error parsing the received message: %v\n", err)
 		}
-        // switch between recieved messages
+		// switch between recieved messages
 		t := serviceMsg.GetType()
 		switch t {
 
@@ -76,10 +76,10 @@ func ReadPropertyServerExample(cmd *cobra.Command, args []string) {
 		}
 
 		log.Printf("decoded ReadProperty message:\n\tObjectType: %d\n\tInstance ID: %d\n\tProperty ID: %d\n",
-			decodedReadPropertyMessage.ObjectType, decodedReadPropertyMessage.InstanceId,
+			decodedReadPropertyMessage.ObjectType, decodedReadPropertyMessage.InstanceNum,
 			decodedReadPropertyMessage.PropertyId)
 
-		if decodedReadPropertyMessage.InstanceId >= uint32(len(mCACKs)) {
+		if decodedReadPropertyMessage.InstanceNum >= uint32(len(mCACKs)) {
 			bErr, err := bacnet.NewError(
 				services.ServiceConfirmedReadProperty, objects.ErrorClassObject, objects.ErrorCodeUnknownObject)
 			if err != nil {
@@ -92,7 +92,7 @@ func ReadPropertyServerExample(cmd *cobra.Command, args []string) {
 			continue
 		}
 
-		if _, err := listenConn.WriteTo(mCACKs[decodedReadPropertyMessage.InstanceId], remoteAddr); err != nil {
+		if _, err := listenConn.WriteTo(mCACKs[decodedReadPropertyMessage.InstanceNum], remoteAddr); err != nil {
 			log.Fatalf("error sending our CACK reply: %v\n", err)
 		}
 

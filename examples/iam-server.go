@@ -101,7 +101,7 @@ func IAmExample(cmd *cobra.Command, args []string) {
 			out := "Decoded ReadPropertyMultiple message:\n"
 			out += fmt.Sprintf(
 				"\n\tObject Type: %d\n\tInstance Id: %d\n",
-				decodedReadPropertyMessage.ObjectType, decodedReadPropertyMessage.InstanceId,
+				decodedReadPropertyMessage.ObjectType, decodedReadPropertyMessage.InstanceNum,
 			)
 			for i, t := range decodedReadPropertyMessage.Tags {
 				out += fmt.Sprintf(

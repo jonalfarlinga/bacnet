@@ -17,9 +17,9 @@ type ConfirmedReadProperty struct {
 }
 
 type ConfirmedReadPropertyDec struct {
-	ObjectType uint16
-	InstanceId uint32
-	PropertyId uint16
+	ObjectType  uint16
+	InstanceNum uint32
+	PropertyId  uint16
 }
 
 func ConfirmedReadPropertyObjects(objectType uint16, instN uint32, propertyId uint16) []objects.APDUPayload {
@@ -167,7 +167,7 @@ func (c *ConfirmedReadProperty) Decode() (ConfirmedReadPropertyDec, error) {
 				return decCRP, errors.Wrap(err, "decoding ConfirmedRP")
 			}
 			decCRP.ObjectType = objId.ObjectType
-			decCRP.InstanceId = objId.InstanceNumber
+			decCRP.InstanceNum = objId.InstanceNumber
 		case 1:
 			propId, err := objects.DecPropertyIdentifier(obj)
 			if err != nil {
