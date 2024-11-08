@@ -19,7 +19,6 @@ func NewSimpleACK(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *SimpleACK {
 	s := &SimpleACK{
 		BVLC: bvlc,
 		NPDU: npdu,
-		// TODO: Consider to implement parameter struct to an argment of New functions.
 		APDU: plumbing.NewAPDU(plumbing.SimpleAck, ServiceConfirmedReadProperty, nil),
 	}
 	s.SetLength()

@@ -22,18 +22,18 @@ func DecPropertyIdentifier(rawPayload APDUPayload) (uint16, error) {
 	return binary.BigEndian.Uint16(rawObject.Data), nil
 }
 
-func EncPropertyIdentifier(contextTag bool, tagN uint8, propId uint16) *Object {
-	newObj := Object{}
-	var data []byte
-	if propId < 256 {
-		data = []byte{uint8(propId)}
-	} else {
-		data = []byte{uint8(propId >> 8), uint8(propId)}
-	}
-	newObj.TagNumber = tagN
-	newObj.TagClass = contextTag
-	newObj.Data = data
-	newObj.Length = uint8(len(data))
+// func EncPropertyIdentifier(contextTag bool, tagN uint8, propId uint16) *Object {
+// 	newObj := Object{}
+// 	var data []byte
+// 	if propId < 256 {
+// 		data = []byte{uint8(propId)}
+// 	} else {
+// 		data = []byte{uint8(propId >> 8), uint8(propId)}
+// 	}
+// 	newObj.TagNumber = tagN
+// 	newObj.TagClass = contextTag
+// 	newObj.Data = data
+// 	newObj.Length = uint8(len(data))
 
-	return &newObj
-}
+// 	return &newObj
+// }

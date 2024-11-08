@@ -28,20 +28,16 @@ func ConfirmedWritePropertyObjects(objectType uint16, instN uint32, propertyId u
 	objs := make([]objects.APDUPayload, 6)
 
 	objs[0] = objects.EncObjectIdentifier(true, 0, objectType, instN)
-	objs[1] = objects.EncPropertyIdentifier(true, 1, propertyId)
+	objs[1] = objects.ContextTag(1, objects.EncUnsignedInteger(uint(propertyId)))
 	objs[2] = objects.EncOpeningTag(3)
-	var obj *objects.Object
 	switch data := data.(type) {
 	case float32:
-		obj = objects.EncReal(data)
+		objs[3] = objects.ContextTag(3, objects.EncReal(data))
 	case uint:
-		obj = objects.EncUnsignedInteger(data)
+		objs[3] = objects.ContextTag(3, objects.EncUnsignedInteger(data))
 	case string:
-		obj = objects.EncString(data)
+		objs[3] = objects.ContextTag(3, objects.EncString(data))
 	}
-	obj.TagClass = true
-	obj.TagNumber = 3
-	objs[3] = obj
 	objs[4] = objects.EncClosingTag(3)
 	objs[5] = objects.EncPriority(true, 4, 16)
 

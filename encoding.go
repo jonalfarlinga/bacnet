@@ -17,7 +17,7 @@ func NewWhois() ([]byte, error) {
 	return u.MarshalBinary()
 }
 
-func NewIAm(deviceId uint32, vendorId uint16) ([]byte, error) {
+func NewIAm(instN uint32, vendorId uint16) ([]byte, error) {
 	bvlc := plumbing.NewBVLC(plumbing.BVLCFuncBroadcast)
 
 	npdu := plumbing.NewNPDU(false, true, false, false)
@@ -27,7 +27,7 @@ func NewIAm(deviceId uint32, vendorId uint16) ([]byte, error) {
 
 	u := services.NewUnconfirmedIAm(bvlc, npdu)
 
-	u.APDU.Objects = services.IAmObjects(deviceId,
+	u.APDU.Objects = services.IAmObjects(instN,
 		DEFAULT_ACCEPTED_SIZE, DEFAULT_SEGMENTATION_SUPPORT, vendorId)
 	u.SetLength()
 

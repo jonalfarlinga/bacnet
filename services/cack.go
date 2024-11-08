@@ -26,7 +26,7 @@ type ComplexACKDec struct {
 func ComplexACKObjects(objectType uint16, instN uint32, propertyId uint16, value interface{}) []objects.APDUPayload {
 	objs := make([]objects.APDUPayload, 5)
 	objs[0] = objects.EncObjectIdentifier(true, 0, objectType, instN)
-	objs[1] = objects.EncPropertyIdentifier(true, 1, propertyId)
+	objs[1] = objects.ContextTag(1, objects.EncUnsignedInteger(uint(propertyId)))
 	objs[2] = objects.EncOpeningTag(3)
 
 	switch v := value.(type) {

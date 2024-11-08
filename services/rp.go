@@ -22,24 +22,26 @@ type ConfirmedReadPropertyDec struct {
 	PropertyId  uint16
 }
 
-func ConfirmedReadPropertyObjects(objectType uint16, instN uint32, propertyId uint16) []objects.APDUPayload {
+func ConfirmedReadPropertyObjects(objectType uint16, instN uint32, propId uint16) []objects.APDUPayload {
 	objs := make([]objects.APDUPayload, 2)
 
 	objs[0] = objects.EncObjectIdentifier(true, 0, objectType, instN)
-	objs[1] = objects.EncPropertyIdentifier(true, 1, propertyId)
+	objs[1] = objects.ContextTag(2, objects.EncUnsignedInteger(uint(propId)))
 
 	return objs
 }
 
-func ConfirmedReadPropertyMultipleObjects(objectType uint16, instN uint32, propertyId []uint16) []objects.APDUPayload {
-	objs := make([]objects.APDUPayload, 0)
+func ConfirmedReadPropertyMultipleObjects(objectType uint16, instN uint32, propIds []uint16) []objects.APDUPayload {
+	length := 3 + len(propIds)
+	objs := make([]objects.APDUPayload, length)
 
-	objs = append(objs, objects.EncObjectIdentifier(true, 0, objectType, instN))
-	objs = append(objs, objects.EncOpeningTag(1))
-	for _, p := range propertyId {
-		objs = append(objs, objects.EncPropertyIdentifier(true, 0, p))
+	objs[0] = objects.EncObjectIdentifier(true, 0, objectType, instN)
+	objs[1] = objects.EncOpeningTag(1)
+	for i, p := range propIds {
+		objs[i+1] = objects.ContextTag(
+			0, objects.EncUnsignedInteger(uint(p)))
 	}
-	objs = append(objs, objects.EncClosingTag(1))
+	objs[len(objs)-1] = objects.EncClosingTag(1)
 
 	return objs
 }
@@ -48,8 +50,6 @@ func NewConfirmedReadProperty(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *Confirm
 	c := &ConfirmedReadProperty{
 		BVLC: bvlc,
 		NPDU: npdu,
-
-		// TODO: Consider to implement parameter struct to an argment of New functions.
 		APDU: plumbing.NewAPDU(plumbing.ConfirmedReq, ServiceConfirmedReadProperty, ConfirmedReadPropertyObjects(
 			objects.ObjectTypeAnalogOutput, 1, objects.PropertyIdPresentValue)),
 	}
@@ -63,9 +63,10 @@ func NewConfirmedReadPropertyMultiple(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) 
 		BVLC: bvlc,
 		NPDU: npdu,
 		APDU: plumbing.NewAPDU(plumbing.ConfirmedReq, ServiceConfirmedReadProperty, ConfirmedReadPropertyMultipleObjects(
-			objects.ObjectTypeAnalogOutput, 1, []uint16{objects.PropertyIdPresentValue, objects.PropertyIdStatusFlags})),
+			objects.ObjectTypeAnalogOutput, 1, []uint16{})),
 	}
 	c.SetLength()
+	
 	return c
 }
 

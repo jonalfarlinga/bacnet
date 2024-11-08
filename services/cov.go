@@ -29,22 +29,10 @@ type ConfirmedCOVDec struct {
 func COVObjects(pid uint, oid uint16, instN uint32, expect bool, life uint) []objects.APDUPayload {
 	objs := make([]objects.APDUPayload, 4)
 
-	obj := objects.EncUnsignedInteger(pid)
-	obj.TagClass = true
-	obj.TagNumber = 0
-	objs[0] = obj
+	objs[0] = objects.ContextTag(0, objects.EncUnsignedInteger(pid))
 	objs[1] = objects.EncObjectIdentifier(true, 1, oid, instN)
-	obj = &objects.Object{
-		TagClass:  true,
-		TagNumber: 2,
-		Length:    1,
-		Data:      []byte{byte(common.BoolToInt(expect))},
-	}
-	objs[2] = obj
-	obj = objects.EncUnsignedInteger(life)
-	obj.TagClass = true
-	obj.TagNumber = 3
-	objs[3] = obj
+	objs[2] = objects.EncContextBool(2, expect)
+	objs[3] = objects.ContextTag(8, objects.EncUnsignedInteger(life))
 
 	return objs
 }
@@ -52,10 +40,7 @@ func COVObjects(pid uint, oid uint16, instN uint32, expect bool, life uint) []ob
 func CancelCOVOBjects(pid uint, oid uint16, instN uint32) []objects.APDUPayload {
 	objs := make([]objects.APDUPayload, 2)
 
-	obj := objects.EncUnsignedInteger(pid)
-	obj.TagClass = true
-	obj.TagNumber = 0
-	objs[0] = obj
+	objs[0] = objects.ContextTag(0, objects.EncUnsignedInteger(pid))
 	objs[1] = objects.EncObjectIdentifier(true, 1, oid, instN)
 
 	return objs

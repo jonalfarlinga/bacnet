@@ -29,9 +29,9 @@ func ConfirmedReadRangeObjects(objectType uint16, instN uint32, property uint16,
 	objs[0] = objects.EncObjectIdentifier(true, 0, objectType, instN)
 	switch property {
 	case objects.PropertyIdPresentValue:
-		objs[1] = objects.EncPropertyIdentifier(true, 1, objects.PropertyIdPresentValue)
+		objs[1] = objects.ContextTag(1, objects.EncUnsignedInteger(uint(property)))
 	case objects.PropertyIdLogBuffer:
-		objs[1] = objects.EncPropertyIdentifier(true, 1, objects.PropertyIdLogBuffer)
+		objs[1] = objects.ContextTag(1, objects.EncUnsignedInteger(uint(property)))
 		objs[2] = objects.EncOpeningTag(3)
 		objs[3] = objects.EncUnsignedInteger(uint(index))
 		objs[4] = objects.EncSignedInteger(int(count))

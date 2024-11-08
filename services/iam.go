@@ -57,7 +57,6 @@ func (u *UnconfirmedIAm) UnmarshalBinary(b []byte) error {
 		)
 	}
 
-	// do I need to Unmarshal again?
 	var offset int = 0
 	if err := u.BVLC.UnmarshalBinary(b[offset:]); err != nil {
 		return errors.Wrap(
