@@ -90,7 +90,6 @@ func ReadRangeClientExample(cmd *cobra.Command, args []string) {
 			if !ok {
 				log.Fatalf("we didn't receive a CACK reply...\n")
 			}
-			// logBuffer := services.NewLogBufferCACK(cACK)
 			log.Printf("unmarshalled BVLC: %#v\n", cACK.BVLC)
 			log.Printf("unmarshalled NPDU: %#v\n", cACK.NPDU)
 

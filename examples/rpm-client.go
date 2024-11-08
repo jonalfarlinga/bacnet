@@ -61,7 +61,7 @@ func ReadPropertyMultipleClientExample(cmd *cobra.Command, args []string) {
 	replyRaw := make([]byte, 1024)
 	sentRequests := 0
 	for {
-		listenConn.SetDeadline(time.Now().Add(5 * time.Second))
+		listenConn.SetDeadline(time.Now().Add(1 * time.Second))
 		if _, err := listenConn.WriteTo(mReadProperty, remoteUDPAddr); err != nil {
 			log.Fatalf("Failed to write the request: %s\n", err)
 		}

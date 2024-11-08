@@ -7,21 +7,13 @@ import (
 	"github.com/pkg/errors"
 )
 
-type NamedTag struct {
+type OpenCloseTag struct {
 	TagNumber uint8
 	TagClass  bool
 	Name      uint8
 }
 
-func NewNamedTag(number uint8, class bool, name uint8) *NamedTag {
-	return &NamedTag{
-		TagNumber: number,
-		TagClass:  class,
-		Name:      name,
-	}
-}
-
-func (n *NamedTag) UnmarshalBinary(b []byte) error {
+func (n *OpenCloseTag) UnmarshalBinary(b []byte) error {
 	if l := len(b); l < objLenMin {
 		return errors.Wrap(
 			common.ErrTooShortToParse,
@@ -42,7 +34,7 @@ func (n *NamedTag) UnmarshalBinary(b []byte) error {
 	return nil
 }
 
-func (n *NamedTag) MarshalBinary() ([]byte, error) {
+func (n *OpenCloseTag) MarshalBinary() ([]byte, error) {
 	b := make([]byte, n.MarshalLen())
 	if err := n.MarshalTo(b); err != nil {
 		return nil, errors.Wrap(err, "failed to marshal binary")
@@ -51,7 +43,7 @@ func (n *NamedTag) MarshalBinary() ([]byte, error) {
 	return b, nil
 }
 
-func (n *NamedTag) MarshalTo(b []byte) error {
+func (n *OpenCloseTag) MarshalTo(b []byte) error {
 	if len(b) < n.MarshalLen() {
 		return errors.Wrap(common.ErrTooShortToMarshalBinary, "failed to marshall NamedTag - marshal length too short")
 	}
@@ -60,20 +52,20 @@ func (n *NamedTag) MarshalTo(b []byte) error {
 	return nil
 }
 
-func (n *NamedTag) MarshalLen() int {
+func (n *OpenCloseTag) MarshalLen() int {
 	return 1
 }
 
 func DecOpeningTab(rawPayload APDUPayload) (bool, error) {
-	rawTag, ok := rawPayload.(*NamedTag)
+	rawTag, ok := rawPayload.(*OpenCloseTag)
 	if !ok {
 		return false, errors.Wrap(common.ErrWrongPayload, "failed to decode OpeningTab")
 	}
 	return rawTag.Name == 0x6 && rawTag.TagClass, nil
 }
 
-func EncOpeningTag(tagN uint8) *NamedTag {
-	oTag := NamedTag{}
+func EncOpeningTag(tagN uint8) *OpenCloseTag {
+	oTag := OpenCloseTag{}
 
 	oTag.TagClass = true
 	oTag.TagNumber = tagN
@@ -83,15 +75,15 @@ func EncOpeningTag(tagN uint8) *NamedTag {
 }
 
 func DecClosingTab(rawPayload APDUPayload) (bool, error) {
-	rawTag, ok := rawPayload.(*NamedTag)
+	rawTag, ok := rawPayload.(*OpenCloseTag)
 	if !ok {
 		return false, errors.Wrap(common.ErrWrongPayload, "failed to decode ClosingTab")
 	}
 	return rawTag.Name == 0x7 && rawTag.TagClass, nil
 }
 
-func EncClosingTag(tagN uint8) *NamedTag {
-	cTag := NamedTag{}
+func EncClosingTag(tagN uint8) *OpenCloseTag {
+	cTag := OpenCloseTag{}
 
 	cTag.TagClass = true
 	cTag.TagNumber = tagN

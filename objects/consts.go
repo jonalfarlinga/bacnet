@@ -60,6 +60,7 @@ const (
 	ObjectTypeNetworkSecurity
 )
 
+// Error classes
 const (
 	ErrorClassDevice   uint8 = iota
 	ErrorClassObject
