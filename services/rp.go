@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
@@ -26,7 +27,8 @@ func ConfirmedReadPropertyObjects(objectType uint16, instN uint32, propId uint16
 	objs := make([]objects.APDUPayload, 2)
 
 	objs[0] = objects.EncObjectIdentifier(true, 0, objectType, instN)
-	objs[1] = objects.ContextTag(2, objects.EncUnsignedInteger(uint(propId)))
+	objs[1] = objects.ContextTag(1, objects.EncUnsignedInteger(uint(propId)))
+	log.Printf("%+v\n", objs[1])
 
 	return objs
 }
@@ -160,25 +162,51 @@ func (c *ConfirmedReadProperty) Decode() (ConfirmedReadPropertyDec, error) {
 		)
 	}
 
+	context := []uint8{8}
 	for i, obj := range c.APDU.Objects {
-		switch i {
-		case 0:
-			objId, err := objects.DecObjectIdentifier(obj)
-			if err != nil {
-				return decCRP, errors.Wrap(err, "decoding ConfirmedRP")
+		enc_obj, ok := obj.(*objects.Object)
+		if !ok {
+			return decCRP, errors.Wrap(
+				common.ErrInvalidObjectType,
+				fmt.Sprintf("ComplexACK object at index %d is not Object type", i),
+			)
+		}
+
+		// add or remove context based on opening and closing tags
+		if enc_obj.Length == 6 {
+			context = append(context, enc_obj.TagNumber)
+			continue
+		}
+		if enc_obj.Length == 7 {
+			if len(context) == 0 {
+				return decCRP, errors.Wrap(
+					common.ErrInvalidObjectType,
+					fmt.Sprintf("LogBufferCACK object at index %d has mismatched closing tag", i),
+				)
 			}
-			decCRP.ObjectType = objId.ObjectType
-			decCRP.InstanceNum = objId.InstanceNumber
-		case 1:
-			value, err := objects.DecUnsignedInteger(obj)
-			if err != nil {
-				return decCRP, errors.Wrap(err, "decoding ConfirmedRP")
+			context = context[:len(context)-1]
+			continue
+		}
+		if enc_obj.TagClass {
+			c := combine(context[len(context)-1], enc_obj.TagNumber)
+			switch c {
+			case combine(8, 0):
+				objId, err := objects.DecObjectIdentifier(obj)
+				if err != nil {
+					return decCRP, errors.Wrap(err, "decoding ConfirmedRP")
+				}
+				decCRP.ObjectType = objId.ObjectType
+				decCRP.InstanceNum = objId.InstanceNumber
+			case combine(8, 2):
+				value, err := objects.DecUnsignedInteger(obj)
+				if err != nil {
+					return decCRP, errors.Wrap(err, "decoding ConfirmedRP")
+				}
+				propId := uint16(value)
+				decCRP.PropertyId = propId
 			}
-			propId := uint16(value)
-			decCRP.PropertyId = propId
 		}
 	}
-
 	return decCRP, nil
 }
 
