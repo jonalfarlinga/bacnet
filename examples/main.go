@@ -14,6 +14,7 @@ func init() {
 	// Add the different sub-commands
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(whoIsCmd)
+	rootCmd.AddCommand(whoIsCmdBroad)
 	rootCmd.AddCommand(IAmCmd)
 	rootCmd.AddCommand(COVClient)
 	rootCmd.AddCommand(ReadPropertyServerCmd)
