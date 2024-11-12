@@ -19,7 +19,7 @@ func init() {
 	ReadPropertyMultipleClientCmd.Flags().Uint16Var(&rmObjectType, "object-type", 0, "Object type to read.")
 	ReadPropertyMultipleClientCmd.Flags().Uint32Var(&rmInstanceId, "instance-id", 0, "Instance ID to read.")  // Analog-input
 	ReadPropertyMultipleClientCmd.Flags().Uint16Var(&rmPropertyId, "property-id", 85, "Property ID to read.") // Current-value
-	ReadPropertyMultipleClientCmd.Flags().IntSliceVar(&rmProperties, "properties", []int{}, "Properties to read.")
+	ReadPropertyMultipleClientCmd.Flags().IntSliceVar(&rmProperties, "properties", []int{8}, "Properties to read.")
 	ReadPropertyMultipleClientCmd.Flags().IntVar(&rmPeriod, "period", 1, "Period, in seconds, between requests.")
 	ReadPropertyMultipleClientCmd.Flags().IntVar(&rmN, "messages", 1, "Number of messages to send, being 0 unlimited.")
 }

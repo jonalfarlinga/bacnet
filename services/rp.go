@@ -40,7 +40,7 @@ func ConfirmedReadPropertyMultipleObjects(objectType uint16, instN uint32, propI
 	objs[0] = objects.EncObjectIdentifier(true, 0, objectType, instN)
 	objs[1] = objects.EncOpeningTag(1)
 	for i, p := range propIds {
-		objs[i+1] = objects.ContextTag(
+		objs[i+2] = objects.ContextTag(
 			0, objects.EncUnsignedInteger(uint(p)))
 	}
 	objs[len(objs)-1] = objects.EncClosingTag(1)
