@@ -2,7 +2,6 @@ package services
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
@@ -28,7 +27,6 @@ func ConfirmedReadPropertyObjects(objectType uint16, instN uint32, propId uint16
 
 	objs[0] = objects.EncObjectIdentifier(true, 0, objectType, instN)
 	objs[1] = objects.ContextTag(1, objects.EncUnsignedInteger(uint(propId)))
-	log.Printf("%+v\n", objs[1])
 
 	return objs
 }
