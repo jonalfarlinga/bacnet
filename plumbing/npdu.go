@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/jonalfarlinga/bacnet/common"
-	"github.com/pkg/errors"
 )
 
 // NPDU is a Network Protocol Data Units.
@@ -37,9 +36,10 @@ func (n *NPDU) SetControlFlags(nsduContain bool, dstSpecifier bool, srcSpecifier
 // UnmarshalBinary sets the values retrieved from byte sequence in a NPDU frame.
 func (n *NPDU) UnmarshalBinary(b []byte) error {
 	if l := len(b); l < n.MarshalLen() {
-		return errors.Wrap(
+		return fmt.Errorf(
+			"failed to unmarshal NPDU - marshal length %d binary length %d: %v",
+			n.MarshalLen(), l,
 			common.ErrTooShortToParse,
-			fmt.Sprintf("failed to unmarshal NPDU - marshal length %d binary length %d", n.MarshalLen(), l),
 		)
 	}
 	n.Version = b[0]
@@ -56,9 +56,11 @@ func (n *NPDU) UnmarshalBinary(b []byte) error {
 // MarshalTo puts the byte sequence in the byte array given as b.
 func (n *NPDU) MarshalTo(b []byte) error {
 	if len(b) < n.MarshalLen() {
-		return errors.Wrap(
+		return fmt.Errorf(
+			"failed to marshall NPDU - marshal length %d binary length %d: %v",
+			n.MarshalLen(),
+			len(b),
 			common.ErrTooShortToMarshalBinary,
-			fmt.Sprintf("failed to marshall NPDU - marshal length %d binary length %d", n.MarshalLen(), len(b)),
 		)
 	}
 	b[0] = n.Version

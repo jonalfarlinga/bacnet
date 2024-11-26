@@ -6,7 +6,6 @@ import (
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
 	"github.com/jonalfarlinga/bacnet/plumbing"
-	"github.com/pkg/errors"
 )
 
 // UnconfirmedIAm is a BACnet message.
@@ -45,37 +44,34 @@ func NewError(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *Error {
 // UnmarshalBinary sets the values retrieved from byte sequence in a UnconfirmedIAm frame.
 func (e *Error) UnmarshalBinary(b []byte) error {
 	if l := len(b); l < e.MarshalLen() {
-		return errors.Wrap(
+		return fmt.Errorf(
+			"failed to unmarshal Error - marshal length %d binary length %d: %v",
+			e.MarshalLen(), l,
 			common.ErrTooShortToParse,
-			fmt.Sprintf("failed to unmarshal Error - marshal length %d binary length %d", e.MarshalLen(), l),
 		)
 	}
 
 	var offset int = 0
 
 	if err := e.BVLC.UnmarshalBinary(b[offset:]); err != nil {
-		return errors.Wrap(
-			common.ErrTooShortToParse,
-			fmt.Sprintf("unmarshalling Error %v", e),
+		return fmt.Errorf(
+			"unmarshalling Error: %v", common.ErrTooShortToParse,
 		)
 	}
 	offset += e.BVLC.MarshalLen()
 
 	if err := e.NPDU.UnmarshalBinary(b[offset:]); err != nil {
-		return errors.Wrap(
-			common.ErrTooShortToParse,
-			fmt.Sprintf("unmarshalling Error %v", e),
+		return fmt.Errorf(
+			"unmarshalling Error: %v", common.ErrTooShortToParse,
 		)
 	}
 	offset += e.NPDU.MarshalLen()
 
 	if err := e.APDU.UnmarshalBinary(b[offset:]); err != nil {
-		return errors.Wrap(
-			common.ErrTooShortToParse,
-			fmt.Sprintf("unmarshalling Error %v", e),
+		return fmt.Errorf(
+			"unmarshalling Error: %v", common.ErrTooShortToParse,
 		)
 	}
-
 	return nil
 }
 
@@ -83,7 +79,7 @@ func (e *Error) UnmarshalBinary(b []byte) error {
 func (e *Error) MarshalBinary() ([]byte, error) {
 	b := make([]byte, e.MarshalLen())
 	if err := e.MarshalTo(b); err != nil {
-		return nil, errors.Wrap(err, "failed to marshal binary")
+		return nil, fmt.Errorf("failed to marshal binary: %v", err)
 	}
 	return b, nil
 }
@@ -91,24 +87,25 @@ func (e *Error) MarshalBinary() ([]byte, error) {
 // MarshalTo puts the byte sequence in the byte array given as b.
 func (e *Error) MarshalTo(b []byte) error {
 	if len(b) < e.MarshalLen() {
-		return errors.Wrap(
+		return fmt.Errorf(
+			"failed to marshal Error - marshal length %d binary length %d: %v",
+			e.MarshalLen(), len(b),
 			common.ErrTooShortToMarshalBinary,
-			fmt.Sprintf("failed to marshal Error - marshal length %d binary length %d", e.MarshalLen(), len(b)),
 		)
 	}
 	var offset = 0
 	if err := e.BVLC.MarshalTo(b[offset:]); err != nil {
-		return errors.Wrap(err, "marshalling Error")
+		return fmt.Errorf("marshalling Error: %v", err)
 	}
 	offset += e.BVLC.MarshalLen()
 
 	if err := e.NPDU.MarshalTo(b[offset:]); err != nil {
-		return errors.Wrap(err, "marshalling Error")
+		return fmt.Errorf("marshalling Error: %v", err)
 	}
 	offset += e.NPDU.MarshalLen()
 
 	if err := e.APDU.MarshalTo(b[offset:]); err != nil {
-		return errors.Wrap(err, "marshalling Error")
+		return fmt.Errorf("marshalling Error: %v", err)
 	}
 
 	return nil
@@ -132,9 +129,10 @@ func (e *Error) Decode() (ErrorDec, error) {
 	decErr := ErrorDec{}
 
 	if len(e.APDU.Objects) != 2 {
-		return decErr, errors.Wrap(
+		return decErr, fmt.Errorf(
+			"failed to decode Error - object count: %d: %v",
+			len(e.APDU.Objects),
 			common.ErrWrongObjectCount,
-			fmt.Sprintf("failed to decode Error - object count: %d", len(e.APDU.Objects)),
 		)
 	}
 
@@ -143,13 +141,13 @@ func (e *Error) Decode() (ErrorDec, error) {
 		case 0:
 			errClass, err := objects.DecEnumerated(obj)
 			if err != nil {
-				return decErr, errors.Wrap(err, "failed to decode Enumerated Object")
+				return decErr, fmt.Errorf("failed to decode Enumerated Object: %v", err)
 			}
 			decErr.ErrorClass = uint8(errClass)
 		case 1:
 			errCode, err := objects.DecEnumerated(obj)
 			if err != nil {
-				return decErr, errors.Wrap(err, "failed to decode Enumerated Object")
+				return decErr, fmt.Errorf("failed to decode Enumerated Object: %v", err)
 			}
 			decErr.ErrorCode = uint8(errCode)
 		}

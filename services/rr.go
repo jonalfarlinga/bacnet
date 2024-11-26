@@ -6,7 +6,6 @@ import (
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
 	"github.com/jonalfarlinga/bacnet/plumbing"
-	"github.com/pkg/errors"
 )
 
 // UnconfirmedReadRange is a BACnet message.
@@ -69,33 +68,34 @@ func (c *ConfirmedReadRange) SetLength() {
 
 func (c *ConfirmedReadRange) UnmarshalBinary(b []byte) error {
 	if l := len(b); l < c.MarshalLen() {
-		return errors.Wrap(
+		return fmt.Errorf(
+			"failed to unmarshal ConfirmedRP - marshal length %d binary length %d: %v",
+			c.MarshalLen(), l,
 			common.ErrTooShortToParse,
-			fmt.Sprintf("failed to unmarshal ConfirmedRP - marshal length %d binary length %d", c.MarshalLen(), l),
 		)
 	}
 
 	var offset int = 0
 	if err := c.BVLC.UnmarshalBinary(b[offset:]); err != nil {
-		return errors.Wrap(
-			common.ErrTooShortToParse,
-			fmt.Sprintf("unmarshalling ConfirmedRP %v", c),
+		return fmt.Errorf(
+			"unmarshalling ConfirmedRP %+v: %v",
+			c, common.ErrTooShortToParse,
 		)
 	}
 	offset += c.BVLC.MarshalLen()
 
 	if err := c.NPDU.UnmarshalBinary(b[offset:]); err != nil {
-		return errors.Wrap(
-			common.ErrTooShortToParse,
-			fmt.Sprintf("unmarshalling ConfirmedRP %v", c),
+		return fmt.Errorf(
+			"unmarshalling ConfirmedRP %+v: %v",
+			c, common.ErrTooShortToParse,
 		)
 	}
 	offset += c.NPDU.MarshalLen()
 
 	if err := c.APDU.UnmarshalBinary(b[offset:]); err != nil {
-		return errors.Wrap(
-			common.ErrTooShortToParse,
-			fmt.Sprintf("unmarshalling ConfirmedRP %v", c),
+		return fmt.Errorf(
+			"unmarshalling ConfirmedRP %+v: %v",
+			c, common.ErrTooShortToParse,
 		)
 	}
 
@@ -105,31 +105,32 @@ func (c *ConfirmedReadRange) UnmarshalBinary(b []byte) error {
 func (c *ConfirmedReadRange) MarshalBinary() ([]byte, error) {
 	b := make([]byte, c.MarshalLen())
 	if err := c.MarshalTo(b); err != nil {
-		return nil, errors.Wrap(err, "failed to marshal binary")
+		return nil, fmt.Errorf("failed to marshal binary: %v", err)
 	}
 	return b, nil
 }
 
 func (c *ConfirmedReadRange) MarshalTo(b []byte) error {
 	if len(b) < c.MarshalLen() {
-		return errors.Wrap(
+		return fmt.Errorf(
+			"failed to marshal ConfirmedRP - marshal length %d binary length %d: %v",
+			c.MarshalLen(), len(b),
 			common.ErrTooShortToMarshalBinary,
-			fmt.Sprintf("failed to marshal ConfirmedRP - marshal length %d binary length %d", c.MarshalLen(), len(b)),
 		)
 	}
 	var offset = 0
 	if err := c.BVLC.MarshalTo(b[offset:]); err != nil {
-		return errors.Wrap(err, "failed to marshal ConfirmedRP")
+		return fmt.Errorf("failed to marshal ConfirmedRP: %v", err)
 	}
 	offset += c.BVLC.MarshalLen()
 
 	if err := c.NPDU.MarshalTo(b[offset:]); err != nil {
-		return errors.Wrap(err, "failed to marshal ConfirmedRP")
+		return fmt.Errorf("failed to marshal ConfirmedRP: %v", err)
 	}
 	offset += c.NPDU.MarshalLen()
 
 	if err := c.APDU.MarshalTo(b[offset:]); err != nil {
-		return errors.Wrap(err, "failed to marshal ConfirmedRP")
+		return fmt.Errorf("failed to marshal ConfirmedRP: %v", err)
 	}
 
 	return nil
@@ -139,9 +140,10 @@ func (c *ConfirmedReadRange) Decode() (ConfirmedReadRangeDec, error) {
 	decCRP := ConfirmedReadRangeDec{}
 
 	if len(c.APDU.Objects) < 2 {
-		return decCRP, errors.Wrap(
+		return decCRP, fmt.Errorf(
+			"failed to decode ConfirmedRP - object count %d: %v",
+			len(c.APDU.Objects),
 			common.ErrWrongObjectCount,
-			fmt.Sprintf("failed to decode ConfirmedRP - object count %d", len(c.APDU.Objects)),
 		)
 	}
 
@@ -149,9 +151,9 @@ func (c *ConfirmedReadRange) Decode() (ConfirmedReadRangeDec, error) {
 	for i, obj := range c.APDU.Objects {
 		enc_obj, ok := obj.(*objects.Object)
 		if !ok {
-			return decCRP, errors.Wrap(
-				common.ErrInvalidObjectType,
-				fmt.Sprintf("ComplexACK object at index %d is not Object type", i),
+			return decCRP, fmt.Errorf(
+				"ComplexACK object at index %d is not Object type: %v",
+				i, common.ErrInvalidObjectType,
 			)
 		}
 
@@ -160,27 +162,26 @@ func (c *ConfirmedReadRange) Decode() (ConfirmedReadRangeDec, error) {
 			case 0:
 				objId, err := objects.DecObjectIdentifier(obj)
 				if err != nil {
-					return decCRP, errors.Wrap(err, "decode Context object case 0")
+					return decCRP, fmt.Errorf("decode Context object case 0: %v", err)
 				}
 				decCRP.ObjectType = objId.ObjectType
 				decCRP.InstanceNum = objId.InstanceNumber
 			case 1:
 				value, err := objects.DecUnsignedInteger(obj)
 				if err != nil {
-					return decCRP, errors.Wrap(err, "decode Context object case 1")
+					return decCRP, fmt.Errorf("decode Context object case 1: %v", err)
 				}
 				propId := uint16(value)
 				decCRP.PropertyId = propId
 			}
 		} else {
-			tag, err := decodeTags(enc_obj, &obj)
+			tag, err := decodeAppTags(enc_obj, &obj)
 			if err != nil {
-				return decCRP, errors.Wrap(err, "decode Application Tag")
+				return decCRP, fmt.Errorf("decode Application Tag: %v", err)
 			}
 			objs = append(objs, tag)
 		}
 		decCRP.Tags = objs
 	}
-
 	return decCRP, nil
 }

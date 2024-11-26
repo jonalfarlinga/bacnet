@@ -5,7 +5,6 @@ import (
 
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/plumbing"
-	"github.com/pkg/errors"
 )
 
 // SimpleACK is a BACnet message.
@@ -28,33 +27,31 @@ func NewSimpleACK(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *SimpleACK {
 
 func (s *SimpleACK) UnmarshalBinary(b []byte) error {
 	if l := len(b); l < s.MarshalLen() {
-		return errors.Wrap(
+		return fmt.Errorf(
+			"failed to unmarshal SACK - marshal length %d binary length %d: %v",
+			s.MarshalLen(), l,
 			common.ErrTooShortToParse,
-			fmt.Sprintf("failed to unmarshal SACK - marshal length %d binary length %d", s.MarshalLen(), l),
 		)
 	}
 
 	var offset int = 0
 	if err := s.BVLC.UnmarshalBinary(b[offset:]); err != nil {
-		return errors.Wrap(
-			common.ErrTooShortToParse,
-			fmt.Sprintf("unmarshalling SACK %v", s),
+		return fmt.Errorf(
+			"unmarshalling SACK %+v: %v", s, common.ErrTooShortToParse,
 		)
 	}
 	offset += s.BVLC.MarshalLen()
 
 	if err := s.NPDU.UnmarshalBinary(b[offset:]); err != nil {
-		return errors.Wrap(
-			common.ErrTooShortToParse,
-			fmt.Sprintf("unmarshalling SACK %v", s),
+		return fmt.Errorf(
+			"unmarshalling SACK %+v: %v", s, common.ErrTooShortToParse,
 		)
 	}
 	offset += s.NPDU.MarshalLen()
 
 	if err := s.APDU.UnmarshalBinary(b[offset:]); err != nil {
-		return errors.Wrap(
-			common.ErrTooShortToParse,
-			fmt.Sprintf("unmarshalling SACK %v", s),
+		return fmt.Errorf(
+			"unmarshalling SACK %+v: %v", s, common.ErrTooShortToParse,
 		)
 	}
 
@@ -64,31 +61,32 @@ func (s *SimpleACK) UnmarshalBinary(b []byte) error {
 func (s *SimpleACK) MarshalBinary() ([]byte, error) {
 	b := make([]byte, s.MarshalLen())
 	if err := s.MarshalTo(b); err != nil {
-		return nil, errors.Wrap(err, "failed to marshal binary")
+		return nil, fmt.Errorf("failed to marshal binary: %v", err)
 	}
 	return b, nil
 }
 
 func (s *SimpleACK) MarshalTo(b []byte) error {
 	if len(b) < s.MarshalLen() {
-		return errors.Wrap(
+		return fmt.Errorf(
+			"failed to marshal SACK - marshal length %d binary length %d: %v",
+			s.MarshalLen(), len(b),
 			common.ErrTooShortToMarshalBinary,
-			fmt.Sprintf("failed to marshal SACK - marshal length %d binary length %d", s.MarshalLen(), len(b)),
 		)
 	}
 	var offset = 0
 	if err := s.BVLC.MarshalTo(b[offset:]); err != nil {
-		return errors.Wrap(err, "marshalling SACK")
+		return fmt.Errorf("marshalling SACK: %v", err)
 	}
 	offset += s.BVLC.MarshalLen()
 
 	if err := s.NPDU.MarshalTo(b[offset:]); err != nil {
-		return errors.Wrap(err, "marshalling SACK")
+		return fmt.Errorf("marshalling SACK: %v", err)
 	}
 	offset += s.NPDU.MarshalLen()
 
 	if err := s.APDU.MarshalTo(b[offset:]); err != nil {
-		return errors.Wrap(err, "marshalling SACK")
+		return fmt.Errorf("marshalling SACK: %v", err)
 	}
 
 	return nil

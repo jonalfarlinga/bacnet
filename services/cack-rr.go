@@ -7,7 +7,6 @@ import (
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
 	"github.com/jonalfarlinga/bacnet/plumbing"
-	"github.com/pkg/errors"
 )
 
 // LogBufferCACK is a BACnet message.
@@ -39,9 +38,10 @@ func (c *ComplexACK) DecodeRR() (LogBufferCACKDec, error) {
 	decCACK := LogBufferCACKDec{}
 
 	if len(c.APDU.Objects) < 3 {
-		return decCACK, errors.Wrap(
+		return decCACK, fmt.Errorf(
+			"failed to decode CACK - objects count %d: %v",
+			len(c.APDU.Objects),
 			common.ErrWrongObjectCount,
-			fmt.Sprintf("failed to decode CACK - objects count: %d", len(c.APDU.Objects)),
 		)
 	}
 
@@ -50,9 +50,9 @@ func (c *ComplexACK) DecodeRR() (LogBufferCACKDec, error) {
 	for i, obj := range c.APDU.Objects {
 		enc_obj, ok := obj.(*objects.Object)
 		if !ok {
-			return decCACK, errors.Wrap(
-				common.ErrInvalidObjectType,
-				fmt.Sprintf("LogBufferCACK object at index %d is not Object type", i),
+			return decCACK, fmt.Errorf(
+				"LogBufferCACK object at index %d is not Object type: %s",
+				i, common.ErrInvalidObjectType,
 			)
 		}
 
@@ -63,9 +63,9 @@ func (c *ComplexACK) DecodeRR() (LogBufferCACKDec, error) {
 		}
 		if enc_obj.Length == 7 {
 			if len(context) == 0 {
-				return decCACK, errors.Wrap(
-					common.ErrInvalidObjectType,
-					fmt.Sprintf("LogBufferCACK object at index %d has mismatched closing tag", i),
+				return decCACK, fmt.Errorf(
+					"LogBufferCACK object at index %d has mismatched closing tag: %v",
+					i, common.ErrInvalidObjectType,
 				)
 			}
 			context = context[:len(context)-1]
@@ -78,21 +78,21 @@ func (c *ComplexACK) DecodeRR() (LogBufferCACKDec, error) {
 			case combine(8, 0):
 				objId, err := objects.DecObjectIdentifier(obj)
 				if err != nil {
-					return decCACK, errors.Wrap(err, "decode Context object case 0")
+					return decCACK, fmt.Errorf("decode Context object case 0: %v", err)
 				}
 				decCACK.ObjectType = objId.ObjectType
 				decCACK.InstanceId = objId.InstanceNumber
 			case combine(8, 1):
 				value, err := objects.DecUnsignedInteger(obj)
 				if err != nil {
-					return decCACK, errors.Wrap(err, "decode Context object case 1")
+					return decCACK, fmt.Errorf("decode Context object case 1: %v", err)
 				}
 				propId := uint16(value)
 				decCACK.PropertyId = propId
 			case combine(8, 3):
 				first, last, more, err := decResultsFlag(obj)
 				if err != nil {
-					return decCACK, errors.Wrap(err, "decode Context object case 3")
+					return decCACK, fmt.Errorf("decode Context object case 3: %v", err)
 				}
 				decCACK.FirstItem = first
 				decCACK.LastItem = last
@@ -100,13 +100,13 @@ func (c *ComplexACK) DecodeRR() (LogBufferCACKDec, error) {
 			case combine(8, 4):
 				data, err := objects.DecUnsignedInteger(obj)
 				if err != nil {
-					return decCACK, errors.Wrap(err, "decode Context object case 4")
+					return decCACK, fmt.Errorf("decode Context object case 4: %v", err)
 				}
 				decCACK.ItemCount = data
 			case combine(1, 2):
 				value, err := objects.DecReal(obj)
 				if err != nil {
-					return decCACK, errors.Wrap(err, "decode Context object case 2")
+					return decCACK, fmt.Errorf("decode Context object case 2: %v", err)
 				}
 				objs = append(objs, &objects.Object{
 					TagNumber: 2,
@@ -117,7 +117,7 @@ func (c *ComplexACK) DecodeRR() (LogBufferCACKDec, error) {
 			case combine(5, 2):
 				value, err := decStatusFlags(obj)
 				if err != nil {
-					return decCACK, errors.Wrap(err, "decode Context object case 2")
+					return decCACK, fmt.Errorf("decode Context object case 2: %v", err)
 				}
 				objs = append(objs, &objects.Object{
 					TagNumber: 2,
@@ -128,7 +128,7 @@ func (c *ComplexACK) DecodeRR() (LogBufferCACKDec, error) {
 			case combine(1, 0):
 				value, err := objects.DecLogStatus(obj)
 				if err != nil {
-					return decCACK, errors.Wrap(err, "decode Context object case 0")
+					return decCACK, fmt.Errorf("decode Context object case 0: %v", err)
 				}
 				objs = append(objs, &objects.Object{
 					TagNumber: 0,
@@ -137,12 +137,12 @@ func (c *ComplexACK) DecodeRR() (LogBufferCACKDec, error) {
 					Value:     value,
 				})
 			default:
-				log.Printf("Unknown Context object tag class %t tag number %d\n", enc_obj.TagClass, enc_obj.TagNumber)
+				log.Printf("Unknown Context object: context %v tag class %t tag number %d\n", context, enc_obj.TagClass, enc_obj.TagNumber)
 			}
 		} else {
-			tag, err := decodeTags(enc_obj, &obj)
+			tag, err := decodeAppTags(enc_obj, &obj)
 			if err != nil {
-				return decCACK, errors.Wrap(err, "decode Application Tag")
+				return decCACK, fmt.Errorf("decode Application Tag: %v", err)
 			}
 			objs = append(objs, tag)
 		}

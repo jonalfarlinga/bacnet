@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/jonalfarlinga/bacnet/common"
-	"github.com/pkg/errors"
 )
 
 var TagMap = map[uint8]string{
@@ -30,16 +29,14 @@ var TagMap = map[uint8]string{
 func DecNull(rawPayload APDUPayload) error {
 	rawObject, ok := rawPayload.(*Object)
 	if !ok {
-		return errors.Wrap(
-			common.ErrWrongPayload,
-			fmt.Sprintf("failed to decode Null - %v", rawPayload),
+		return fmt.Errorf(
+			"failed to decode Null - %+v: %s", rawPayload, common.ErrWrongPayload,
 		)
 	}
 
 	if rawObject.TagNumber != TagNull && !rawObject.TagClass {
-		return errors.Wrap(
-			common.ErrWrongStructure,
-			fmt.Sprintf("failed to decode Null - wrong tag number - %v", rawObject.TagNumber),
+		return fmt.Errorf(
+			"failed to decode Null - %+v: %v", rawObject.TagNumber, common.ErrWrongStructure,
 		)
 	}
 
@@ -61,9 +58,8 @@ func EncNull() *Object {
 func DecBoolean(rawPayload APDUPayload) (bool, error) {
 	rawObject, ok := rawPayload.(*Object)
 	if !ok {
-		return false, errors.Wrap(
-			common.ErrWrongPayload,
-			fmt.Sprintf("DecBoolean not ok: %v", rawPayload),
+		return false, fmt.Errorf(
+			"DecBoolean not ok - %+v: %v", rawPayload, common.ErrWrongPayload,
 		)
 	}
 	return rawObject.Length == 1, nil
@@ -86,16 +82,14 @@ func EncBoolean(value bool) *Object {
 func DecUnsignedInteger(rawPayload APDUPayload) (uint32, error) {
 	rawObject, ok := rawPayload.(*Object)
 	if !ok {
-		return 0, errors.Wrap(
-			common.ErrWrongPayload,
-			fmt.Sprintf("failed to decode UnsignedInteger - %v", rawPayload),
+		return 0, fmt.Errorf(
+			"failed to decode UnsignedInteger - %+v: %v", rawPayload, common.ErrWrongPayload,
 		)
 	}
 
 	if rawObject.TagNumber != TagUnsignedInteger && !rawObject.TagClass {
-		return 0, errors.Wrap(
-			common.ErrWrongStructure,
-			fmt.Sprintf("failed to decode UnsignedInteger - wrong tag number - %v", rawObject.TagNumber),
+		return 0, fmt.Errorf(
+			"failed to decode UnsignedInteger - %+v: %v", rawObject.TagNumber, common.ErrWrongStructure,
 		)
 	}
 
@@ -110,9 +104,8 @@ func DecUnsignedInteger(rawPayload APDUPayload) (uint32, error) {
 		return binary.BigEndian.Uint32(rawObject.Data), nil
 	}
 
-	return 0, errors.Wrap(
-		common.ErrNotImplemented,
-		fmt.Sprintf("failed to decode UnsignedInteger - %v", rawObject.Data),
+	return 0, fmt.Errorf(
+		"failed to decode UnsignedInteger - %+v: %v", rawObject.Data, common.ErrNotImplemented,
 	)
 }
 
@@ -145,9 +138,8 @@ func EncUnsignedInteger(value uint) *Object {
 func DecSignedInteger(rawPayload APDUPayload) (int, error) {
 	rawObject, ok := rawPayload.(*Object)
 	if !ok {
-		return 0, errors.Wrap(
-			common.ErrWrongPayload,
-			fmt.Sprintf("failed to decode SignedInteger - %v", rawPayload),
+		return 0, fmt.Errorf(
+			"failed to decode SignedInteger - %+v: %v", rawPayload, common.ErrWrongPayload,
 		)
 	}
 	switch rawObject.Length {
@@ -160,9 +152,8 @@ func DecSignedInteger(rawPayload APDUPayload) (int, error) {
 	case 4:
 		return int(binary.BigEndian.Uint32(rawObject.Data)), nil
 	}
-	return 0, errors.Wrap(
-		common.ErrNotImplemented,
-		fmt.Sprintf("failed to decode SignedInteger - %v", rawObject.Data),
+	return 0, fmt.Errorf(
+		"failed to decode SignedInteger - %+v: %v", rawObject.Data, common.ErrNotImplemented,
 	)
 }
 
@@ -198,16 +189,14 @@ func EncSignedInteger(value int) *Object {
 func DecReal(rawPayload APDUPayload) (float32, error) {
 	rawObject, ok := rawPayload.(*Object)
 	if !ok {
-		return 0, errors.Wrap(
-			common.ErrWrongPayload,
-			fmt.Sprintf("failed to decode Real - %v", rawPayload),
+		return 0, fmt.Errorf(
+			"failed to decode Real - %+v: %v", rawPayload, common.ErrWrongPayload,
 		)
 	}
 
 	if rawObject.TagNumber != TagReal && !rawObject.TagClass {
-		return 0, errors.Wrap(
-			common.ErrWrongStructure,
-			fmt.Sprintf("failed to decode real - wrong tag number - %v", rawObject.TagNumber),
+		return 0, fmt.Errorf(
+			"failed to decode real - %+v: %v", rawObject.TagNumber, common.ErrWrongStructure,
 		)
 	}
 
@@ -232,9 +221,8 @@ func EncReal(value float32) *Object {
 func DecDouble(rawPayload APDUPayload) (float64, error) {
 	rawObject, ok := rawPayload.(*Object)
 	if !ok {
-		return 0, errors.Wrap(
-			common.ErrWrongPayload,
-			fmt.Sprintf("failed to decode Double - %v", rawPayload),
+		return 0, fmt.Errorf(
+			"failed to decode Double - %+v: %v", rawPayload, common.ErrWrongPayload,
 		)
 	}
 	return math.Float64frombits(binary.BigEndian.Uint64(rawObject.Data)), nil
@@ -258,9 +246,8 @@ func EncDouble(value float64) *Object {
 func DecOctetString(rawPayload APDUPayload) ([]byte, error) {
 	rawObject, ok := rawPayload.(*Object)
 	if !ok {
-		return nil, errors.Wrap(
-			common.ErrWrongPayload,
-			fmt.Sprintf("failed to decode OctetString - %v", rawPayload),
+		return nil, fmt.Errorf(
+			"failed to decode OctetString - %+v: %v", rawPayload, common.ErrWrongPayload,
 		)
 	}
 	return rawObject.Data, nil
@@ -281,15 +268,14 @@ func EncOctetString(value []byte) *Object {
 func DecString(rawPayload APDUPayload) (string, error) {
 	rawObject, ok := rawPayload.(*Object)
 	if !ok {
-		return "", errors.Wrap(
+		return "", fmt.Errorf(
+			"DecString not ok - %+v: %v", rawPayload,
 			common.ErrWrongPayload,
-			fmt.Sprintf("DecString not ok: %v", rawPayload),
 		)
 	}
 	if rawObject.TagNumber != TagCharacterString || rawObject.TagClass {
-		return "", errors.Wrap(
-			common.ErrWrongStructure,
-			fmt.Sprintf("DecString wrong tag number: %v", rawObject.TagNumber),
+		return "", fmt.Errorf(
+			"DecString wrong tag number - %+v: %v", rawObject.TagNumber, common.ErrWrongStructure,
 		)
 	}
 	return string(rawObject.Data[1:]), nil
@@ -308,9 +294,8 @@ func EncString(value string) *Object {
 func DecBitString(rawPayload APDUPayload) (uint32, error) {
 	rawObject, ok := rawPayload.(*Object)
 	if !ok {
-		return 0, errors.Wrap(
-			common.ErrWrongPayload,
-			fmt.Sprintf("failed to decode BitString - %v", rawPayload),
+		return 0, fmt.Errorf(
+			"failed to decode BitString - %+v: %v", rawPayload, common.ErrWrongPayload,
 		)
 	}
 	unused := int(rawObject.Data[0])
@@ -325,16 +310,14 @@ func DecBitString(rawPayload APDUPayload) (uint32, error) {
 func DecEnumerated(rawPayload APDUPayload) (uint32, error) {
 	rawObject, ok := rawPayload.(*Object)
 	if !ok {
-		return 0, errors.Wrap(
-			common.ErrWrongPayload,
-			fmt.Sprintf("failed to decode EnumObject - %v", rawPayload),
+		return 0, fmt.Errorf(
+			"failed to decode EnumObject - %+v: %v", rawPayload, common.ErrWrongPayload,
 		)
 	}
 
 	if rawObject.TagNumber != TagEnumerated && !rawObject.TagClass {
-		return 0, errors.Wrap(
-			common.ErrWrongStructure,
-			fmt.Sprintf("failed to decode EnumObject - wrong tag number - %v", rawObject.TagNumber),
+		return 0, fmt.Errorf(
+			"failed to decode EnumObject - %+v: %v", rawObject.TagNumber, common.ErrWrongStructure,
 		)
 	}
 
@@ -349,9 +332,8 @@ func DecEnumerated(rawPayload APDUPayload) (uint32, error) {
 		return binary.BigEndian.Uint32(rawObject.Data), nil
 	}
 
-	return 0, errors.Wrap(
-		common.ErrNotImplemented,
-		fmt.Sprintf("failed to decode EnumObject - %v", rawObject.Data),
+	return 0, fmt.Errorf(
+		"failed to decode EnumObject - %+v: %v", rawObject.Data, common.ErrNotImplemented,
 	)
 }
 
@@ -373,17 +355,10 @@ func EncEnumerated(value uint8) *Object {
 func DecDate(rawPayload APDUPayload) (time.Time, error) {
 	rawObject, ok := rawPayload.(*Object)
 	if !ok {
-		return time.Time{}, errors.Wrap(
-			common.ErrWrongPayload,
-			fmt.Sprintf("failed to decode Date - %v", rawPayload),
+		return time.Time{}, fmt.Errorf(
+			"failed to decode Date - %+v: %v", rawPayload, common.ErrWrongPayload,
 		)
 	}
-	// if rawObject.Length != 4 {
-	// 	return time.Time{}, errors.Wrap(
-	// 		common.ErrWrongStructure,
-	// 		fmt.Sprintf("failed to decode Date - wrong length - %v", rawObject.Length),
-	// 	)
-	// }
 
 	year := int(rawObject.Data[0]) + 1900
 	month := time.Month(rawObject.Data[1])
@@ -393,12 +368,6 @@ func DecDate(rawPayload APDUPayload) (time.Time, error) {
 		weekday = time.Weekday(0)
 	}
 	date := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
-	// if date.Weekday() != weekday {
-	// 	return time.Time{}, errors.Wrap(
-	// 		common.ErrInvalidData,
-	// 		fmt.Sprintf("failed to decode Date - weekday mismatch - %v %v", weekday, date.Weekday()),
-	// 	)
-	// }
 
 	return date, nil
 }
@@ -407,16 +376,15 @@ func DecDate(rawPayload APDUPayload) (time.Time, error) {
 func DecTime(rawPayload APDUPayload) (time.Time, error) {
 	rawObject, ok := rawPayload.(*Object)
 	if !ok {
-		return time.Time{}, errors.Wrap(
-			common.ErrWrongPayload,
-			fmt.Sprintf("failed to decode Time - %v", rawPayload),
+		return time.Time{}, fmt.Errorf(
+			"failed to decode Time - %+v: %v", rawPayload, common.ErrWrongPayload,
 		)
 	}
 
 	if rawObject.Length != 4 {
-		return time.Time{}, errors.Wrap(
+		return time.Time{}, fmt.Errorf(
+			"failed to decode Time - wrong length - %+v: %v", rawObject.Length,
 			common.ErrWrongStructure,
-			fmt.Sprintf("failed to decode Time - wrong length - %v", rawObject.Length),
 		)
 	}
 

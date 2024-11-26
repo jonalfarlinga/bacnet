@@ -6,7 +6,6 @@ import (
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/plumbing"
 	"github.com/jonalfarlinga/bacnet/services"
-	"github.com/pkg/errors"
 )
 
 const bacnetLenMin = 8
@@ -19,9 +18,8 @@ func combine(t, s uint8) uint16 {
 func Parse(b []byte) (plumbing.BACnet, error) {
 
 	if len(b) < bacnetLenMin {
-		return nil, errors.Wrap(
-			common.ErrTooShortToParse,
-			fmt.Sprintf("Parsing length %d", len(b)),
+		return nil, fmt.Errorf(
+			"parsing length %d: %v", len(b), common.ErrTooShortToParse,
 		)
 	}
 
@@ -31,12 +29,12 @@ func Parse(b []byte) (plumbing.BACnet, error) {
 
 	offset := 0
 	if err := bvlc.UnmarshalBinary(b); err != nil {
-		return nil, errors.Wrap(err, fmt.Sprintf("Parsing BVLC %x", b))
+		return nil, fmt.Errorf("parsing BVLC %x: %v", b, err)
 	}
 	offset += bvlc.MarshalLen()
 
 	if err := npdu.UnmarshalBinary(b[offset:]); err != nil {
-		return nil, errors.Wrap(err, fmt.Sprintf("Parsing NPDU %x", b[offset:]))
+		return nil, fmt.Errorf("parsing NPDU %x: %v", b[offset:], err)
 	}
 	offset += npdu.MarshalLen()
 
@@ -73,16 +71,14 @@ func Parse(b []byte) (plumbing.BACnet, error) {
 	case combine(plumbing.Error<<4, 0):
 		bacnet = services.NewError(&bvlc, &npdu)
 	default:
-		return nil, errors.Wrap(
-			common.ErrNotImplemented,
-			fmt.Sprintf("Parsing service: %x", c),
+		return nil, fmt.Errorf(
+			"parsing service %x: %v", c, common.ErrNotImplemented,
 		)
 	}
 
 	if err := bacnet.UnmarshalBinary(b); err != nil {
-		return nil, errors.Wrap(
-			err,
-			fmt.Sprintf("Parsing BACnet %x", b[offset:]),
+		return nil, fmt.Errorf(
+			"parsing BACnet %x: %v", b[offset:], err,
 		)
 	}
 

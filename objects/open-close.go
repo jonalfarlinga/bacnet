@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/jonalfarlinga/bacnet/common"
-	"github.com/pkg/errors"
 )
 
 type OpenCloseTag struct {
@@ -15,9 +14,8 @@ type OpenCloseTag struct {
 
 func (n *OpenCloseTag) UnmarshalBinary(b []byte) error {
 	if l := len(b); l < objLenMin {
-		return errors.Wrap(
-			common.ErrTooShortToParse,
-			fmt.Sprintf("failed to unmarshal NamedTag - binary too short - %x", b),
+		return fmt.Errorf(
+			"failed to unmarshal NamedTag %x: %s", b, common.ErrTooShortToParse,
 		)
 	}
 	n.TagNumber = b[0] >> 4
@@ -25,9 +23,9 @@ func (n *OpenCloseTag) UnmarshalBinary(b []byte) error {
 	n.Name = b[0] & 0x7
 
 	if l := len(b); l < 1 {
-		return errors.Wrap(
+		return fmt.Errorf(
+			"failed to unmarshal NamedTag %+v: %v", n,
 			common.ErrTooShortToParse,
-			fmt.Sprintf("failed to unmarshal NamedTag - missing data - %v", n),
 		)
 	}
 
@@ -37,7 +35,7 @@ func (n *OpenCloseTag) UnmarshalBinary(b []byte) error {
 func (n *OpenCloseTag) MarshalBinary() ([]byte, error) {
 	b := make([]byte, n.MarshalLen())
 	if err := n.MarshalTo(b); err != nil {
-		return nil, errors.Wrap(err, "failed to marshal binary")
+		return nil, fmt.Errorf("failed to marshal binary: %v", err)
 	}
 
 	return b, nil
@@ -45,10 +43,9 @@ func (n *OpenCloseTag) MarshalBinary() ([]byte, error) {
 
 func (n *OpenCloseTag) MarshalTo(b []byte) error {
 	if len(b) < n.MarshalLen() {
-		return errors.Wrap(common.ErrTooShortToMarshalBinary, "failed to marshall NamedTag - marshal length too short")
+		return fmt.Errorf("failed to marshall NamedTag %+v: %v", n, common.ErrTooShortToMarshalBinary)
 	}
 	b[0] = n.TagNumber<<4 | uint8(common.BoolToInt(n.TagClass))<<3 | n.Name
-
 	return nil
 }
 
@@ -59,7 +56,7 @@ func (n *OpenCloseTag) MarshalLen() int {
 func DecOpeningTab(rawPayload APDUPayload) (bool, error) {
 	rawTag, ok := rawPayload.(*OpenCloseTag)
 	if !ok {
-		return false, errors.Wrap(common.ErrWrongPayload, "failed to decode OpeningTab")
+		return false, fmt.Errorf("failed to decode OpeningTab %+v: %s", rawPayload, common.ErrWrongPayload)
 	}
 	return rawTag.Name == 0x6 && rawTag.TagClass, nil
 }
@@ -77,7 +74,7 @@ func EncOpeningTag(tagN uint8) *OpenCloseTag {
 func DecClosingTab(rawPayload APDUPayload) (bool, error) {
 	rawTag, ok := rawPayload.(*OpenCloseTag)
 	if !ok {
-		return false, errors.Wrap(common.ErrWrongPayload, "failed to decode ClosingTab")
+		return false, fmt.Errorf("failed to decode ClosingTab %+v: %v", rawPayload, common.ErrWrongPayload)
 	}
 	return rawTag.Name == 0x7 && rawTag.TagClass, nil
 }

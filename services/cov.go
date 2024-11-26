@@ -7,7 +7,6 @@ import (
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
 	"github.com/jonalfarlinga/bacnet/plumbing"
-	"github.com/pkg/errors"
 )
 
 // ConfirmedCOV is a BACnet message.
@@ -61,33 +60,34 @@ func NewConfirmedSubscribeCOV(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) (*Confir
 // UnmarshalBinary sets the values retrieved from byte sequence in a ConfirmedCOV frame.
 func (u *ConfirmedCOV) UnmarshalBinary(b []byte) error {
 	if l := len(b); l < u.MarshalLen() {
-		return errors.Wrap(
+		return fmt.Errorf(
+			"failed to unmarshal ConfirmedCOV - marshal length %d binary length %d: %v",
+			u.MarshalLen(), l,
 			common.ErrTooShortToParse,
-			fmt.Sprintf("failed to unmarshal ConfirmedCOV - marshal length %d binary length %d", u.MarshalLen(), l),
 		)
 	}
 
 	var offset int = 0
 	if err := u.BVLC.UnmarshalBinary(b[offset:]); err != nil {
-		return errors.Wrap(
-			common.ErrTooShortToParse,
-			fmt.Sprintf("unmarshalling ConfirmedCOV %v", u),
+		return fmt.Errorf(
+			"unmarshalling ConfirmedCOV %v: %v",
+			u, common.ErrTooShortToParse,
 		)
 	}
 	offset += u.BVLC.MarshalLen()
 
 	if err := u.NPDU.UnmarshalBinary(b[offset:]); err != nil {
-		return errors.Wrap(
-			common.ErrTooShortToParse,
-			fmt.Sprintf("unmarshalling ConfirmedCOV %v", u),
+		return fmt.Errorf(
+			"unmarshalling ConfirmedCOV %v: %v",
+			u, common.ErrTooShortToParse,
 		)
 	}
 	offset += u.NPDU.MarshalLen()
 
 	if err := u.APDU.UnmarshalBinary(b[offset:]); err != nil {
-		return errors.Wrap(
-			common.ErrTooShortToParse,
-			fmt.Sprintf("unmarshalling ConfirmedCOV %v", u),
+		return fmt.Errorf(
+			"unmarshalling ConfirmedCOV %v: %v",
+			u, common.ErrTooShortToParse,
 		)
 	}
 
@@ -98,7 +98,7 @@ func (u *ConfirmedCOV) UnmarshalBinary(b []byte) error {
 func (u *ConfirmedCOV) MarshalBinary() ([]byte, error) {
 	b := make([]byte, u.MarshalLen())
 	if err := u.MarshalTo(b); err != nil {
-		return nil, errors.Wrap(err, "failed to marshal binary")
+		return nil, fmt.Errorf("failed to marshal binary: %v", err)
 	}
 	return b, nil
 }
@@ -106,24 +106,25 @@ func (u *ConfirmedCOV) MarshalBinary() ([]byte, error) {
 // MarshalTo puts the byte sequence in the byte array given as b.
 func (u *ConfirmedCOV) MarshalTo(b []byte) error {
 	if len(b) < u.MarshalLen() {
-		return errors.Wrap(
+		return fmt.Errorf(
+			"failed to marshal ConfirmedCOV - marshal length %d binary length %d: %v",
+			u.MarshalLen(), len(b),
 			common.ErrTooShortToMarshalBinary,
-			fmt.Sprintf("failed to marshal ConfirmedCOV - marshal length %d binary length %d", u.MarshalLen(), len(b)),
 		)
 	}
 	var offset = 0
 	if err := u.BVLC.MarshalTo(b[offset:]); err != nil {
-		return errors.Wrap(err, "marshalling ConfirmedCOV")
+		return fmt.Errorf("marshalling ConfirmedCOV: %v", err)
 	}
 	offset += u.BVLC.MarshalLen()
 
 	if err := u.NPDU.MarshalTo(b[offset:]); err != nil {
-		return errors.Wrap(err, "marshalling ConfirmedCOV")
+		return fmt.Errorf("marshalling ConfirmedCOV: %v", err)
 	}
 	offset += u.NPDU.MarshalLen()
 
 	if err := u.APDU.MarshalTo(b[offset:]); err != nil {
-		return errors.Wrap(err, "marshalling ConfirmedCOV")
+		return fmt.Errorf("marshalling ConfirmedCOV: %v", err)
 	}
 
 	return nil
@@ -146,9 +147,10 @@ func (u *ConfirmedCOV) Decode() (ConfirmedCOVDec, error) {
 	decCOV := ConfirmedCOVDec{}
 
 	if len(u.APDU.Objects) != 4 {
-		return decCOV, errors.Wrap(
+		return decCOV, fmt.Errorf(
+			"failed to decode ConfirmedCOV - number of objects %d: %v",
+			len(u.APDU.Objects),
 			common.ErrWrongObjectCount,
-			fmt.Sprintf("failed to decode ConfirmedCOV %d - wrong object count", len(u.APDU.Objects)),
 		)
 	}
 
@@ -156,9 +158,9 @@ func (u *ConfirmedCOV) Decode() (ConfirmedCOVDec, error) {
 	for i, obj := range u.APDU.Objects {
 		enc_obj, ok := obj.(*objects.Object)
 		if !ok {
-			return decCOV, errors.Wrap(
-				common.ErrInvalidObjectType,
-				fmt.Sprintf("ComplexACK object at index %d is not Object type", i),
+			return decCOV, fmt.Errorf(
+				"ComplexACK object at index %d is not Object type: %v",
+				i, common.ErrInvalidObjectType,
 			)
 		}
 
@@ -169,9 +171,9 @@ func (u *ConfirmedCOV) Decode() (ConfirmedCOVDec, error) {
 		}
 		if enc_obj.Length == 7 {
 			if len(context) == 0 {
-				return decCOV, errors.Wrap(
-					common.ErrInvalidObjectType,
-					fmt.Sprintf("LogBufferCACK object at index %d has mismatched closing tag", i),
+				return decCOV, fmt.Errorf(
+					"LogBufferCACK object at index %d has mismatched closing tag: %v",
+					i, common.ErrInvalidObjectType,
 				)
 			}
 			context = context[:len(context)-1]
@@ -184,30 +186,32 @@ func (u *ConfirmedCOV) Decode() (ConfirmedCOVDec, error) {
 			case combine(8, 0):
 				proc, err := objects.DecUnsignedInteger(enc_obj)
 				if err != nil {
-					return decCOV, errors.Wrap(err, "decode ProcessId")
+					return decCOV, fmt.Errorf("decode ProcessId: %v", err)
 				}
 				decCOV.ProcessId = proc
 			case combine(8, 1):
 				objId, err := objects.DecObjectIdentifier(enc_obj)
 				if err != nil {
-					return decCOV, errors.Wrap(err, "decode MonitoredObjID")
+					return decCOV, fmt.Errorf("decode MonitoredObjID: %v", err)
 				}
 				decCOV.MonitoredObjType = objId.ObjectType
 				decCOV.MonitoredInstNum = objId.InstanceNumber
 			case combine(8, 2):
 				if len(enc_obj.Data) != 1 {
-					return decCOV, errors.Wrap(
-						common.ErrInvalidObjectType,
-						fmt.Sprintf("LogBufferCACK object at index %d has invalid data length", i),
+					return decCOV, fmt.Errorf(
+						"LogBufferCACK object at index %d has invalid data length: %v",
+						i, common.ErrInvalidObjectType,
 					)
 				}
 				decCOV.ExpectConfirmed = common.IntToBool(int(enc_obj.Data[0]))
 			case combine(8, 3):
 				life, err := objects.DecUnsignedInteger(enc_obj)
 				if err != nil {
-					return decCOV, errors.Wrap(err, "decode Lifetime")
+					return decCOV, fmt.Errorf("decode Lifetime: %v", err)
 				}
 				decCOV.Lifetime = life
+			default:
+				log.Printf("Unknown Context object: context %v tag class %t tag number %d\n", context, enc_obj.TagClass, enc_obj.TagNumber)
 			}
 		} else {
 			log.Printf("Not encoded object: %+v\n", enc_obj)

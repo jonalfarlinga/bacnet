@@ -7,7 +7,6 @@ import (
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
 	"github.com/jonalfarlinga/bacnet/plumbing"
-	"github.com/pkg/errors"
 )
 
 // UnconfirmedWhoIs is a BACnet message.
@@ -35,33 +34,34 @@ func NewUnconfirmedWhoIs(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *UnconfirmedW
 // UnmarshalBinary sets the values retrieved from byte sequence in a UnconfirmedWhoIs frame.
 func (u *UnconfirmedWhoIs) UnmarshalBinary(b []byte) error {
 	if l := len(b); l < u.MarshalLen() {
-		return errors.Wrap(
+		return fmt.Errorf(
+			"failed to unmarshal UnconfirmedWhoIs - marshal length %d binary length %d: %v",
+			u.MarshalLen(), l,
 			common.ErrTooShortToParse,
-			fmt.Sprintf("failed to unmarshal UnconfirmedWhoIs - marshal length %d binary length %d", u.MarshalLen(), l),
 		)
 	}
 
 	var offset int = 0
 	if err := u.BVLC.UnmarshalBinary(b[offset:]); err != nil {
-		return errors.Wrap(
-			common.ErrTooShortToParse,
-			fmt.Sprintf("unmarshalling UnconfirmedWhoIs %v", u),
+		return fmt.Errorf(
+			"unmarshalling UnconfirmedWhoIs %+v: %v",
+			u, common.ErrTooShortToParse,
 		)
 	}
 	offset += u.BVLC.MarshalLen()
 
 	if err := u.NPDU.UnmarshalBinary(b[offset:]); err != nil {
-		return errors.Wrap(
-			common.ErrTooShortToParse,
-			fmt.Sprintf("unmarshalling UnconfirmedWhoIs %v", u),
+		return fmt.Errorf(
+			"unmarshalling UnconfirmedWhoIs %+v: %v",
+			u, common.ErrTooShortToParse,
 		)
 	}
 	offset += u.NPDU.MarshalLen()
 
 	if err := u.APDU.UnmarshalBinary(b[offset:]); err != nil {
-		return errors.Wrap(
-			common.ErrTooShortToParse,
-			fmt.Sprintf("unmarshalling UnconfirmedWhoIs %v", u),
+		return fmt.Errorf(
+			"unmarshalling UnconfirmedWhoIs %+v: %v",
+			u, common.ErrTooShortToParse,
 		)
 	}
 
@@ -72,7 +72,7 @@ func (u *UnconfirmedWhoIs) UnmarshalBinary(b []byte) error {
 func (u *UnconfirmedWhoIs) MarshalBinary() ([]byte, error) {
 	b := make([]byte, u.MarshalLen())
 	if err := u.MarshalTo(b); err != nil {
-		return nil, errors.Wrap(err, "failed to marshal binary")
+		return nil, fmt.Errorf("failed to marshal binary: %v", err)
 	}
 	return b, nil
 }
@@ -80,24 +80,25 @@ func (u *UnconfirmedWhoIs) MarshalBinary() ([]byte, error) {
 // MarshalTo puts the byte sequence in the byte array given as b.
 func (u *UnconfirmedWhoIs) MarshalTo(b []byte) error {
 	if len(b) < u.MarshalLen() {
-		return errors.Wrap(
+		return fmt.Errorf(
+			"failed to marshal UnconfirmedWhoIs - marshal length %d binary length %d: %v",
+			u.MarshalLen(), len(b),
 			common.ErrTooShortToMarshalBinary,
-			fmt.Sprintf("failed to marshal UnconfirmedWhoIs - marshal length %d binary length %d", u.MarshalLen(), len(b)),
 		)
 	}
 	var offset = 0
 	if err := u.BVLC.MarshalTo(b[offset:]); err != nil {
-		return errors.Wrap(err, "marshalling UnconfirmedWhoIs")
+		return fmt.Errorf("marshalling UnconfirmedWhoIs: %v", err)
 	}
 	offset += u.BVLC.MarshalLen()
 
 	if err := u.NPDU.MarshalTo(b[offset:]); err != nil {
-		return errors.Wrap(err, "marshalling UnconfirmedWhoIs")
+		return fmt.Errorf("marshalling UnconfirmedWhoIs: %v", err)
 	}
 	offset += u.NPDU.MarshalLen()
 
 	if err := u.APDU.MarshalTo(b[offset:]); err != nil {
-		return errors.Wrap(err, "marshalling UnconfirmedWhoIs")
+		return fmt.Errorf("marshalling UnconfirmedWhoIs: %v", err)
 	}
 
 	return nil
@@ -120,9 +121,9 @@ func (u *UnconfirmedWhoIs) Decode() (UnconfirmedWhoIsDec, error) {
 	for i, obj := range u.APDU.Objects {
 		enc_obj, ok := obj.(*objects.Object)
 		if !ok {
-			return decWhois, errors.Wrap(
-				common.ErrInvalidObjectType,
-				fmt.Sprintf("ComplexACK object at index %d is not Object type", i),
+			return decWhois, fmt.Errorf(
+				"ComplexACK object at index %d is not Object type: %v",
+				i, common.ErrInvalidObjectType,
 			)
 		}
 
@@ -133,9 +134,9 @@ func (u *UnconfirmedWhoIs) Decode() (UnconfirmedWhoIsDec, error) {
 		}
 		if enc_obj.Length == 7 {
 			if len(context) == 0 {
-				return decWhois, errors.Wrap(
-					common.ErrInvalidObjectType,
-					fmt.Sprintf("LogBufferCACK object at index %d has mismatched closing tag", i),
+				return decWhois, fmt.Errorf(
+					"LogBufferCACK object at index %d has mismatched closing tag: %v",
+					i, common.ErrInvalidObjectType,
 				)
 			}
 			context = context[:len(context)-1]
@@ -148,7 +149,7 @@ func (u *UnconfirmedWhoIs) Decode() (UnconfirmedWhoIsDec, error) {
 			case combine(8, 0):
 				lowRange, err := objects.DecUnsignedInteger(obj)
 				if err != nil {
-					return decWhois, errors.Wrap(err, "decode Context object case 0")
+					return decWhois, fmt.Errorf("decode Context object case 0: %v", err)
 				}
 				objs = append(objs, &objects.Object{
 					TagNumber: 0,
@@ -159,7 +160,7 @@ func (u *UnconfirmedWhoIs) Decode() (UnconfirmedWhoIsDec, error) {
 			case combine(8, 1):
 				highRange, err := objects.DecUnsignedInteger(obj)
 				if err != nil {
-					return decWhois, errors.Wrap(err, "decode Context object case 1")
+					return decWhois, fmt.Errorf("decode Context object case 1: %v", err)
 				}
 				objs = append(objs, &objects.Object{
 					TagNumber: 1,
@@ -168,12 +169,12 @@ func (u *UnconfirmedWhoIs) Decode() (UnconfirmedWhoIsDec, error) {
 					Length:    uint8(obj.MarshalLen()),
 				})
 			default:
-				log.Printf("Unknown tag %+v\n", enc_obj)
+				log.Printf("Unknown Context object: context %v tag class %t tag number %d\n", context, enc_obj.TagClass, enc_obj.TagNumber)
 			}
 		} else {
-			tag, err := decodeTags(enc_obj, &obj)
+			tag, err := decodeAppTags(enc_obj, &obj)
 			if err != nil {
-				return decWhois, errors.Wrap(err, "decode Application Tag")
+				return decWhois, fmt.Errorf("decode Application Tag: %v", err)
 			}
 			objs = append(objs, tag)
 		}

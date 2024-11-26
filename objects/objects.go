@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/jonalfarlinga/bacnet/common"
-	"github.com/pkg/errors"
 )
 
 type APDUPayload interface {
@@ -40,9 +39,8 @@ const objLenMin int = 2
 // UnmarshalBinary sets the values retrieved from byte sequence in a Object frame.
 func (o *Object) UnmarshalBinary(b []byte) error {
 	if l := len(b); l < objLenMin {
-		return errors.Wrap(
-			common.ErrTooShortToParse,
-			fmt.Sprintf("failed to unmarshal - binary %x - too short", b),
+		return fmt.Errorf(
+			"failed to unmarshal - binary %x - too short: %v", b, common.ErrTooShortToParse,
 		)
 	}
 
@@ -51,9 +49,8 @@ func (o *Object) UnmarshalBinary(b []byte) error {
 	o.Length = b[0] & 0x7
 
 	if l := len(b); l < int(o.Length) {
-		return errors.Wrap(
-			common.ErrTooShortToParse,
-			fmt.Sprintf("failed to unmarshal object - binary %x - marshal length too short", b),
+		return fmt.Errorf(
+			"failed to unmarshal object - binary %x - marshal length too short: %v", b, common.ErrTooShortToParse,
 		)
 	}
 
@@ -65,7 +62,7 @@ func (o *Object) UnmarshalBinary(b []byte) error {
 func (o *Object) MarshalBinary() ([]byte, error) {
 	b := make([]byte, o.MarshalLen())
 	if err := o.MarshalTo(b); err != nil {
-		return nil, errors.Wrap(err, "failed to marshal object")
+		return nil, fmt.Errorf("failed to marshal object: %s", err)
 	}
 
 	return b, nil
@@ -74,9 +71,8 @@ func (o *Object) MarshalBinary() ([]byte, error) {
 // MarshalTo puts the byte sequence in the byte array given as b.
 func (o *Object) MarshalTo(b []byte) error {
 	if len(b) < o.MarshalLen() {
-		return errors.Wrap(
-			common.ErrTooShortToMarshalBinary,
-			fmt.Sprintf("failed to marshal object - binary %x - marshal length too short", b),
+		return fmt.Errorf(
+			"failed to marshal object - binary %x - marshal length too short: %v", b, common.ErrTooShortToMarshalBinary,
 		)
 	}
 	b[0] = o.TagNumber<<4 | uint8(common.BoolToInt(o.TagClass))<<3 | o.Length

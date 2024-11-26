@@ -7,7 +7,6 @@ import (
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
 	"github.com/jonalfarlinga/bacnet/plumbing"
-	"github.com/pkg/errors"
 )
 
 // ComplexACKRPM is a BACnet message.
@@ -30,9 +29,9 @@ func (c *ComplexACK) DecodeRPM() (ComplexACKRPMDec, error) {
 	for i, obj := range c.APDU.Objects {
 		enc_obj, ok := obj.(*objects.Object)
 		if !ok {
-			return decCACK, errors.Wrap(
-				common.ErrInvalidObjectType,
-				fmt.Sprintf("ComplexACKRPM object at index %d is not Object type", i),
+			return decCACK, fmt.Errorf(
+				"ComplexACKRPM object at index %d is not Object type: %v",
+				i, common.ErrInvalidObjectType,
 			)
 		}
 
@@ -43,9 +42,9 @@ func (c *ComplexACK) DecodeRPM() (ComplexACKRPMDec, error) {
 		}
 		if enc_obj.Length == 7 && enc_obj.Data == nil {
 			if len(context) == 0 {
-				return decCACK, errors.Wrap(
-					common.ErrInvalidObjectType,
-					fmt.Sprintf("LogBufferCACK object at index %d has mismatched closing tag", i),
+				return decCACK, fmt.Errorf(
+					"LogBufferCACK object at index %d has mismatched closing tag: %v",
+					i, common.ErrInvalidObjectType,
 				)
 			}
 			context = context[:len(context)-1]
@@ -58,14 +57,14 @@ func (c *ComplexACK) DecodeRPM() (ComplexACKRPMDec, error) {
 			case combine(8, 0):
 				objId, err := objects.DecObjectIdentifier(obj)
 				if err != nil {
-					return decCACK, errors.Wrap(err, "decode Context object case 0")
+					return decCACK, fmt.Errorf("decode Context object case 0: %v", err)
 				}
 				decCACK.ObjectType = objId.ObjectType
 				decCACK.InstanceId = objId.InstanceNumber
 			case combine(1, 2):
 				propId, err := objects.DecUnsignedInteger(obj)
 				if err != nil {
-					return decCACK, errors.Wrap(err, "decode Context object case 1")
+					return decCACK, fmt.Errorf("decode Context object case 1: %v", err)
 				}
 				objs = append(objs, &objects.Object{
 					TagNumber: 2,
@@ -77,7 +76,7 @@ func (c *ComplexACK) DecodeRPM() (ComplexACKRPMDec, error) {
 			case combine(4, 0):
 				objId, err := objects.DecObjectIdentifier(obj)
 				if err != nil {
-					return decCACK, errors.Wrap(err, "decode Context object case 0")
+					return decCACK, fmt.Errorf("decode Context object case 0: %v", err)
 				}
 				objs = append(objs, &objects.Object{
 					TagNumber: 0,
@@ -88,7 +87,7 @@ func (c *ComplexACK) DecodeRPM() (ComplexACKRPMDec, error) {
 			case combine(4, 1):
 				value, err := objects.DecUnsignedInteger(obj)
 				if err != nil {
-					return decCACK, errors.Wrap(err, "decode Context object case 1")
+					return decCACK, fmt.Errorf("decode Context object case 1: %v", err)
 				}
 				propId := uint16(value)
 				objs = append(objs, &objects.Object{
@@ -100,7 +99,7 @@ func (c *ComplexACK) DecodeRPM() (ComplexACKRPMDec, error) {
 			case combine(4, 3):
 				objId, err := objects.DecObjectIdentifier(obj)
 				if err != nil {
-					return decCACK, errors.Wrap(err, "decode Context object case 0")
+					return decCACK, fmt.Errorf("decode Context object case 0: %v", err)
 				}
 				objs = append(objs, &objects.Object{
 					TagNumber: 3,
@@ -109,12 +108,12 @@ func (c *ComplexACK) DecodeRPM() (ComplexACKRPMDec, error) {
 					Length:    uint8(obj.MarshalLen()),
 				})
 			default:
-				log.Println("context", context, "TagNumber", enc_obj.TagNumber)
+				log.Printf("Unknown Context object: context %v tag class %t tag number %d\n", context, enc_obj.TagClass, enc_obj.TagNumber)
 			}
 		} else {
-			tag, err := decodeTags(enc_obj, &obj)
+			tag, err := decodeAppTags(enc_obj, &obj)
 			if err != nil {
-				return decCACK, errors.Wrap(err, "decode Application Tag")
+				return decCACK, fmt.Errorf("decode Application Tag: %v", err)
 			}
 			objs = append(objs, tag)
 		}

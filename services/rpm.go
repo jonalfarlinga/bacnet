@@ -6,7 +6,6 @@ import (
 
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
-	"github.com/pkg/errors"
 )
 
 type ConfirmedReadPropMultDec struct {
@@ -23,9 +22,9 @@ func (c *ConfirmedReadProperty) DecodeRPM() (ConfirmedReadPropMultDec, error) {
 	for i, obj := range c.APDU.Objects {
 		enc_obj, ok := obj.(*objects.Object)
 		if !ok {
-			return decRPM, errors.Wrap(
-				common.ErrInvalidObjectType,
-				fmt.Sprintf("ComplexACKRPM object at index %d is not Object type", i),
+			return decRPM, fmt.Errorf(
+				"ComplexACKRPM object at index %d is not Object type: %v",
+				i, common.ErrInvalidObjectType,
 			)
 		}
 
@@ -36,9 +35,9 @@ func (c *ConfirmedReadProperty) DecodeRPM() (ConfirmedReadPropMultDec, error) {
 		}
 		if enc_obj.Length == 7 && enc_obj.Data == nil {
 			if len(context) == 0 {
-				return decRPM, errors.Wrap(
-					common.ErrInvalidObjectType,
-					fmt.Sprintf("LogBufferCACK object at index %d has mismatched closing tag", i),
+				return decRPM, fmt.Errorf(
+					"LogBufferCACK object at index %d has mismatched closing tag: %v",
+					i, common.ErrInvalidObjectType,
 				)
 			}
 			context = context[:len(context)-1]
@@ -51,14 +50,14 @@ func (c *ConfirmedReadProperty) DecodeRPM() (ConfirmedReadPropMultDec, error) {
 			case combine(8, 0):
 				objId, err := objects.DecObjectIdentifier(obj)
 				if err != nil {
-					return decRPM, errors.Wrap(err, "decode Context object case 0")
+					return decRPM, fmt.Errorf("decode Context object case 0: %v", err)
 				}
 				decRPM.ObjectType = objId.ObjectType
 				decRPM.InstanceNum = objId.InstanceNumber
 			case combine(1, 0):
 				propId, err := objects.DecUnsignedInteger(obj)
 				if err != nil {
-					return decRPM, errors.Wrap(err, "decode Context object case 0")
+					return decRPM, fmt.Errorf("decode Context object case 0: %v", err)
 				}
 				objs = append(objs, &objects.Object{
 					TagNumber: 0,
@@ -67,12 +66,12 @@ func (c *ConfirmedReadProperty) DecodeRPM() (ConfirmedReadPropMultDec, error) {
 					Value:     propId,
 				})
 			default:
-				log.Println("context", context, "TagNumber", enc_obj.TagNumber)
+				log.Printf("Unknown Context object: context %v tag class %t tag number %d\n", context, enc_obj.TagClass, enc_obj.TagNumber)
 			}
 		} else {
-			tag, err := decodeTags(enc_obj, &obj)
+			tag, err := decodeAppTags(enc_obj, &obj)
 			if err != nil {
-				return decRPM, errors.Wrap(err, "decode Application Tag")
+				return decRPM, fmt.Errorf("decode Application Tag: %v", err)
 			}
 			objs = append(objs, tag)
 		}

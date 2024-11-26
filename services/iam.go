@@ -6,7 +6,6 @@ import (
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
 	"github.com/jonalfarlinga/bacnet/plumbing"
-	"github.com/pkg/errors"
 )
 
 // UnconfirmedIAm is a BACnet message.
@@ -51,33 +50,34 @@ func NewUnconfirmedIAm(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *UnconfirmedIAm
 // UnmarshalBinary sets the values retrieved from byte sequence in a UnconfirmedIAm frame.
 func (u *UnconfirmedIAm) UnmarshalBinary(b []byte) error {
 	if l := len(b); l < u.MarshalLen() {
-		return errors.Wrap(
+		return fmt.Errorf(
+			"failed to unmarshal UnconfirmedIAm - marshal length %d binary length %d: %v",
+			u.MarshalLen(), l,
 			common.ErrTooShortToParse,
-			fmt.Sprintf("failed to unmarshal UnconfirmedIAm - marshal length %d binary length %d", u.MarshalLen(), l),
 		)
 	}
 
 	var offset int = 0
 	if err := u.BVLC.UnmarshalBinary(b[offset:]); err != nil {
-		return errors.Wrap(
-			common.ErrTooShortToParse,
-			fmt.Sprintf("unmarshalling UnconfirmedIAm %v", u),
+		return fmt.Errorf(
+			"unmarshalling UnconfirmedIAm %+v: %v",
+			u, common.ErrTooShortToParse,
 		)
 	}
 	offset += u.BVLC.MarshalLen()
 
 	if err := u.NPDU.UnmarshalBinary(b[offset:]); err != nil {
-		return errors.Wrap(
-			common.ErrTooShortToParse,
-			fmt.Sprintf("unmarshalling UnconfirmedIAm %v", u),
+		return fmt.Errorf(
+			"unmarshalling UnconfirmedIAm %+v: %v",
+			u, common.ErrTooShortToParse,
 		)
 	}
 	offset += u.NPDU.MarshalLen()
 
 	if err := u.APDU.UnmarshalBinary(b[offset:]); err != nil {
-		return errors.Wrap(
-			common.ErrTooShortToParse,
-			fmt.Sprintf("unmarshalling UnconfirmedIAm %v", u),
+		return fmt.Errorf(
+			"unmarshalling UnconfirmedIAm %+v: %v",
+			u, common.ErrTooShortToParse,
 		)
 	}
 
@@ -88,7 +88,7 @@ func (u *UnconfirmedIAm) UnmarshalBinary(b []byte) error {
 func (u *UnconfirmedIAm) MarshalBinary() ([]byte, error) {
 	b := make([]byte, u.MarshalLen())
 	if err := u.MarshalTo(b); err != nil {
-		return nil, errors.Wrap(err, "failed to marshal binary")
+		return nil, fmt.Errorf("failed to marshal binary: %v", err)
 	}
 	return b, nil
 }
@@ -96,24 +96,25 @@ func (u *UnconfirmedIAm) MarshalBinary() ([]byte, error) {
 // MarshalTo puts the byte sequence in the byte array given as b.
 func (u *UnconfirmedIAm) MarshalTo(b []byte) error {
 	if len(b) < u.MarshalLen() {
-		return errors.Wrap(
+		return fmt.Errorf(
+			"failed to marshal UnconfirmedIAm - marshal length %d binary length %d: %v",
+			u.MarshalLen(), len(b),
 			common.ErrTooShortToMarshalBinary,
-			fmt.Sprintf("failed to marshal UnconfirmedIAm - marshal length %d binary length %d", u.MarshalLen(), len(b)),
 		)
 	}
 	var offset = 0
 	if err := u.BVLC.MarshalTo(b[offset:]); err != nil {
-		return errors.Wrap(err, "marshalling UnconfirmedIAm")
+		return fmt.Errorf("marshalling UnconfirmedIAm: %v", err)
 	}
 	offset += u.BVLC.MarshalLen()
 
 	if err := u.NPDU.MarshalTo(b[offset:]); err != nil {
-		return errors.Wrap(err, "marshalling UnconfirmedIAm")
+		return fmt.Errorf("marshalling UnconfirmedIAm: %v", err)
 	}
 	offset += u.NPDU.MarshalLen()
 
 	if err := u.APDU.MarshalTo(b[offset:]); err != nil {
-		return errors.Wrap(err, "marshalling UnconfirmedIAm")
+		return fmt.Errorf("marshalling UnconfirmedIAm: %v", err)
 	}
 
 	return nil
@@ -136,9 +137,10 @@ func (u *UnconfirmedIAm) Decode() (UnconfirmedIAmDec, error) {
 	decIAm := UnconfirmedIAmDec{}
 
 	if len(u.APDU.Objects) != 4 {
-		return decIAm, errors.Wrap(
+		return decIAm, fmt.Errorf(
+			"failed to decode UnconfirmedIAm - number of objects %d: %v",
+			len(u.APDU.Objects),
 			common.ErrWrongObjectCount,
-			fmt.Sprintf("failed to decode UnconfirmedIAm %d - wrong object count", len(u.APDU.Objects)),
 		)
 	}
 
@@ -147,26 +149,26 @@ func (u *UnconfirmedIAm) Decode() (UnconfirmedIAmDec, error) {
 		case 0:
 			objId, err := objects.DecObjectIdentifier(obj)
 			if err != nil {
-				return decIAm, errors.Wrap(err, "decoding UnconfirmedIAm")
+				return decIAm, fmt.Errorf("decoding UnconfirmedIAm: %v", err)
 			}
 			decIAm.DeviceType = objId.ObjectType
 			decIAm.InstanceNum = objId.InstanceNumber
 		case 1:
 			maxLen, err := objects.DecUnsignedInteger(obj)
 			if err != nil {
-				return decIAm, errors.Wrap(err, "decoding UnconfirmedIAm")
+				return decIAm, fmt.Errorf("decoding UnconfirmedIAm: %v", err)
 			}
 			decIAm.MaxAPDULength = uint16(maxLen)
 		case 2:
 			segSupport, err := objects.DecEnumerated(obj)
 			if err != nil {
-				return decIAm, errors.Wrap(err, "decoding UnconfirmedIAm")
+				return decIAm, fmt.Errorf("decoding UnconfirmedIAm: %v", err)
 			}
 			decIAm.SegmentationSupported = uint8(segSupport)
 		case 3:
 			vendorId, err := objects.DecUnsignedInteger(obj)
 			if err != nil {
-				return decIAm, errors.Wrap(err, "decoding UnconfirmedIAm")
+				return decIAm, fmt.Errorf("decoding UnconfirmedIAm: %v", err)
 			}
 			decIAm.VendorId = uint16(vendorId)
 		}

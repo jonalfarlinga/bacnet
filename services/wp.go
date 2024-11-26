@@ -6,7 +6,6 @@ import (
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
 	"github.com/jonalfarlinga/bacnet/plumbing"
-	"github.com/pkg/errors"
 )
 
 // UnconfirmedIAm is a BACnet message.
@@ -22,7 +21,7 @@ type ConfirmedWritePropertyDec struct {
 	PropertyId  uint16
 	Value       float32
 	Priority    uint8
-	Tags		[]*objects.Object
+	Tags        []*objects.Object
 }
 
 func ConfirmedWritePropertyObjects(objectType uint16, instN uint32, propertyId uint16, data interface{}) []objects.APDUPayload {
@@ -58,33 +57,31 @@ func NewConfirmedWriteProperty(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) *Confir
 
 func (c *ConfirmedWriteProperty) UnmarshalBinary(b []byte) error {
 	if l := len(b); l < c.MarshalLen() {
-		return errors.Wrap(
+		return fmt.Errorf(
+			"failed to unmarshal ConfirmedWP - marshal length %d binary length %d: %v",
+			c.MarshalLen(), l,
 			common.ErrTooShortToParse,
-			fmt.Sprintf("failed to unmarshal ConfirmedWP - marshal length %d binary length %d", c.MarshalLen(), l),
 		)
 	}
 
 	var offset int = 0
 	if err := c.BVLC.UnmarshalBinary(b[offset:]); err != nil {
-		return errors.Wrap(
-			common.ErrTooShortToParse,
-			fmt.Sprintf("unmarshalling ConfirmedWP %v", c),
+		return fmt.Errorf(
+			"unmarshalling ConfirmedWP %+v: %v", c, common.ErrTooShortToParse,
 		)
 	}
 	offset += c.BVLC.MarshalLen()
 
 	if err := c.NPDU.UnmarshalBinary(b[offset:]); err != nil {
-		return errors.Wrap(
-			common.ErrTooShortToParse,
-			fmt.Sprintf("unmarshalling ConfirmedWP %v", c),
+		return fmt.Errorf(
+			"unmarshalling ConfirmedWP %+v: %v", c, common.ErrTooShortToParse,
 		)
 	}
 	offset += c.NPDU.MarshalLen()
 
 	if err := c.APDU.UnmarshalBinary(b[offset:]); err != nil {
-		return errors.Wrap(
-			common.ErrTooShortToParse,
-			fmt.Sprintf("unmarshalling ConfirmedWP %v", c),
+		return fmt.Errorf(
+			"unmarshalling ConfirmedWP %+v: %v", c, common.ErrTooShortToParse,
 		)
 	}
 
@@ -94,31 +91,32 @@ func (c *ConfirmedWriteProperty) UnmarshalBinary(b []byte) error {
 func (c *ConfirmedWriteProperty) MarshalBinary() ([]byte, error) {
 	b := make([]byte, c.MarshalLen())
 	if err := c.MarshalTo(b); err != nil {
-		return nil, errors.Wrap(err, "failed to marshal binary")
+		return nil, fmt.Errorf("failed to marshal binary: %v", err)
 	}
 	return b, nil
 }
 
 func (c *ConfirmedWriteProperty) MarshalTo(b []byte) error {
 	if len(b) < c.MarshalLen() {
-		return errors.Wrap(
+		return fmt.Errorf(
+			"failed to marshal ConfirmedWP - marshal length %d binary length %d: %v",
+			c.MarshalLen(), len(b),
 			common.ErrTooShortToMarshalBinary,
-			fmt.Sprintf("failed to marshal ConfirmedWP - marshal length %d binary length %d", c.MarshalLen(), len(b)),
 		)
 	}
 	var offset = 0
 	if err := c.BVLC.MarshalTo(b[offset:]); err != nil {
-		return errors.Wrap(err, "failed to marshal ConfirmedWP")
+		return fmt.Errorf("failed to marshal ConfirmedWP: %v", err)
 	}
 	offset += c.BVLC.MarshalLen()
 
 	if err := c.NPDU.MarshalTo(b[offset:]); err != nil {
-		return errors.Wrap(err, "failed to marshal ConfirmedWP")
+		return fmt.Errorf("failed to marshal ConfirmedWP: %v", err)
 	}
 	offset += c.NPDU.MarshalLen()
 
 	if err := c.APDU.MarshalTo(b[offset:]); err != nil {
-		return errors.Wrap(err, "failed to marshal ConfirmedWP")
+		return fmt.Errorf("failed to marshal ConfirmedWP: %v", err)
 	}
 
 	return nil
@@ -140,9 +138,10 @@ func (c *ConfirmedWriteProperty) Decode() (ConfirmedWritePropertyDec, error) {
 	decCWP := ConfirmedWritePropertyDec{}
 
 	if len(c.APDU.Objects) != 5 {
-		return decCWP, errors.Wrap(
+		return decCWP, fmt.Errorf(
+			"failed to decode ConfirmedWP - object count %d: %v",
+			len(c.APDU.Objects),
 			common.ErrWrongObjectCount,
-			fmt.Sprintf("failed to decode ConfirmedWP - object count %d", len(c.APDU.Objects)),
 		)
 	}
 
@@ -151,9 +150,9 @@ func (c *ConfirmedWriteProperty) Decode() (ConfirmedWritePropertyDec, error) {
 	for i, obj := range c.APDU.Objects {
 		enc_obj, ok := obj.(*objects.Object)
 		if !ok {
-			return decCWP, errors.Wrap(
-				common.ErrInvalidObjectType,
-				fmt.Sprintf("ComplexACK object at index %d is not Object type", i),
+			return decCWP, fmt.Errorf(
+				"ComplexACK object at index %d is not Object type: %v",
+				i, common.ErrInvalidObjectType,
 			)
 		}
 
@@ -164,9 +163,9 @@ func (c *ConfirmedWriteProperty) Decode() (ConfirmedWritePropertyDec, error) {
 		}
 		if enc_obj.Length == 7 {
 			if len(context) == 0 {
-				return decCWP, errors.Wrap(
-					common.ErrInvalidObjectType,
-					fmt.Sprintf("LogBufferCACK object at index %d has mismatched closing tag", i),
+				return decCWP, fmt.Errorf(
+					"LogBufferCACK object at index %d has mismatched closing tag: %v",
+					i, common.ErrInvalidObjectType,
 				)
 			}
 			context = context[:len(context)-1]
@@ -179,27 +178,27 @@ func (c *ConfirmedWriteProperty) Decode() (ConfirmedWritePropertyDec, error) {
 			case combine(8, 0):
 				objId, err := objects.DecObjectIdentifier(obj)
 				if err != nil {
-					return decCWP, errors.Wrap(err, "decoding ConfirmedWP")
+					return decCWP, fmt.Errorf("decoding ConfirmedWP: %v", err)
 				}
 				decCWP.ObjectType = objId.ObjectType
 				decCWP.InstanceNum = objId.InstanceNumber
 			case combine(8, 1):
 				propId, err := objects.DecUnsignedInteger(obj)
 				if err != nil {
-					return decCWP, errors.Wrap(err, "decoding ConfirmedWP")
+					return decCWP, fmt.Errorf("decoding ConfirmedWP: %v", err)
 				}
 				decCWP.PropertyId = uint16(propId)
 			case combine(8, 4):
 				priority, err := objects.DecUnsignedInteger(obj)
 				if err != nil {
-					return decCWP, errors.Wrap(err, "decoding ConfirmedWP")
+					return decCWP, fmt.Errorf("decoding ConfirmedWP: %v", err)
 				}
 				decCWP.Priority = uint8(priority)
 			}
 		} else {
-			tag, err := decodeTags(enc_obj, &obj)
+			tag, err := decodeAppTags(enc_obj, &obj)
 			if err != nil {
-				return decCWP, errors.Wrap(err, "decode Application Tag")
+				return decCWP, fmt.Errorf("decode Application Tag: %v", err)
 			}
 			objs = append(objs, tag)
 		}
