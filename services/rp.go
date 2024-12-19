@@ -31,7 +31,7 @@ func ConfirmedReadPropertyObjects(objectType uint16, instN uint32, propId uint16
 }
 
 func ConfirmedReadPropertyMultipleObjects(objectType uint16, instN uint32, propIds []uint16) []objects.APDUPayload {
-	length := 3 + len(propIds)
+	length := 3 + (1 * len(propIds))
 	objs := make([]objects.APDUPayload, length)
 
 	objs[0] = objects.EncObjectIdentifier(true, 0, objectType, instN)

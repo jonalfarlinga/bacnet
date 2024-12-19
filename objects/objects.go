@@ -48,13 +48,9 @@ func (o *Object) UnmarshalBinary(b []byte) error {
 	o.TagClass = common.IntToBool(int(b[0]) & 0x8 >> 3)
 	o.Length = b[0] & 0x7
 
-	if l := len(b); l < int(o.Length) {
-		return fmt.Errorf(
-			"failed to unmarshal object - binary %x - marshal length too short: %v", b, common.ErrTooShortToParse,
-		)
+	if !o.TagClass || !(o.Length == 6 || o.Length == 7) {
+		o.Data = b[1:o.Length]
 	}
-
-	o.Data = b[1:o.Length]
 	return nil
 }
 
@@ -76,15 +72,19 @@ func (o *Object) MarshalTo(b []byte) error {
 		)
 	}
 	b[0] = o.TagNumber<<4 | uint8(common.BoolToInt(o.TagClass))<<3 | o.Length
-	if o.Length > 0 {
+	if o.Length > 0 && o.Length < 5 {
 		copy(b[1:o.Length+1], o.Data)
+	} else if o.Length == 5 {
+		b[1] = o.Length
+		copy(b[2:o.Length+2], o.Data)
 	}
 	return nil
 }
 
 // MarshalLen returns the serial length of Object.
 func (o *Object) MarshalLen() int {
-	if !o.TagClass && (o.TagNumber == TagNull || o.TagNumber == TagBoolean) {
+	if (!o.TagClass && (o.TagNumber == TagNull || o.TagNumber == TagBoolean)) ||
+		(o.TagClass && (o.Length == 6 || o.Length == 7)) {
 		return 1
 	}
 	return 1 + int(o.Length)

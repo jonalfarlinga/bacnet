@@ -76,12 +76,9 @@ func IAmExample(cmd *cobra.Command, args []string) {
 			}
 
 			log.Printf("received a WhoIs request!\n")
-			decodedWhoIsMessage, err := whoIsMessage.Decode()
+			_, err := whoIsMessage.Decode()
 			if err != nil {
 				log.Fatalf("couldn't decode the WhoIs request: %v\n", err)
-			}
-			for _, obj := range decodedWhoIsMessage.Tags {
-				log.Printf("object: %+v\n", obj)
 			}
 
 			if _, err := listenConn.WriteTo(mIAm, remoteUDPAddr); err != nil {

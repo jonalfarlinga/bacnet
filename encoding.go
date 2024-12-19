@@ -1,8 +1,6 @@
 package bacnet
 
 import (
-	"log"
-
 	"github.com/jonalfarlinga/bacnet/plumbing"
 	"github.com/jonalfarlinga/bacnet/services"
 )
@@ -107,11 +105,7 @@ func NewReadPropertyMultiple(objectType uint16, instanceNumber uint32, propertyI
 	c.APDU.MaxSize = 5
 	c.APDU.InvokeID = 1
 	c.APDU.Flags = 2
-	log.Println("propertyIds", propertyIds)
 	c.APDU.Objects = services.ConfirmedReadPropertyMultipleObjects(objectType, instanceNumber, propertyIds)
-	for _, obj := range c.APDU.Objects {
-		log.Printf("obj %+v", obj)
-	}
 	c.SetLength()
 
 	return c.MarshalBinary()

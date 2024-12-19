@@ -291,19 +291,51 @@ func EncString(value string) *Object {
 }
 
 // TagNumber 8
-func DecBitString(rawPayload APDUPayload) (uint32, error) {
+func DecBitString(rawPayload APDUPayload) ([]bool, error) {
 	rawObject, ok := rawPayload.(*Object)
 	if !ok {
-		return 0, fmt.Errorf(
+		return nil, fmt.Errorf(
 			"failed to decode BitString - %+v: %v", rawPayload, common.ErrWrongPayload,
 		)
 	}
 	unused := int(rawObject.Data[0])
-	var bits uint32
-	for i := len(rawObject.Data) - 1; i > 0; i-- {
-		bits = bits<<8 | uint32(rawObject.Data[i])
+	var bits []bool
+	for i := 1; i < len(rawObject.Data); i++ {
+		for j := 0; j < 8; j++ {
+			bit := (rawObject.Data[i] >> uint8(7-j)) & 0x01
+			bits = append(bits, bit == 1)
+		}
 	}
-	return bits >> unused, nil
+	return bits[:len(bits)-unused], nil
+}
+
+func EncBitString(value []bool) *Object {
+	newObj := Object{}
+	data := make([]byte, 1)
+	var unused = 8 - (len(value) % 8)
+	if unused == 8 {
+		unused = 0
+	}
+	data[0] = byte(unused)
+
+	for i := 0; i < len(value); i += 8 {
+		var byteValue byte
+		for j := 0; j < 8; j++ {
+			if i+j < len(value) {
+				if value[i+j] {
+					byteValue |= (1 << uint8(7-j))
+				}
+			}
+		}
+		data = append(data, byteValue)
+	}
+
+	newObj.TagNumber = TagBitString
+	newObj.TagClass = false
+	newObj.Data = data
+	newObj.Length = uint8(len(data))
+
+	return &newObj
 }
 
 // TagNumber 9
