@@ -17,6 +17,7 @@ func init() {
 	rootCmd.AddCommand(whoIsCmdBroad)
 	rootCmd.AddCommand(IAmCmd)
 	rootCmd.AddCommand(COVClient)
+	rootCmd.AddCommand(OrchestratorCmd)
 	rootCmd.AddCommand(ReadPropertyServerCmd)
 	rootCmd.AddCommand(ReadPropertyClientCmd)
 	rootCmd.AddCommand(ReadPropertyMultipleClientCmd)

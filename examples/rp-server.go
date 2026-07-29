@@ -6,6 +6,7 @@ import (
 
 	"github.com/jonalfarlinga/bacnet"
 	"github.com/jonalfarlinga/bacnet/objects"
+	"github.com/jonalfarlinga/bacnet/plumbing"
 	"github.com/jonalfarlinga/bacnet/services"
 	"github.com/spf13/cobra"
 )
@@ -55,47 +56,45 @@ func ReadPropertyServerExample(cmd *cobra.Command, args []string) {
 
 		log.Printf("read %d bytes from %s: %x\n", nBytes, remoteAddr, reqRaw[:nBytes])
 
-		serviceMsg, err := bacnet.Parse(reqRaw[:nBytes])
+		err = DecodeAndDispatch(reqRaw[:nBytes], MessageDispatcher{
+			OnConfirmedReadProperty: func(readPropertyMessage *services.ConfirmedReadProperty) error {
+				log.Printf("received a ReadProperty request!\n")
+
+				decodedReadPropertyMessage, err := readPropertyMessage.Decode()
+				if err != nil {
+					return err
+				}
+
+				log.Printf("decoded ReadProperty message:\n\tObjectType: %d\n\tInstance ID: %d\n\tProperty ID: %d\n",
+					decodedReadPropertyMessage.ObjectType, decodedReadPropertyMessage.InstanceNum,
+					decodedReadPropertyMessage.PropertyId)
+
+				if decodedReadPropertyMessage.InstanceNum >= uint32(len(mCACKs)) {
+					bErr, err := bacnet.NewError(services.ServiceConfirmedReadProperty, objects.ErrorClassObject, objects.ErrorCodeUnknownObject)
+					if err != nil {
+						return err
+					}
+					if _, err := listenConn.WriteTo(bErr, remoteAddr); err != nil {
+						return err
+					}
+					log.Printf("we were asked for a wrong instance ID!\n")
+					return nil
+				}
+
+				if _, err := listenConn.WriteTo(mCACKs[decodedReadPropertyMessage.InstanceNum], remoteAddr); err != nil {
+					return err
+				}
+
+				log.Printf("replied with our CACK!\n")
+				return nil
+			},
+			OnUnknown: func(msg plumbing.BACnet) error {
+				log.Printf("ignoring non-ReadProperty message type=%d service=%d", msg.GetType(), msg.GetService())
+				return nil
+			},
+		})
 		if err != nil {
-			log.Fatalf("error parsing the received message: %v\n", err)
+			log.Printf("failed to handle inbound packet from %s: %v", remoteAddr, err)
 		}
-		// switch between recieved messages
-		t := serviceMsg.GetType()
-		switch t {
-
-		}
-		readPropertyMessage, ok := serviceMsg.(*services.ConfirmedReadProperty)
-		if !ok {
-			log.Fatalf("we didn't receive a ReadProperty request: %x\n", reqRaw[:nBytes])
-		}
-		log.Printf("received a ReadProperty request!\n")
-
-		decodedReadPropertyMessage, err := readPropertyMessage.Decode()
-		if err != nil {
-			log.Fatalf("error decoding the ReadProperty message: %v\n", err)
-		}
-
-		log.Printf("decoded ReadProperty message:\n\tObjectType: %d\n\tInstance ID: %d\n\tProperty ID: %d\n",
-			decodedReadPropertyMessage.ObjectType, decodedReadPropertyMessage.InstanceNum,
-			decodedReadPropertyMessage.PropertyId)
-
-		if decodedReadPropertyMessage.InstanceNum >= uint32(len(mCACKs)) {
-			bErr, err := bacnet.NewError(
-				services.ServiceConfirmedReadProperty, objects.ErrorClassObject, objects.ErrorCodeUnknownObject)
-			if err != nil {
-				log.Fatalf("error generating Error reply: %v\n", err)
-			}
-			if _, err := listenConn.WriteTo(bErr, remoteAddr); err != nil {
-				log.Fatalf("error sending our Error reply: %v\n", err)
-			}
-			log.Printf("we were asked for a wrong instance ID!\n")
-			continue
-		}
-
-		if _, err := listenConn.WriteTo(mCACKs[decodedReadPropertyMessage.InstanceNum], remoteAddr); err != nil {
-			log.Fatalf("error sending our CACK reply: %v\n", err)
-		}
-
-		log.Printf("replied with our CACK!\n")
 	}
 }

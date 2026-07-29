@@ -12,8 +12,9 @@ const BVLCType = 0x81
 
 // BVLCFunc determines unicast or broadcast in BVLL.
 const (
-	BVLCFuncUnicast   = 0x0a
-	BVLCFuncBroadcast = 0x0b
+	BVLCFuncForwardedNPDU = 0x04
+	BVLCFuncUnicast       = 0x0a
+	BVLCFuncBroadcast     = 0x0b
 )
 
 // BVLC is a BVLC frame.

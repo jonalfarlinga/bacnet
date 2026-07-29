@@ -70,85 +70,84 @@ func COVClientExample(cmd *cobra.Command, args []string) {
 		}
 
 		log.Printf("sent: %x", message)
-		for err == nil {
-			listenConn.SetDeadline(time.Now().Add(1 * time.Second))
-			nBytes, remoteAddr, err := listenConn.ReadFrom(replyRaw)
+
+		listenConn.SetDeadline(time.Now().Add(1 * time.Second))
+		nBytes, remoteAddr, err := listenConn.ReadFrom(replyRaw)
+		if err != nil {
+			log.Fatalf("error reading incoming packet: %v\n", err)
+		}
+
+		log.Printf("read %d bytes from %s: %x\n", nBytes, remoteAddr, replyRaw[:nBytes])
+
+		serviceMsg, err := bacnet.Parse(replyRaw[:nBytes])
+		if err != nil {
+			log.Fatalf("error parsing the received message: %v\n", err)
+		}
+
+		// switch between recieved message type
+		t := serviceMsg.GetType()
+		switch t {
+		case plumbing.UnConfirmedReq:
+			unConf, ok := serviceMsg.(*services.COVNotification)
+			if !ok {
+				log.Fatalf("we didn't receive an UnconfirmedCOVNotification reply...\n")
+			}
+			log.Printf("unmarshalled BVLC: %#v\n", unConf.BVLC)
+			log.Printf("unmarshalled NPDU: %#v\n", unConf.NPDU)
+
+			decodedUnConf, err := unConf.Decode()
 			if err != nil {
-				log.Fatalf("error reading incoming packet: %v\n", err)
+				log.Fatalf("couldn't decode the UnconfirmedCOVNotification reply: %v\n", err)
 			}
+			printCOVNot(&decodedUnConf)
+		case plumbing.SimpleAck:
+			sACK, ok := serviceMsg.(*services.SimpleACK)
+			if !ok {
+				log.Fatalf("we didn't receive a SACK reply...\n")
+			}
+			log.Printf("unmarshalled BVLC: %#v\n", sACK.BVLC)
+			log.Printf("unmarshalled NPDU: %#v\n", sACK.NPDU)
+			log.Printf("decoded SimpleACK reply:\n\n\tService Choice: %d\n\tInvoke ID: %d\n\n", sACK.APDU.Service, sACK.APDU.InvokeID)
+		case plumbing.ComplexAck:
+			cACK, ok := serviceMsg.(*services.ComplexACK)
+			if !ok {
+				log.Fatalf("we didn't receive a CACK reply...\n")
+			}
+			log.Printf("unmarshalled BVLC: %#v\n", cACK.BVLC)
+			log.Printf("unmarshalled NPDU: %#v\n", cACK.NPDU)
 
-			log.Printf("read %d bytes from %s: %x\n", nBytes, remoteAddr, replyRaw[:nBytes])
-
-			serviceMsg, err := bacnet.Parse(replyRaw[:nBytes])
+			decodedLogBuffer, err := cACK.DecodeRR()
 			if err != nil {
-				log.Fatalf("error parsing the received message: %v\n", err)
+				log.Fatalf("couldn't decode the LogBuffer reply: %v\n", err)
 			}
-
-			// switch between recieved message type
-			t := serviceMsg.GetType()
-			switch t {
-			case plumbing.UnConfirmedReq:
-				unConf, ok := serviceMsg.(*services.COVNotification)
-				if !ok {
-					log.Fatalf("we didn't receive an UnconfirmedCOVNotification reply...\n")
-				}
-				log.Printf("unmarshalled BVLC: %#v\n", unConf.BVLC)
-				log.Printf("unmarshalled NPDU: %#v\n", unConf.NPDU)
-
-				decodedUnConf, err := unConf.Decode()
-				if err != nil {
-					log.Fatalf("couldn't decode the UnconfirmedCOVNotification reply: %v\n", err)
-				}
-				printCOVNot(&decodedUnConf)
-			case plumbing.SimpleAck:
-				sACK, ok := serviceMsg.(*services.SimpleACK)
-				if !ok {
-					log.Fatalf("we didn't receive a SACK reply...\n")
-				}
-				log.Printf("unmarshalled BVLC: %#v\n", sACK.BVLC)
-				log.Printf("unmarshalled NPDU: %#v\n", sACK.NPDU)
-				log.Printf("decoded SimpleACK reply:\n\n\tService Choice: %d\n\tInvoke ID: %d\n\n", sACK.APDU.Service, sACK.APDU.InvokeID)
-			case plumbing.ComplexAck:
-				cACK, ok := serviceMsg.(*services.ComplexACK)
-				if !ok {
-					log.Fatalf("we didn't receive a CACK reply...\n")
-				}
-				log.Printf("unmarshalled BVLC: %#v\n", cACK.BVLC)
-				log.Printf("unmarshalled NPDU: %#v\n", cACK.NPDU)
-
-				decodedLogBuffer, err := cACK.DecodeRR()
-				if err != nil {
-					log.Fatalf("couldn't decode the LogBuffer reply: %v\n", err)
-				}
-				printLogBuffer(&decodedLogBuffer)
-			case plumbing.Error:
-				errEnc, ok := serviceMsg.(*services.Error)
-				if !ok {
-					log.Fatalf("we didn't receive an Error reply...\n")
-				}
-				log.Printf("unmarshalled BVLC: %#v\n", errEnc.BVLC)
-				log.Printf("unmarshalled NPDU: %#v\n", errEnc.NPDU)
-
-				decodedErr, err := errEnc.Decode()
-				if err != nil {
-					log.Fatalf("couldn't decode the Error reply: %v\n", err)
-				}
-				log.Printf("decoded Error reply:\n\tError Class: %d\n\tError Code: %d\n",
-					decodedErr.ErrorClass, decodedErr.ErrorCode,
-				)
-			case plumbing.ConfirmedReq:
-				cReq, ok := serviceMsg.(*services.COVNotification)
-				if !ok {
-					log.Fatalf("we didn't receive a ConfirmedRequest reply...\n")
-				}
-				log.Printf("unmarshalled BVLC: %#v\n", cReq.BVLC)
-				log.Printf("unmarshalled NPDU: %#v\n", cReq.NPDU)
-				decodedCOVNot, err := cReq.Decode()
-				if err != nil {
-					log.Fatalf("couldn't decode the ConfirmedRequest reply: %v\n", err)
-				}
-				printCOVNot(&decodedCOVNot)
+			printLogBuffer(&decodedLogBuffer)
+		case plumbing.Error:
+			errEnc, ok := serviceMsg.(*services.Error)
+			if !ok {
+				log.Fatalf("we didn't receive an Error reply...\n")
 			}
+			log.Printf("unmarshalled BVLC: %#v\n", errEnc.BVLC)
+			log.Printf("unmarshalled NPDU: %#v\n", errEnc.NPDU)
+
+			decodedErr, err := errEnc.Decode()
+			if err != nil {
+				log.Fatalf("couldn't decode the Error reply: %v\n", err)
+			}
+			log.Printf("decoded Error reply:\n\tError Class: %d\n\tError Code: %d\n",
+				decodedErr.ErrorClass, decodedErr.ErrorCode,
+			)
+		case plumbing.ConfirmedReq:
+			cReq, ok := serviceMsg.(*services.COVNotification)
+			if !ok {
+				log.Fatalf("we didn't receive a ConfirmedRequest reply...\n")
+			}
+			log.Printf("unmarshalled BVLC: %#v\n", cReq.BVLC)
+			log.Printf("unmarshalled NPDU: %#v\n", cReq.NPDU)
+			decodedCOVNot, err := cReq.Decode()
+			if err != nil {
+				log.Fatalf("couldn't decode the ConfirmedRequest reply: %v\n", err)
+			}
+			printCOVNot(&decodedCOVNot)
 		}
 
 		sentRequests++

@@ -1,6 +1,7 @@
 package bacnet
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/jonalfarlinga/bacnet/common"
@@ -9,10 +10,6 @@ import (
 )
 
 const bacnetLenMin = 8
-
-func combine(t, s uint8) uint16 {
-	return uint16(t)<<8 | uint16(s)
-}
 
 // Parse decodes the given bytes.
 func Parse(b []byte) (plumbing.BACnet, error) {
@@ -23,63 +20,269 @@ func Parse(b []byte) (plumbing.BACnet, error) {
 		)
 	}
 
-	var bvlc plumbing.BVLC
-	var npdu plumbing.NPDU
-	var bacnet plumbing.BACnet
-
-	offset := 0
-	if err := bvlc.UnmarshalBinary(b); err != nil {
-		return nil, fmt.Errorf("parsing BVLC %x: %v", b, err)
+	bvlc, parseBuf, err := normalizeForwardedBVLC(b)
+	if err != nil {
+		return nil, err
 	}
-	offset += bvlc.MarshalLen()
 
-	if err := npdu.UnmarshalBinary(b[offset:]); err != nil {
-		return nil, fmt.Errorf("parsing NPDU %x: %v", b[offset:], err)
+	var npdu plumbing.NPDU
+	offset := bvlc.MarshalLen()
+
+	if err := npdu.UnmarshalBinary(parseBuf[offset:]); err != nil {
+		return nil, fmt.Errorf("parsing NPDU %x: %v", parseBuf[offset:], err)
 	}
 	offset += npdu.MarshalLen()
 
-	var c uint16
-	PDUType := b[offset] >> 4 & 0xFF
-	switch PDUType {
+	if (npdu.Control & 0x80) != 0 {
+		return nil, fmt.Errorf(
+			"parsing NPDU control %x: %w",
+			npdu.Control,
+			common.ErrNotImplemented,
+		)
+	}
+
+	if len(parseBuf) <= offset {
+		return nil, fmt.Errorf(
+			"parsing APDU offset %d in %d bytes: %v",
+			offset,
+			len(parseBuf),
+			common.ErrTooShortToParse,
+		)
+	}
+
+	var apdu plumbing.APDU
+	if err := apdu.UnmarshalBinary(parseBuf[offset:]); err != nil {
+		return nil, fmt.Errorf("parsing APDU %x: %v", parseBuf[offset:], err)
+	}
+
+	return wrapParsedMessage(&bvlc, &npdu, &apdu)
+}
+
+// ParseWithFallback first attempts strict decoding with Parse and, if that fails,
+// retries with a bounded lenient parser for known non-canonical routed NPDU layouts.
+// It skips the fallback when the strict parse already reached a fully-decoded NPDU/APDU
+// and only failed because the service or PDU type isn't implemented: a different NPDU
+// parsing strategy cannot change which service byte the APDU carries.
+func ParseWithFallback(b []byte) (plumbing.BACnet, error) {
+	strictMsg, strictErr := Parse(b)
+	if strictErr == nil {
+		return strictMsg, nil
+	}
+
+	if errors.Is(strictErr, common.ErrNotImplemented) {
+		return nil, strictErr
+	}
+
+	fallbackMsg, fallbackErr := parseLenientRoutedNPDU(b)
+	if fallbackErr == nil {
+		return fallbackMsg, nil
+	}
+
+	return nil, fmt.Errorf("strict parse failed: %v; fallback parse failed: %v", strictErr, fallbackErr)
+}
+
+func parseLenientRoutedNPDU(b []byte) (plumbing.BACnet, error) {
+	bvlc, parseBuf, err := normalizeForwardedBVLC(b)
+	if err != nil {
+		return nil, err
+	}
+
+	offset := bvlc.MarshalLen()
+	npdu, npduLen, err := parseNPDULenient(parseBuf[offset:])
+	if err != nil {
+		return nil, fmt.Errorf("lenient NPDU parse %x: %v", parseBuf[offset:], err)
+	}
+	offset += npduLen
+
+	if (npdu.Control & 0x80) != 0 {
+		return nil, fmt.Errorf(
+			"parsing NPDU control %x: %w",
+			npdu.Control,
+			common.ErrNotImplemented,
+		)
+	}
+
+	if len(parseBuf) <= offset {
+		return nil, fmt.Errorf(
+			"parsing APDU offset %d in %d bytes: %v",
+			offset,
+			len(parseBuf),
+			common.ErrTooShortToParse,
+		)
+	}
+
+	var apdu plumbing.APDU
+	if err := apdu.UnmarshalBinary(parseBuf[offset:]); err != nil {
+		return nil, fmt.Errorf("parsing APDU %x: %v", parseBuf[offset:], err)
+	}
+
+	return wrapParsedMessage(&bvlc, &npdu, &apdu)
+}
+
+func normalizeForwardedBVLC(b []byte) (plumbing.BVLC, []byte, error) {
+	var bvlc plumbing.BVLC
+	if err := bvlc.UnmarshalBinary(b); err != nil {
+		return bvlc, nil, fmt.Errorf("parsing BVLC %x: %v", b, err)
+	}
+
+	parseBuf := b
+	if bvlc.Function == plumbing.BVLCFuncForwardedNPDU {
+		forwardedHdrOffset := bvlc.MarshalLen()
+		if len(b) < forwardedHdrOffset+6 {
+			return bvlc, nil, fmt.Errorf(
+				"parsing BVLC forwarded header %x: %v",
+				b,
+				common.ErrTooShortToParse,
+			)
+		}
+
+		parseBuf = make([]byte, 0, len(b)-6)
+		parseBuf = append(parseBuf, b[:forwardedHdrOffset]...)
+		parseBuf = append(parseBuf, b[forwardedHdrOffset+6:]...)
+	}
+
+	return bvlc, parseBuf, nil
+}
+
+func parseNPDULenient(b []byte) (plumbing.NPDU, int, error) {
+	var npdu plumbing.NPDU
+	if len(b) < 2 {
+		return npdu, 0, fmt.Errorf("NPDU header too short")
+	}
+
+	npdu.Version = b[0]
+	npdu.Control = b[1]
+	offset := 2
+
+	hasDest := (npdu.Control & 0x20) != 0
+	hasSource := (npdu.Control & 0x08) != 0
+
+	if hasDest {
+		if len(b) < offset+3 {
+			return npdu, 0, fmt.Errorf("NPDU destination fields too short")
+		}
+		npdu.DNET = uint16(b[offset])<<8 | uint16(b[offset+1])
+		offset += 2
+		npdu.DLEN = b[offset]
+		offset++
+
+		if len(b) < offset+int(npdu.DLEN) {
+			return npdu, 0, fmt.Errorf("NPDU DADR too short")
+		}
+		npdu.DADR = append([]byte(nil), b[offset:offset+int(npdu.DLEN)]...)
+		offset += int(npdu.DLEN)
+
+		if hasSource {
+			canon, canonOff, canonErr := parseAfterDestCanonical(npdu, b, offset)
+			if canonErr == nil {
+				return canon, canonOff, nil
+			}
+
+			alt, altOff, altErr := parseAfterDestSourceThenHop(npdu, b, offset)
+			if altErr == nil {
+				return alt, altOff, nil
+			}
+
+			return npdu, 0, fmt.Errorf("canonical: %v; source-then-hop: %v", canonErr, altErr)
+		}
+
+		if len(b) <= offset {
+			return npdu, 0, fmt.Errorf("NPDU hop too short")
+		}
+		npdu.Hop = b[offset]
+		offset++
+		return npdu, offset, nil
+	}
+
+	if hasSource {
+		npduWithSource, nextOffset, err := parseSourceFields(npdu, b, offset)
+		if err != nil {
+			return npdu, 0, err
+		}
+		return npduWithSource, nextOffset, nil
+	}
+
+	return npdu, offset, nil
+}
+
+func parseAfterDestCanonical(npdu plumbing.NPDU, b []byte, offset int) (plumbing.NPDU, int, error) {
+	if len(b) <= offset {
+		return npdu, 0, fmt.Errorf("NPDU hop too short")
+	}
+	npdu.Hop = b[offset]
+	offset++
+	return parseSourceFields(npdu, b, offset)
+}
+
+func parseAfterDestSourceThenHop(npdu plumbing.NPDU, b []byte, offset int) (plumbing.NPDU, int, error) {
+	npduWithSource, nextOffset, err := parseSourceFields(npdu, b, offset)
+	if err != nil {
+		return npdu, 0, err
+	}
+	if len(b) <= nextOffset {
+		return npdu, 0, fmt.Errorf("NPDU trailing hop too short")
+	}
+	npduWithSource.Hop = b[nextOffset]
+	nextOffset++
+	return npduWithSource, nextOffset, nil
+}
+
+func parseSourceFields(npdu plumbing.NPDU, b []byte, offset int) (plumbing.NPDU, int, error) {
+	if len(b) < offset+3 {
+		return npdu, 0, fmt.Errorf("NPDU source fields too short")
+	}
+	npdu.SNET = uint16(b[offset])<<8 | uint16(b[offset+1])
+	offset += 2
+	npdu.SLEN = b[offset]
+	offset++
+
+	if len(b) < offset+int(npdu.SLEN) {
+		return npdu, 0, fmt.Errorf("NPDU SADR too short")
+	}
+	npdu.SADR = append([]byte(nil), b[offset:offset+int(npdu.SLEN)]...)
+	offset += int(npdu.SLEN)
+
+	return npdu, offset, nil
+}
+
+func wrapParsedMessage(bvlc *plumbing.BVLC, npdu *plumbing.NPDU, apdu *plumbing.APDU) (plumbing.BACnet, error) {
+	var bacnet plumbing.BACnet
+
+	switch apdu.Type {
 	case plumbing.UnConfirmedReq:
-		c = combine(b[offset], b[offset+1])
+		switch apdu.Service {
+		case services.ServiceUnconfirmedWhoIs:
+			bacnet = &services.UnconfirmedWhoIs{BVLC: bvlc, NPDU: npdu, APDU: apdu}
+		case services.ServiceUnconfirmedIAm:
+			bacnet = &services.UnconfirmedIAm{BVLC: bvlc, NPDU: npdu, APDU: apdu}
+		case services.ServiceUnconfirmedCOVNotification:
+			bacnet = &services.COVNotification{BVLC: bvlc, NPDU: npdu, APDU: apdu}
+		}
 	case plumbing.ConfirmedReq:
-		c = combine(b[offset]>>4, b[offset+3]) // We need to skip the PDU flags and the InvokeID
-	case plumbing.ComplexAck, plumbing.SimpleAck, plumbing.Error:
-		c = combine(b[offset], 0) // We need to skip the PDU flags and the InvokeID
-	}
-
-	switch c {
-	case combine(plumbing.UnConfirmedReq<<4, services.ServiceUnconfirmedWhoIs):
-		bacnet = services.NewUnconfirmedWhoIs(&bvlc, &npdu)
-	case combine(plumbing.UnConfirmedReq<<4, services.ServiceUnconfirmedIAm):
-		bacnet = services.NewUnconfirmedIAm(&bvlc, &npdu)
-	case combine(plumbing.UnConfirmedReq<<4, services.ServiceUnconfirmedCOVNotification):
-		bacnet = services.NewUnconfirmedCOVNotification(&bvlc, &npdu)
-	case combine(plumbing.ConfirmedReq<<4, services.ServiceConfirmedCOVNotification):
-		bacnet = services.NewConfirmedCOVNotification(&bvlc, &npdu)
-	case combine(plumbing.ConfirmedReq<<4, services.ServiceConfirmedReadProperty):
-		bacnet = services.NewConfirmedReadProperty(&bvlc, &npdu)
-	case combine(plumbing.ConfirmedReq<<4, services.ServiceConfirmedReadPropMultiple):
-		bacnet = services.NewConfirmedReadPropertyMultiple(&bvlc, &npdu)
-	case combine(plumbing.ConfirmedReq<<4, services.ServiceConfirmedWriteProperty):
-		bacnet = services.NewConfirmedWriteProperty(&bvlc, &npdu)
-	case combine(plumbing.ComplexAck<<4, 0):
-		bacnet = services.NewComplexACK(&bvlc, &npdu)
-	case combine(plumbing.SimpleAck<<4, 0):
-		bacnet = services.NewSimpleACK(&bvlc, &npdu)
-	case combine(plumbing.Error<<4, 0):
-		bacnet = services.NewError(&bvlc, &npdu)
+		switch apdu.Service {
+		case services.ServiceConfirmedCOVNotification:
+			bacnet = &services.COVNotification{BVLC: bvlc, NPDU: npdu, APDU: apdu}
+		case services.ServiceConfirmedReadProperty, services.ServiceConfirmedReadPropMultiple:
+			bacnet = &services.ConfirmedReadProperty{BVLC: bvlc, NPDU: npdu, APDU: apdu}
+		case services.ServiceConfirmedReadRange:
+			bacnet = &services.ConfirmedReadRange{BVLC: bvlc, NPDU: npdu, APDU: apdu}
+		case services.ServiceConfirmedSubscribeCOV:
+			bacnet = &services.ConfirmedCOV{BVLC: bvlc, NPDU: npdu, APDU: apdu}
+		case services.ServiceConfirmedWriteProperty:
+			bacnet = &services.ConfirmedWriteProperty{BVLC: bvlc, NPDU: npdu, APDU: apdu}
+		}
+	case plumbing.ComplexAck:
+		bacnet = &services.ComplexACK{BVLC: bvlc, NPDU: npdu, APDU: apdu}
+	case plumbing.SimpleAck:
+		bacnet = &services.SimpleACK{BVLC: bvlc, NPDU: npdu, APDU: apdu}
+	case plumbing.Error:
+		bacnet = &services.Error{BVLC: bvlc, NPDU: npdu, APDU: apdu}
 	default:
-		return nil, fmt.Errorf(
-			"parsing service %x: %v", c, common.ErrNotImplemented,
-		)
+		return nil, fmt.Errorf("parsing APDU type %x: %w", apdu.Type, common.ErrNotImplemented)
 	}
 
-	if err := bacnet.UnmarshalBinary(b); err != nil {
-		return nil, fmt.Errorf(
-			"parsing BACnet %x: %v", b[offset:], err,
-		)
+	if bacnet == nil {
+		return nil, fmt.Errorf("parsing service %x: %w", uint16(apdu.Type)<<8|uint16(apdu.Service), common.ErrNotImplemented)
 	}
 
 	return bacnet, nil

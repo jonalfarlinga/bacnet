@@ -185,3 +185,11 @@ func (c *ConfirmedReadRange) Decode() (ConfirmedReadRangeDec, error) {
 	}
 	return decCRP, nil
 }
+
+func (u *ConfirmedReadRange) GetService() uint8 {
+	return u.APDU.Service
+}
+
+func (u *ConfirmedReadRange) GetType() uint8 {
+	return u.APDU.Type
+}

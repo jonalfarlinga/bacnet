@@ -6,6 +6,7 @@ import (
 
 	"github.com/jonalfarlinga/bacnet"
 	"github.com/jonalfarlinga/bacnet/objects"
+	"github.com/jonalfarlinga/bacnet/plumbing"
 	"github.com/jonalfarlinga/bacnet/services"
 	"github.com/spf13/cobra"
 )
@@ -57,58 +58,56 @@ func WritePropertyServerExample(cmd *cobra.Command, args []string) {
 
 		log.Printf("read %d bytes from %s: %x\n", nBytes, remoteAddr, reqRaw[:nBytes])
 
-		serviceMsg, err := bacnet.Parse(reqRaw[:nBytes])
+		err = DecodeAndDispatch(reqRaw[:nBytes], MessageDispatcher{
+			OnUnconfirmedWhoIs: func(msg *services.UnconfirmedWhoIs) error {
+				log.Printf("received a WhoIs request!\n")
+				if _, err := listenConn.WriteTo(iAm, remoteUDPAddr); err != nil {
+					return err
+				}
+				return nil
+			},
+			OnConfirmedWriteProperty: func(writePropertyMessage *services.ConfirmedWriteProperty) error {
+				log.Printf("received a WriteProperty request!\n")
+
+				decodedWritePropertyMessage, err := writePropertyMessage.Decode()
+				if err != nil {
+					return err
+				}
+
+				log.Printf(
+					"decoded WriteProperty message:\n\tObjectType: %d\n\tInstance ID: %d\n\tProperty ID: %d\n\tValue: %f\n",
+					decodedWritePropertyMessage.ObjectType, decodedWritePropertyMessage.InstanceNum,
+					decodedWritePropertyMessage.PropertyId, decodedWritePropertyMessage.Value)
+
+				if decodedWritePropertyMessage.InstanceNum >= uint32(len(storedValues)) {
+					bErr, err := bacnet.NewError(
+						services.ServiceConfirmedWriteProperty, objects.ErrorClassObject, objects.ErrorCodeUnknownObject)
+					if err != nil {
+						return err
+					}
+					if _, err := listenConn.WriteTo(bErr, remoteAddr); err != nil {
+						return err
+					}
+					log.Printf("we were asked for a wrong instance ID!\n")
+					return nil
+				}
+
+				storedValues[decodedWritePropertyMessage.InstanceNum] = decodedWritePropertyMessage.Value
+
+				if _, err := listenConn.WriteTo(sACK, remoteAddr); err != nil {
+					return err
+				}
+				log.Printf("replied with our SACK!\n")
+				return nil
+			},
+			OnUnknown: func(msg plumbing.BACnet) error {
+				log.Printf("we didn't receive a WriteProperty request! Back to listening...")
+				log.Printf("ignored message type=%d service=%d", msg.GetType(), msg.GetService())
+				return nil
+			},
+		})
 		if err != nil {
-			log.Fatalf("error parsing the received message: %v\n", err)
+			log.Printf("failed to handle inbound packet from %s: %v", remoteAddr, err)
 		}
-		// switch between recieved messages
-		t := serviceMsg.GetType()
-		switch t {
-
-		}
-		writePropertyMessage, ok := serviceMsg.(*services.ConfirmedWriteProperty)
-		if !ok {
-			_, ok := serviceMsg.(*services.UnconfirmedWhoIs)
-			if !ok {
-				log.Printf("we didn't receive a WriteProperty request! Back to listening...\n")
-				continue
-			}
-			log.Printf("received a WhoIs request!\n")
-			if _, err := listenConn.WriteTo(iAm, remoteUDPAddr); err != nil {
-				log.Fatalf("error sending our IAm reply: %v\n", err)
-			}
-			continue
-		}
-		log.Printf("received a WriteProperty request!\n")
-
-		decodedWritePropertyMessage, err := writePropertyMessage.Decode()
-		if err != nil {
-			log.Fatalf("error decoding the WriteProperty message: %v\n", err)
-		}
-
-		log.Printf(
-			"decoded WriteProperty message:\n\tObjectType: %d\n\tInstance ID: %d\n\tProperty ID: %d\n\tValue: %f\n",
-			decodedWritePropertyMessage.ObjectType, decodedWritePropertyMessage.InstanceNum,
-			decodedWritePropertyMessage.PropertyId, decodedWritePropertyMessage.Value)
-
-		if decodedWritePropertyMessage.InstanceNum >= uint32(len(storedValues)) {
-			bErr, err := bacnet.NewError(
-				services.ServiceConfirmedWriteProperty, objects.ErrorClassObject, objects.ErrorCodeUnknownObject)
-			if err != nil {
-				log.Fatalf("error generating Error reply: %v\n", err)
-			}
-			if _, err := listenConn.WriteTo(bErr, remoteAddr); err != nil {
-				log.Fatalf("error sending our Error reply: %v\n", err)
-			}
-			log.Printf("we were asked for a wrong instance ID!\n")
-			continue
-		}
-
-		storedValues[decodedWritePropertyMessage.InstanceNum] = decodedWritePropertyMessage.Value
-
-		if _, err := listenConn.WriteTo(sACK, remoteAddr); err != nil {
-			log.Fatalf("error sending our CACK reply: %v\n", err)
-		}
-		log.Printf("replied with our SACK!\n")
 	}
 }

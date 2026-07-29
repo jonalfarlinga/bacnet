@@ -220,3 +220,11 @@ func (u *ConfirmedCOV) Decode() (ConfirmedCOVDec, error) {
 
 	return decCOV, nil
 }
+
+func (u *ConfirmedCOV) GetService() uint8 {
+	return u.APDU.Service
+}
+
+func (u *ConfirmedCOV) GetType() uint8 {
+	return u.APDU.Type
+}

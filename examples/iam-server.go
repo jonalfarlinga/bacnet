@@ -8,6 +8,7 @@ import (
 	"github.com/jonalfarlinga/bacnet"
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
+	"github.com/jonalfarlinga/bacnet/plumbing"
 	"github.com/jonalfarlinga/bacnet/services"
 	"github.com/spf13/cobra"
 )
@@ -62,51 +63,45 @@ func IAmExample(cmd *cobra.Command, args []string) {
 
 		log.Printf("read %d bytes from %s: %x\n", nBytes, remoteAddr, reqRaw[:nBytes])
 
-		serviceMsg, err := bacnet.Parse(reqRaw[:nBytes])
-		if err != nil {
-			log.Fatalf("error parsing the received message: %v\n", err)
-		}
-		// switch between recieved messages
-		s := serviceMsg.GetService()
-		switch s {
-		case services.ServiceUnconfirmedWhoIs:
-			whoIsMessage, ok := serviceMsg.(*services.UnconfirmedWhoIs)
-			if !ok {
-				log.Printf("we didn't receive a WhoIs reply...\n")
-			}
+		err = DecodeAndDispatch(reqRaw[:nBytes], MessageDispatcher{
+			OnUnconfirmedWhoIs: func(whoIsMessage *services.UnconfirmedWhoIs) error {
+				log.Printf("received a WhoIs request!\n")
+				if _, err := whoIsMessage.Decode(); err != nil {
+					return err
+				}
 
-			log.Printf("received a WhoIs request!\n")
-			_, err := whoIsMessage.Decode()
-			if err != nil {
-				log.Fatalf("couldn't decode the WhoIs request: %v\n", err)
-			}
-
-			if _, err := listenConn.WriteTo(mIAm, remoteUDPAddr); err != nil {
-				log.Fatalf("error sending our IAm response: %v\n", err)
-			}
-		case services.ServiceConfirmedReadPropMultiple:
-			readPropertyMessage, ok := serviceMsg.(*services.ConfirmedReadProperty)
-			if !ok {
-				log.Printf("we didn't receive a ReadPropertyMultiple request! Back to listening...\n")
-				continue
-			}
-			log.Printf("received a ReadPropertyMultiple request!\n")
-			decodedReadPropertyMessage, err := readPropertyMessage.DecodeRPM()
-			if err != nil {
-				log.Fatalf("error decoding the ReadPropertyMultiple message: %v\n", err)
-			}
-			out := "Decoded ReadPropertyMultiple message:\n"
-			out += fmt.Sprintf(
-				"\n\tObject Type: %d\n\tInstance Id: %d\n",
-				decodedReadPropertyMessage.ObjectType, decodedReadPropertyMessage.InstanceNum,
-			)
-			for i, t := range decodedReadPropertyMessage.Tags {
+				if _, err := listenConn.WriteTo(mIAm, remoteUDPAddr); err != nil {
+					return err
+				}
+				return nil
+			},
+			OnConfirmedReadPropertyMultiple: func(readPropertyMessage *services.ConfirmedReadProperty) error {
+				log.Printf("received a ReadPropertyMultiple request!\n")
+				decodedReadPropertyMessage, err := readPropertyMessage.DecodeRPM()
+				if err != nil {
+					return err
+				}
+				out := "Decoded ReadPropertyMultiple message:\n"
 				out += fmt.Sprintf(
-					"\tTag %d:\n\t\tAppTag Type: %s\n\t\tValue: %+v\n\t\tData Length: %d\n",
-					i, objects.TagMap[t.TagNumber], t.Value, t.Length,
+					"\n\tObject Type: %d\n\tInstance Id: %d\n",
+					decodedReadPropertyMessage.ObjectType, decodedReadPropertyMessage.InstanceNum,
 				)
-			}
-			log.Print(out)
+				for i, t := range decodedReadPropertyMessage.Tags {
+					out += fmt.Sprintf(
+						"\tTag %d:\n\t\tAppTag Type: %s\n\t\tValue: %+v\n\t\tData Length: %d\n",
+						i, objects.TagMap[t.TagNumber], t.Value, t.Length,
+					)
+				}
+				log.Print(out)
+				return nil
+			},
+			OnUnknown: func(msg plumbing.BACnet) error {
+				log.Printf("ignoring message type=%d service=%d", msg.GetType(), msg.GetService())
+				return nil
+			},
+		})
+		if err != nil {
+			log.Printf("failed to handle inbound packet from %s: %v", remoteAddr, err)
 		}
 	}
 }
