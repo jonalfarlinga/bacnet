@@ -151,6 +151,11 @@ func NewSubscribeCOV(objectType uint16, instanceNumber uint32, processId uint, l
 	return c.MarshalBinary()
 }
 
+func NewReadForeignDeviceTable() ([]byte, error) {
+	r := plumbing.NewReadForeignDeviceTable()
+	return r.MarshalBinary()
+}
+
 func NewWriteProperty(objectType uint16, instanceNumber uint32, propertyId uint16, data interface{}) ([]byte, error) {
 	bvlc := plumbing.NewBVLC(plumbing.BVLCFuncUnicast)
 	npdu := plumbing.NewNPDU(false, false, false, true)

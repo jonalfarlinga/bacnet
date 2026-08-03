@@ -16,8 +16,8 @@ import (
 )
 
 func init() {
-	OrchestratorCmd.Flags().StringSliceVar(&orchSend, "send", []string{}, "Message kinds to send every cycle. Supported: whois, iam, rp, rpm, rr, wp, cov, sack, cack, err")
-	OrchestratorCmd.Flags().IntVar(&orchPeriod, "period", 3, "Seconds between outbound send cycles.")
+	OrchestratorCmd.Flags().StringSliceVar(&orchSend, "send", []string{}, "Message kinds to send every cycle. Supported: whois, iam, rp, rpm, rr, wp, cov, sack, cack, err, rfdt")
+	OrchestratorCmd.Flags().IntVar(&orchPeriod, "period", 30, "Seconds between outbound send cycles.")
 	OrchestratorCmd.Flags().IntVar(&orchN, "messages", 0, "Number of send cycles. 0 means unlimited.")
 	OrchestratorCmd.Flags().BoolVar(&orchStayAlive, "stay-alive", true, "Keep listening and handling inbound traffic after sending cycles complete.")
 	OrchestratorCmd.Flags().DurationVar(&orchShutdownAfter, "shutdown-after", 0, "Automatically stop the orchestrator after this duration (e.g. 30s, 5m). 0 disables auto-shutdown.")
@@ -123,7 +123,7 @@ func OrchestratorExample(cmd *cobra.Command, args []string) {
 	}
 
 	log.Printf("orchestrator listening on %s and targeting %s", bAddr, remoteUDPAddr)
-	log.Printf("IAm configured with: \n\tInstance: %d \n\tVendor: %d \n\tObjectType: %d \n\tInstanceID: %d \n\tPropertyID: %d", orchDeviceInst, orchVendorID, orchObjectType, orchInstanceID, orchPropertyID)
+	log.Printf("IAm configured with: \n\tInstance: %d \n\tVendor: %d \n\tObjectType: %d", orchDeviceInst, orchVendorID, orchObjectType)
 	if len(builders) == 0 {
 		log.Print("no outbound plan configured; running in listen/respond mode")
 	}
@@ -167,16 +167,17 @@ func OrchestratorExample(cmd *cobra.Command, args []string) {
 			continue
 		}
 
-		if shutdownC == nil {
-			<-ticker.C
-			continue
-		}
-
-		select {
-		case <-ticker.C:
-		case <-shutdownC:
-			log.Printf("shutdown timer reached (%s); exiting", orchShutdownAfter)
-			return
+	waitForNextCycle:
+		for {
+			select {
+			case <-ticker.C:
+				break waitForNextCycle
+			case <-shutdownC:
+				log.Printf("shutdown timer reached (%s); exiting", orchShutdownAfter)
+				return
+			default:
+			}
+			handleInboundWindow(listenConn, ifaceAddrs, state, replyRaw)
 		}
 	}
 }
@@ -263,6 +264,8 @@ func buildOutbound(kind string) (outboundBuilder, error) {
 				objects.ErrorCodeServiceRequestDenied,
 			)
 		}}, nil
+	case "rfdt":
+		return outboundBuilder{kind: kind, build: bacnet.NewReadForeignDeviceTable}, nil
 	default:
 		return outboundBuilder{}, fmt.Errorf("unsupported outbound kind %q", kind)
 	}
@@ -294,7 +297,7 @@ func sendOutboundCycle(conn net.PacketConn, target net.Addr, builders []outbound
 
 func handleInboundWindow(conn net.PacketConn, ifaceAddrs []net.Addr, state *orchState, buffer []byte) {
 	for {
-		if err := conn.SetDeadline(time.Now().Add(350 * time.Millisecond)); err != nil {
+		if err := conn.SetReadDeadline(time.Now().Add(350 * time.Millisecond)); err != nil {
 			log.Printf("could not set deadline: %v", err)
 			return
 		}
@@ -421,6 +424,14 @@ func handleIncoming(conn net.PacketConn, remoteAddr net.Addr, state *orchState, 
 				return nil
 			}
 			log.Printf("Error service=%d class=%d code=%d", msg.APDU.Service, decoded.ErrorClass, decoded.ErrorCode)
+			return nil
+		},
+		OnReadForeignDeviceTableAck: func(msg *plumbing.ReadForeignDeviceTableAck) error {
+			printFDT(msg)
+			return nil
+		},
+		OnBVLCResult: func(msg *plumbing.BVLCResult) error {
+			printBVLCResult(msg)
 			return nil
 		},
 		OnUnknown: func(msg plumbing.BACnet) error {

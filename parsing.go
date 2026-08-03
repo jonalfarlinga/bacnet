@@ -14,6 +14,36 @@ const bacnetLenMin = 8
 // Parse decodes the given bytes.
 func Parse(b []byte) (plumbing.BACnet, error) {
 
+	// BVLC-only messages (BVLC-Result, Read-Foreign-Device-Table and its
+	// ack) carry no NPDU/APDU, so they can be as short as 4-6 bytes -
+	// shorter than bacnetLenMin, which assumes a full NPDU+APDU follows.
+	// Peek at the BVLC function code before applying that length floor.
+	if len(b) >= 4 {
+		var bvlcPeek plumbing.BVLC
+		if err := bvlcPeek.UnmarshalBinary(b); err == nil {
+			switch bvlcPeek.Function {
+			case plumbing.BVLCFuncResult:
+				r := &plumbing.BVLCResult{}
+				if err := r.UnmarshalBinary(b); err != nil {
+					return nil, fmt.Errorf("parsing BVLCResult %x: %v", b, err)
+				}
+				return r, nil
+			case plumbing.BVLCFuncReadForeignDeviceTable:
+				r := &plumbing.ReadForeignDeviceTable{}
+				if err := r.UnmarshalBinary(b); err != nil {
+					return nil, fmt.Errorf("parsing ReadForeignDeviceTable %x: %v", b, err)
+				}
+				return r, nil
+			case plumbing.BVLCFuncReadForeignDeviceTableAck:
+				a := &plumbing.ReadForeignDeviceTableAck{}
+				if err := a.UnmarshalBinary(b); err != nil {
+					return nil, fmt.Errorf("parsing ReadForeignDeviceTableAck %x: %v", b, err)
+				}
+				return a, nil
+			}
+		}
+	}
+
 	if len(b) < bacnetLenMin {
 		return nil, fmt.Errorf(
 			"parsing length %d: %v", len(b), common.ErrTooShortToParse,

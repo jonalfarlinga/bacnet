@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/jonalfarlinga/bacnet/objects"
+	"github.com/jonalfarlinga/bacnet/plumbing"
 	"github.com/jonalfarlinga/bacnet/services"
 )
 
@@ -43,6 +44,29 @@ func printLogBuffer(d *services.LogBufferCACKDec) {
 		out += fmt.Sprintf(
 			"\tTag %d:\n\t\tAppTag Type: %s\n\t\tValue: %+v\n\t\tData Length: %d\n",
 			i, objects.TagMap[t.TagNumber], t.Value, t.Length,
+		)
+	}
+	log.Print(out)
+}
+
+func printBVLCResult(d *plumbing.BVLCResult) {
+	label, ok := plumbing.BVLCResultCodeMap[d.ResultCode]
+	if !ok {
+		label = "Unknown result code"
+	}
+	log.Printf("Decoded BVLC-Result reply:\n\n\tCode: 0x%04x\n\tMeaning: %s\n", d.ResultCode, label)
+}
+
+func printFDT(d *plumbing.ReadForeignDeviceTableAck) {
+	out := "Decoded Read-Foreign-Device-Table reply:\n"
+
+	if len(d.Entries) == 0 {
+		out += "\n\t(no entries)\n"
+	}
+	for i, e := range d.Entries {
+		out += fmt.Sprintf(
+			"\tEntry %d:\n\t\tAddress: %d.%d.%d.%d:%d\n\t\tTTL: %d secs\n\t\tRemaining: %d secs\n",
+			i, e.IP[0], e.IP[1], e.IP[2], e.IP[3], e.Port, e.TTL, e.RemainingTime,
 		)
 	}
 	log.Print(out)

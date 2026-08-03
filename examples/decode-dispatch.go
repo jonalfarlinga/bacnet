@@ -22,6 +22,8 @@ type MessageDispatcher struct {
 	OnComplexACK                    func(msg *services.ComplexACK) error
 	OnSimpleACK                     func(msg *services.SimpleACK) error
 	OnError                         func(msg *services.Error) error
+	OnReadForeignDeviceTableAck     func(msg *plumbing.ReadForeignDeviceTableAck) error
+	OnBVLCResult                    func(msg *plumbing.BVLCResult) error
 	OnUnknown                       func(msg plumbing.BACnet) error
 }
 
@@ -93,6 +95,14 @@ func DispatchMessage(msg plumbing.BACnet, dispatcher MessageDispatcher) error {
 	case *services.Error:
 		if dispatcher.OnError != nil {
 			return dispatcher.OnError(m)
+		}
+	case *plumbing.ReadForeignDeviceTableAck:
+		if dispatcher.OnReadForeignDeviceTableAck != nil {
+			return dispatcher.OnReadForeignDeviceTableAck(m)
+		}
+	case *plumbing.BVLCResult:
+		if dispatcher.OnBVLCResult != nil {
+			return dispatcher.OnBVLCResult(m)
 		}
 	}
 
