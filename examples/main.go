@@ -62,7 +62,7 @@ func argValidation(cmd *cobra.Command, args []string) error {
 }
 
 func execute() {
-	log.SetFlags(log.Lshortfile)
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lshortfile)
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
