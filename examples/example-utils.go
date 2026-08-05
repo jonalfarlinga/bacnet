@@ -49,6 +49,28 @@ func printLogBuffer(d *services.LogBufferCACKDec) {
 	log.Print(out)
 }
 
+func printAbort(d *services.Abort) {
+	label, ok := objects.AbortReasonMap[d.APDU.Reason]
+	if !ok {
+		label = "Unknown abort reason"
+	}
+	log.Printf(
+		"Decoded Abort reply:\n\n\tInvokeID: %d\n\tReason: %d\n\tMeaning: %s\n",
+		d.APDU.InvokeID, d.APDU.Reason, label,
+	)
+}
+
+func printReject(d *services.Reject) {
+	label, ok := objects.RejectReasonMap[d.APDU.Reason]
+	if !ok {
+		label = "Unknown reject reason"
+	}
+	log.Printf(
+		"Decoded Reject reply:\n\n\tInvokeID: %d\n\tReason: %d\n\tMeaning: %s\n",
+		d.APDU.InvokeID, d.APDU.Reason, label,
+	)
+}
+
 func printBVLCResult(d *plumbing.BVLCResult) {
 	label, ok := plumbing.BVLCResultCodeMap[d.ResultCode]
 	if !ok {

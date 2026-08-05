@@ -30,6 +30,21 @@ func ConfirmedReadPropertyObjects(objectType uint16, instN uint32, propId uint16
 	return objs
 }
 
+// ConfirmedReadPropertyIndexedObjects builds a ReadProperty request for a
+// single element of an array/list property, via the optional
+// propertyArrayIndex parameter (context tag 2). Index 0 reads the array's
+// element count instead of an element. Reading one element at a time avoids
+// needing a segmented reply for large arrays (e.g. Object_List).
+func ConfirmedReadPropertyIndexedObjects(objectType uint16, instN uint32, propId uint16, arrayIndex uint32) []objects.APDUPayload {
+	objs := make([]objects.APDUPayload, 3)
+
+	objs[0] = objects.EncObjectIdentifier(true, 0, objectType, instN)
+	objs[1] = objects.ContextTag(1, objects.EncUnsignedInteger(uint(propId)))
+	objs[2] = objects.ContextTag(2, objects.EncUnsignedInteger(uint(arrayIndex)))
+
+	return objs
+}
+
 func ConfirmedReadPropertyMultipleObjects(objectType uint16, instN uint32, propIds []uint16) []objects.APDUPayload {
 	length := 3 + (1 * len(propIds))
 	objs := make([]objects.APDUPayload, length)

@@ -1,9 +1,12 @@
 package main
 
 import (
+	"encoding/hex"
 	"fmt"
 	"log"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -45,6 +48,8 @@ func init() {
 
 	OrchestratorCmd.Flags().Float32Var(&orchDefaultValue, "default-value", 1.1, "Default present-value used in RP responses.")
 	OrchestratorCmd.Flags().Uint16Var(&orchStateInstances, "state-instances", 2, "Number of object instances preloaded in local state map.")
+
+	OrchestratorCmd.Flags().StringVar(&orchDumpDir, "dump-reassembled", "", "If set, write each fully reassembled segmented message's raw bytes (hex-encoded) to this directory.")
 }
 
 var (
@@ -71,6 +76,7 @@ var (
 	orchCOVCancel          bool
 	orchDefaultValue       float32
 	orchStateInstances     uint16
+	orchDumpDir            string
 
 	OrchestratorCmd = &cobra.Command{
 		Use:   "orchestrator",
@@ -83,7 +89,8 @@ var (
 )
 
 type orchState struct {
-	values map[uint32]float32
+	values      map[uint32]float32
+	reassembler *SegmentReassembler
 }
 
 type outboundBuilder struct {
@@ -187,7 +194,7 @@ func newOrchestratorState() *orchState {
 	for i := uint16(0); i < orchStateInstances; i++ {
 		values[uint32(i)] = orchDefaultValue * float32(i+1)
 	}
-	return &orchState{values: values}
+	return &orchState{values: values, reassembler: NewSegmentReassembler(segmentReassemblyTTL)}
 }
 
 func buildOutboundPlan(kinds []string) ([]outboundBuilder, error) {
@@ -316,6 +323,7 @@ func handleInboundWindow(conn net.PacketConn, ifaceAddrs []net.Addr, state *orch
 		}
 
 		log.Printf("read %d bytes from %s: %x", nBytes, remoteAddr, buffer[:nBytes])
+		dumpRawPacket(orchDumpDir, remoteAddr, buffer[:nBytes])
 		handleIncoming(conn, remoteAddr, state, buffer[:nBytes])
 	}
 }
@@ -410,7 +418,15 @@ func handleIncoming(conn net.PacketConn, remoteAddr net.Addr, state *orchState, 
 			return nil
 		},
 		OnComplexACK: func(msg *services.ComplexACK) error {
+			if msg.APDU.IsSegmented() {
+				handleSegment(conn, remoteAddr, state, msg.BVLC, msg.NPDU, msg.APDU)
+				return nil
+			}
 			handleComplexAck(msg)
+			return nil
+		},
+		OnSegmentedAPDU: func(msg *services.SegmentedAPDU) error {
+			handleSegment(conn, remoteAddr, state, msg.BVLC, msg.NPDU, msg.APDU)
 			return nil
 		},
 		OnSimpleACK: func(msg *services.SimpleACK) error {
@@ -424,6 +440,22 @@ func handleIncoming(conn net.PacketConn, remoteAddr net.Addr, state *orchState, 
 				return nil
 			}
 			log.Printf("Error service=%d class=%d code=%d", msg.APDU.Service, decoded.ErrorClass, decoded.ErrorCode)
+			return nil
+		},
+		OnReject: func(msg *services.Reject) error {
+			printReject(msg)
+			return nil
+		},
+		OnAbort: func(msg *services.Abort) error {
+			printAbort(msg)
+			return nil
+		},
+		OnSegmentAck: func(msg *services.SegmentACK) error {
+			log.Printf(
+				"received SegmentAck invokeID=%d seq=%d windowSize=%d negativeAck=%t server=%t",
+				msg.APDU.InvokeID, msg.APDU.SequenceNumber, msg.APDU.ActualWindowSize,
+				msg.APDU.IsNegativeAck(), msg.APDU.IsServerAck(),
+			)
 			return nil
 		},
 		OnReadForeignDeviceTableAck: func(msg *plumbing.ReadForeignDeviceTableAck) error {
@@ -550,6 +582,120 @@ func inferAPDUOffsetLenient(payload []byte, npduOffset int) (int, error) {
 	}
 
 	return offset, nil
+}
+
+func handleSegment(conn net.PacketConn, remoteAddr net.Addr, state *orchState, bvlc *plumbing.BVLC, npdu *plumbing.NPDU, apdu *plumbing.APDU) {
+	dumpSegment(orchDumpDir, remoteAddr, apdu)
+
+	raw, complete, accepted := state.reassembler.Feed(remoteAddr, bvlc, npdu, apdu)
+	if accepted {
+		sendSegmentAck(conn, remoteAddr, apdu)
+	}
+	if !complete {
+		return
+	}
+	log.Printf(
+		"reassembled %d-byte message from %d segment(s) (invokeID=%d) from %s",
+		len(raw), apdu.SequenceNumber+1, apdu.InvokeID, remoteAddr,
+	)
+	dumpReassembled(orchDumpDir, raw, apdu.InvokeID)
+	handleIncoming(conn, remoteAddr, state, raw)
+}
+
+// dumpRawPacket writes the complete, unparsed bytes of one incoming UDP
+// datagram to a hex-encoded text file, exactly as read from the socket -
+// before any BVLC/NPDU/APDU parsing touches them. This is the ground truth
+// for verifying our own header-offset assumptions independently of our own
+// parser, which can't validate itself. A no-op if dir is empty.
+func dumpRawPacket(dir string, remoteAddr net.Addr, raw []byte) {
+	if dir == "" {
+		return
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		log.Printf("dump raw packet: mkdir %s failed: %v", dir, err)
+		return
+	}
+
+	name := fmt.Sprintf("raw-%s.hex", time.Now().Format("20060102-150405.000000"))
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte(hex.EncodeToString(raw)), 0o644); err != nil {
+		log.Printf("dump raw packet: write %s failed: %v", path, err)
+		return
+	}
+	log.Printf("dumped raw packet (%d bytes) from %s to %s", len(raw), remoteAddr, path)
+}
+
+// dumpSegment writes one arriving segment's raw Payload to a hex-encoded
+// text file, named with a microsecond timestamp plus invoke/sequence
+// numbers so every delivery - including retransmitted duplicates - gets its
+// own file in strict arrival order. Lets duplicate deliveries of the "same"
+// segment be diffed byte-for-byte instead of guessed at. A no-op if dir is
+// empty.
+func dumpSegment(dir string, remoteAddr net.Addr, apdu *plumbing.APDU) {
+	if dir == "" {
+		return
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		log.Printf("dump segment: mkdir %s failed: %v", dir, err)
+		return
+	}
+
+	name := fmt.Sprintf(
+		"segment-%s-invoke%d-seq%d-more%t.hex",
+		time.Now().Format("20060102-150405.000000"), apdu.InvokeID, apdu.SequenceNumber, apdu.HasMoreSegments(),
+	)
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte(hex.EncodeToString(apdu.Payload)), 0o644); err != nil {
+		log.Printf("dump segment: write %s failed: %v", path, err)
+		return
+	}
+	log.Printf(
+		"dumped segment seq=%d (%d bytes payload, more=%t) from %s to %s",
+		apdu.SequenceNumber, len(apdu.Payload), apdu.HasMoreSegments(), remoteAddr, path,
+	)
+}
+
+// dumpReassembled writes the raw bytes of a fully reassembled message to a
+// hex-encoded text file in dir, named with a timestamp and invoke ID so
+// repeated runs don't collide. A no-op if dir is empty.
+func dumpReassembled(dir string, raw []byte, invokeID uint8) {
+	if dir == "" {
+		return
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		log.Printf("dump reassembled: mkdir %s failed: %v", dir, err)
+		return
+	}
+
+	name := fmt.Sprintf("reassembled-%s-invoke%d.hex", time.Now().Format("20060102-150405.000000"), invokeID)
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte(hex.EncodeToString(raw)), 0o644); err != nil {
+		log.Printf("dump reassembled: write %s failed: %v", path, err)
+		return
+	}
+	log.Printf("dumped reassembled message (%d bytes) to %s", len(raw), path)
+}
+
+// sendSegmentAck acknowledges one received segment so the sender continues
+// with its next window. server reflects the role of the ack-sender (us),
+// not of whoever sent the segment: acking a ComplexAck means we're the
+// client receiving a reply to our own request (server=false); acking a
+// ConfirmedReq means we're the server receiving a request (server=true).
+func sendSegmentAck(conn net.PacketConn, target net.Addr, apdu *plumbing.APDU) {
+	server := apdu.Type == plumbing.ConfirmedReq
+	reply, err := bacnet.NewSegmentAck(apdu.InvokeID, apdu.SequenceNumber, apdu.ProposedWindowSize, false, server)
+	if err != nil {
+		log.Printf("build SegmentAck failed: %v", err)
+		return
+	}
+	if _, err := conn.WriteTo(reply, target); err != nil {
+		log.Printf("send SegmentAck failed: %v", err)
+		return
+	}
+	log.Printf(
+		"sent SegmentAck invokeID=%d seq=%d windowSize=%d to %s",
+		apdu.InvokeID, apdu.SequenceNumber, apdu.ProposedWindowSize, target,
+	)
 }
 
 func handleConfirmedReadProperty(conn net.PacketConn, remoteAddr net.Addr, state *orchState, msg *services.ConfirmedReadProperty) {

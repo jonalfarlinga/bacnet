@@ -22,8 +22,12 @@ type MessageDispatcher struct {
 	OnComplexACK                    func(msg *services.ComplexACK) error
 	OnSimpleACK                     func(msg *services.SimpleACK) error
 	OnError                         func(msg *services.Error) error
+	OnReject                        func(msg *services.Reject) error
+	OnAbort                         func(msg *services.Abort) error
+	OnSegmentAck                    func(msg *services.SegmentACK) error
 	OnReadForeignDeviceTableAck     func(msg *plumbing.ReadForeignDeviceTableAck) error
 	OnBVLCResult                    func(msg *plumbing.BVLCResult) error
+	OnSegmentedAPDU                 func(msg *services.SegmentedAPDU) error
 	OnUnknown                       func(msg plumbing.BACnet) error
 }
 
@@ -96,6 +100,18 @@ func DispatchMessage(msg plumbing.BACnet, dispatcher MessageDispatcher) error {
 		if dispatcher.OnError != nil {
 			return dispatcher.OnError(m)
 		}
+	case *services.Reject:
+		if dispatcher.OnReject != nil {
+			return dispatcher.OnReject(m)
+		}
+	case *services.Abort:
+		if dispatcher.OnAbort != nil {
+			return dispatcher.OnAbort(m)
+		}
+	case *services.SegmentACK:
+		if dispatcher.OnSegmentAck != nil {
+			return dispatcher.OnSegmentAck(m)
+		}
 	case *plumbing.ReadForeignDeviceTableAck:
 		if dispatcher.OnReadForeignDeviceTableAck != nil {
 			return dispatcher.OnReadForeignDeviceTableAck(m)
@@ -103,6 +119,10 @@ func DispatchMessage(msg plumbing.BACnet, dispatcher MessageDispatcher) error {
 	case *plumbing.BVLCResult:
 		if dispatcher.OnBVLCResult != nil {
 			return dispatcher.OnBVLCResult(m)
+		}
+	case *services.SegmentedAPDU:
+		if dispatcher.OnSegmentedAPDU != nil {
+			return dispatcher.OnSegmentedAPDU(m)
 		}
 	}
 

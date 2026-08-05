@@ -85,9 +85,33 @@ func NewReadProperty(objectType uint16, instanceNumber uint32, propertyId uint16
 	c := services.NewConfirmedReadProperty(bvlc, npdu)
 
 	c.APDU.Service = services.ServiceConfirmedReadProperty
+	c.APDU.MaxSeg = 7 // more than 64 segments accepted
 	c.APDU.MaxSize = 5
 	c.APDU.InvokeID = 1
+	c.APDU.Flags = 2 // SA: accept a segmented response, in case the property is too large for one APDU
 	c.APDU.Objects = services.ConfirmedReadPropertyObjects(objectType, instanceNumber, propertyId)
+
+	c.SetLength()
+
+	return c.MarshalBinary()
+}
+
+// NewReadPropertyIndexed reads a single element of an array/list property
+// (via the propertyArrayIndex parameter) instead of the whole property, so
+// large arrays like Object_List can be pulled in small pieces without
+// relying on segmentation. Index 0 reads the array's element count.
+func NewReadPropertyIndexed(objectType uint16, instanceNumber uint32, propertyId uint16, arrayIndex uint32) ([]byte, error) {
+	bvlc := plumbing.NewBVLC(plumbing.BVLCFuncUnicast)
+	npdu := plumbing.NewNPDU(false, false, false, true)
+
+	c := services.NewConfirmedReadProperty(bvlc, npdu)
+
+	c.APDU.Service = services.ServiceConfirmedReadProperty
+	c.APDU.MaxSeg = 7 // more than 64 segments accepted
+	c.APDU.MaxSize = 5
+	c.APDU.InvokeID = 1
+	c.APDU.Flags = 2 // SA: accept a segmented response, just in case
+	c.APDU.Objects = services.ConfirmedReadPropertyIndexedObjects(objectType, instanceNumber, propertyId, arrayIndex)
 
 	c.SetLength()
 
@@ -149,6 +173,26 @@ func NewSubscribeCOV(objectType uint16, instanceNumber uint32, processId uint, l
 	c.SetLength()
 
 	return c.MarshalBinary()
+}
+
+func NewSegmentAck(invokeID, sequenceNumber, actualWindowSize uint8, negativeAck, server bool) ([]byte, error) {
+	bvlc := plumbing.NewBVLC(plumbing.BVLCFuncUnicast)
+	npdu := plumbing.NewNPDU(false, false, false, false)
+
+	s := services.NewSegmentACK(bvlc, npdu)
+
+	s.APDU.InvokeID = invokeID
+	s.APDU.SequenceNumber = sequenceNumber
+	s.APDU.ActualWindowSize = actualWindowSize
+	if negativeAck {
+		s.APDU.Flags |= 0x2
+	}
+	if server {
+		s.APDU.Flags |= 0x1
+	}
+	s.SetLength()
+
+	return s.MarshalBinary()
 }
 
 func NewReadForeignDeviceTable() ([]byte, error) {

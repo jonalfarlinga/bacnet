@@ -289,6 +289,15 @@ func wrapParsedMessage(bvlc *plumbing.BVLC, npdu *plumbing.NPDU, apdu *plumbing.
 			bacnet = &services.COVNotification{BVLC: bvlc, NPDU: npdu, APDU: apdu}
 		}
 	case plumbing.ConfirmedReq:
+		if apdu.IsSegmented() {
+			// Every segment (including segment 0) is routed uniformly
+			// through SegmentedAPDU: a continuation segment has no service
+			// choice of its own to switch on, since only segment 0 carries
+			// one. Callers reassemble the full byte stream and re-parse it
+			// to get a concrete, fully-decoded service type.
+			bacnet = &services.SegmentedAPDU{BVLC: bvlc, NPDU: npdu, APDU: apdu}
+			break
+		}
 		switch apdu.Service {
 		case services.ServiceConfirmedCOVNotification:
 			bacnet = &services.COVNotification{BVLC: bvlc, NPDU: npdu, APDU: apdu}
@@ -307,6 +316,12 @@ func wrapParsedMessage(bvlc *plumbing.BVLC, npdu *plumbing.NPDU, apdu *plumbing.
 		bacnet = &services.SimpleACK{BVLC: bvlc, NPDU: npdu, APDU: apdu}
 	case plumbing.Error:
 		bacnet = &services.Error{BVLC: bvlc, NPDU: npdu, APDU: apdu}
+	case plumbing.Reject:
+		bacnet = &services.Reject{BVLC: bvlc, NPDU: npdu, APDU: apdu}
+	case plumbing.Abort:
+		bacnet = &services.Abort{BVLC: bvlc, NPDU: npdu, APDU: apdu}
+	case plumbing.SegmentAck:
+		bacnet = &services.SegmentACK{BVLC: bvlc, NPDU: npdu, APDU: apdu}
 	default:
 		return nil, fmt.Errorf("parsing APDU type %x: %w", apdu.Type, common.ErrNotImplemented)
 	}

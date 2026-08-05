@@ -298,6 +298,11 @@ func DecBitString(rawPayload APDUPayload) ([]bool, error) {
 			"failed to decode BitString - %+v: %v", rawPayload, common.ErrWrongPayload,
 		)
 	}
+	if len(rawObject.Data) == 0 {
+		return nil, fmt.Errorf(
+			"failed to decode BitString - empty data: %v", common.ErrTooShortToParse,
+		)
+	}
 	unused := int(rawObject.Data[0])
 	var bits []bool
 	for i := 1; i < len(rawObject.Data); i++ {
@@ -305,6 +310,12 @@ func DecBitString(rawPayload APDUPayload) ([]bool, error) {
 			bit := (rawObject.Data[i] >> uint8(7-j)) & 0x01
 			bits = append(bits, bit == 1)
 		}
+	}
+	if unused < 0 || unused > len(bits) {
+		return nil, fmt.Errorf(
+			"failed to decode BitString - unused bit count %d exceeds %d decoded bits: %v",
+			unused, len(bits), common.ErrInvalidData,
+		)
 	}
 	return bits[:len(bits)-unused], nil
 }
