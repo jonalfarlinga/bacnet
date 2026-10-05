@@ -1,0 +1,24 @@
+# BACnet/IP datagrams from a capture of a live, routed BACnet system, one per
+# line; spaces only group the bytes. Addresses are anonymized: the origin of
+# every Forwarded-NPDU is aa.bb.cc.dd:48059.
+#
+# Each line ends where its BVLC length says. The capture held 3 more bytes of
+# Ethernet padding after the Who-Is-Router-To-Network frame, which are not
+# part of the datagram.
+
+# Forwarded-NPDU, Who-Is-Router-To-Network for network 16056
+8104000f aabbccddbbbb 0180 00 3eb8
+# Forwarded-NPDU, I-Am-Router-To-Network: 16601, 16604, 16603
+81040013 aabbccddbbbb 0180 01 40d9 40dc 40db
+# Forwarded-NPDU, Who-Is 1600303..1600303, global broadcast
+8104001a aabbccddbbbb 0120ffff00ff 1008 0b186b2f 1b186b2f
+# Forwarded-NPDU, Who-Is 401..401, global broadcast
+81040018 aabbccddbbbb 0120ffff00ff 1008 0a0191 1a0191
+# Original-Broadcast, Who-Has 0..4194303 by object name "DMA3"
+810b0019 0120ffff00ff 1007 0900 1b3fffff 3d0500444d4133
+# Forwarded-NPDU, I-Am device 1661001 routed from network 16628, MAC 01
+81040022 aabbccddbbbb 0128 ffff00 40f40101 fd 1000 c402195849 2201e0 9103 2125
+# Forwarded-NPDU, Who-Is 1660208..1660208 routed from network 16604, MAC 192.168.0.100:47808
+81040023 aabbccddbbbb 0128 ffff00 40dc06c0a80064bac0 fd 1008 0b195530 1b195530
+# Original-Broadcast, Who-Is 1000151..1000151, global broadcast
+810b0014 0120ffff00ff 1008 0b0f42d7 1b0f42d7

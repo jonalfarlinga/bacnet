@@ -1,0 +1,14 @@
+# Frames from the same live capture that have no BVLC: BACnet over 802.3 with
+# an LLC header, cut down to the NPDU. One per line; spaces only group the
+# bytes. They go through ParseNPDU, not Parse.
+#
+# Each line ends where the NPDU ends. The capture held 3 more bytes of padding
+# after the I-Am-Router-To-Network frame. The source address in the first
+# frame is anonymized to aa.bb.cc.dd:47808.
+
+# Who-Is-Router-To-Network for network 16908, from network 7999
+0188 1f3f06aabbccddbac0 00 420c
+# I-Am-Router-To-Network: 16625
+0180 01 40f1
+# Who-Is 1660208..1660208 routed from network 16604, MAC 192.168.0.100:47808
+0128 ffff00 40dc06c0a80064bac0 fc 1008 0b195530 1b195530

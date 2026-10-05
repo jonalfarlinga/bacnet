@@ -49,11 +49,14 @@ func (n *NPDU) UnmarshalBinary(b []byte) error {
 	n.Version = b[0]
 	n.Control = b[1]
 
+	// Field order per ASHRAE 135 clause 6.2.2: destination, then source,
+	// then the hop count, which is present only with a destination.
 	offset := npduLenMin
-	if flagDNET := (n.Control & 0x20) >> 5; flagDNET == 1 {
+	hasDest := n.Control&0x20 != 0
+	if hasDest {
 		if len(b) < offset+3 {
 			return fmt.Errorf(
-				"failed to unmarshal NPDU destination info at offset %d: %v",
+				"failed to unmarshal NPDU destination info at offset %d: %w",
 				offset,
 				common.ErrTooShortToParse,
 			)
@@ -67,7 +70,7 @@ func (n *NPDU) UnmarshalBinary(b []byte) error {
 		if n.DLEN > 0 {
 			if len(b) < offset+int(n.DLEN) {
 				return fmt.Errorf(
-					"failed to unmarshal NPDU DADR at offset %d length %d: %v",
+					"failed to unmarshal NPDU DADR at offset %d length %d: %w",
 					offset,
 					n.DLEN,
 					common.ErrTooShortToParse,
@@ -76,22 +79,12 @@ func (n *NPDU) UnmarshalBinary(b []byte) error {
 			n.DADR = append([]byte(nil), b[offset:offset+int(n.DLEN)]...)
 			offset += int(n.DLEN)
 		}
-
-		if len(b) <= offset {
-			return fmt.Errorf(
-				"failed to unmarshal NPDU hop count at offset %d: %v",
-				offset,
-				common.ErrTooShortToParse,
-			)
-		}
-		n.Hop = b[offset]
-		offset++
 	}
 
-	if flagSNET := (n.Control & 0x08) >> 3; flagSNET == 1 {
+	if n.Control&0x08 != 0 {
 		if len(b) < offset+3 {
 			return fmt.Errorf(
-				"failed to unmarshal NPDU source info at offset %d: %v",
+				"failed to unmarshal NPDU source info at offset %d: %w",
 				offset,
 				common.ErrTooShortToParse,
 			)
@@ -105,7 +98,7 @@ func (n *NPDU) UnmarshalBinary(b []byte) error {
 		if n.SLEN > 0 {
 			if len(b) < offset+int(n.SLEN) {
 				return fmt.Errorf(
-					"failed to unmarshal NPDU SADR at offset %d length %d: %v",
+					"failed to unmarshal NPDU SADR at offset %d length %d: %w",
 					offset,
 					n.SLEN,
 					common.ErrTooShortToParse,
@@ -114,6 +107,17 @@ func (n *NPDU) UnmarshalBinary(b []byte) error {
 			n.SADR = append([]byte(nil), b[offset:offset+int(n.SLEN)]...)
 			offset += int(n.SLEN)
 		}
+	}
+
+	if hasDest {
+		if len(b) <= offset {
+			return fmt.Errorf(
+				"failed to unmarshal NPDU hop count at offset %d: %w",
+				offset,
+				common.ErrTooShortToParse,
+			)
+		}
+		n.Hop = b[offset]
 	}
 
 	return nil
@@ -131,44 +135,27 @@ func (n *NPDU) MarshalTo(b []byte) error {
 	}
 	b[0] = n.Version
 	b[1] = n.Control
-	if flagDNET := (n.Control & 0x20) >> 5; flagDNET == 1 {
-		offset := npduLenMin
+
+	offset := npduLenMin
+	hasDest := n.Control&0x20 != 0
+	if hasDest {
 		binary.BigEndian.PutUint16(b[offset:offset+2], n.DNET)
 		offset += 2
 		b[offset] = n.DLEN
 		offset++
-
-		if n.DLEN > 0 {
-			copy(b[offset:offset+int(n.DLEN)], n.DADR)
-			offset += int(n.DLEN)
-		}
-
-		b[offset] = n.Hop
-		offset++
-
-		if flagSNET := (n.Control & 0x08) >> 3; flagSNET == 1 {
-			binary.BigEndian.PutUint16(b[offset:offset+2], n.SNET)
-			offset += 2
-			b[offset] = n.SLEN
-			offset++
-
-			if n.SLEN > 0 {
-				copy(b[offset:offset+int(n.SLEN)], n.SADR)
-			}
-		}
-		return nil
+		copy(b[offset:offset+int(n.DLEN)], n.DADR)
+		offset += int(n.DLEN)
 	}
-
-	if flagSNET := (n.Control & 0x08) >> 3; flagSNET == 1 {
-		offset := npduLenMin
+	if n.Control&0x08 != 0 {
 		binary.BigEndian.PutUint16(b[offset:offset+2], n.SNET)
 		offset += 2
 		b[offset] = n.SLEN
 		offset++
-
-		if n.SLEN > 0 {
-			copy(b[offset:offset+int(n.SLEN)], n.SADR)
-		}
+		copy(b[offset:offset+int(n.SLEN)], n.SADR)
+		offset += int(n.SLEN)
+	}
+	if hasDest {
+		b[offset] = n.Hop
 	}
 	return nil
 }

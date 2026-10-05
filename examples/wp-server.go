@@ -36,11 +36,6 @@ func WritePropertyServerExample(cmd *cobra.Command, args []string) {
 
 	storedValues := []float32{0, 0}
 
-	sACK, err := bacnet.NewSACK(services.ServiceConfirmedWriteProperty)
-	if err != nil {
-		log.Fatalf("error generating the SACK: %v\n", err)
-	}
-
 	iAm, err := bacnet.NewIAm(321, 31)
 	if err != nil {
 		log.Fatalf("error generating initial IAm: %v\n", err)
@@ -79,9 +74,12 @@ func WritePropertyServerExample(cmd *cobra.Command, args []string) {
 					decodedWritePropertyMessage.ObjectType, decodedWritePropertyMessage.InstanceNum,
 					decodedWritePropertyMessage.PropertyId, decodedWritePropertyMessage.Value)
 
+				// A reply echoes the invoke ID of the request it answers.
+				invokeID := writePropertyMessage.APDU.InvokeID
+
 				if decodedWritePropertyMessage.InstanceNum >= uint32(len(storedValues)) {
-					bErr, err := bacnet.NewError(
-						services.ServiceConfirmedWriteProperty, objects.ErrorClassObject, objects.ErrorCodeUnknownObject)
+					bErr, err := bacnet.NewErrorReply(
+						invokeID, services.ServiceConfirmedWriteProperty, objects.ErrorClassObject, objects.ErrorCodeUnknownObject)
 					if err != nil {
 						return err
 					}
@@ -94,6 +92,10 @@ func WritePropertyServerExample(cmd *cobra.Command, args []string) {
 
 				storedValues[decodedWritePropertyMessage.InstanceNum] = decodedWritePropertyMessage.Value
 
+				sACK, err := bacnet.NewSACKReply(invokeID, services.ServiceConfirmedWriteProperty)
+				if err != nil {
+					return err
+				}
 				if _, err := listenConn.WriteTo(sACK, remoteAddr); err != nil {
 					return err
 				}

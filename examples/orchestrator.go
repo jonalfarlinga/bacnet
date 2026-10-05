@@ -369,11 +369,11 @@ func handleIncoming(conn net.PacketConn, remoteAddr net.Addr, state *orchState, 
 			decoded, err := msg.DecodeRPM()
 			if err != nil {
 				log.Printf("decode ReadPropertyMultiple failed: %v", err)
-				sendErrorReply(conn, remoteAddr, services.ServiceConfirmedReadPropMultiple, objects.ErrorClassServices, objects.ErrorCodeServiceRequestDenied)
+				sendErrorReply(conn, remoteAddr, msg.APDU.InvokeID, services.ServiceConfirmedReadPropMultiple, objects.ErrorClassServices, objects.ErrorCodeServiceRequestDenied)
 				return nil
 			}
 			log.Printf("received ReadPropertyMultiple request objectType=%d instanceID=%d with %d tags", decoded.ObjectType, decoded.InstanceNum, len(decoded.Tags))
-			sendErrorReply(conn, remoteAddr, services.ServiceConfirmedReadPropMultiple, objects.ErrorClassServices, objects.ErrorCodeServiceRequestDenied)
+			sendErrorReply(conn, remoteAddr, msg.APDU.InvokeID, services.ServiceConfirmedReadPropMultiple, objects.ErrorClassServices, objects.ErrorCodeServiceRequestDenied)
 			return nil
 		},
 		OnConfirmedWriteProperty: func(msg *services.ConfirmedWriteProperty) error {
@@ -386,7 +386,7 @@ func handleIncoming(conn net.PacketConn, remoteAddr net.Addr, state *orchState, 
 				log.Printf("decode ReadRange failed: %v", err)
 			}
 			log.Printf("received ReadRange request objectType=%d instanceID=%d propertyID=%d", decoded.ObjectType, decoded.InstanceNum, decoded.PropertyId)
-			sendErrorReply(conn, remoteAddr, services.ServiceConfirmedReadRange, objects.ErrorClassServices, objects.ErrorCodeServiceRequestDenied)
+			sendErrorReply(conn, remoteAddr, msg.APDU.InvokeID, services.ServiceConfirmedReadRange, objects.ErrorClassServices, objects.ErrorCodeServiceRequestDenied)
 			return nil
 		},
 		OnConfirmedSubscribeCOV: func(msg *services.ConfirmedCOV) error {
@@ -402,7 +402,7 @@ func handleIncoming(conn net.PacketConn, remoteAddr net.Addr, state *orchState, 
 				decoded.ExpectConfirmed,
 				decoded.Lifetime,
 			)
-			sendSimpleAckReply(conn, remoteAddr, services.ServiceConfirmedSubscribeCOV)
+			sendSimpleAckReply(conn, remoteAddr, msg.APDU.InvokeID, services.ServiceConfirmedSubscribeCOV)
 			return nil
 		},
 		OnCOVNotification: func(msg *services.COVNotification) error {
@@ -413,7 +413,7 @@ func handleIncoming(conn net.PacketConn, remoteAddr net.Addr, state *orchState, 
 			}
 			printCOVNot(&decoded)
 			if msg.GetType() == plumbing.ConfirmedReq {
-				sendSimpleAckReply(conn, remoteAddr, services.ServiceConfirmedCOVNotification)
+				sendSimpleAckReply(conn, remoteAddr, msg.APDU.InvokeID, services.ServiceConfirmedCOVNotification)
 			}
 			return nil
 		},
@@ -464,6 +464,27 @@ func handleIncoming(conn net.PacketConn, remoteAddr net.Addr, state *orchState, 
 		},
 		OnBVLCResult: func(msg *plumbing.BVLCResult) error {
 			printBVLCResult(msg)
+			return nil
+		},
+		OnUnconfirmedWhoHas: func(msg *services.UnconfirmedWhoHas) error {
+			decoded, err := msg.Decode()
+			if err != nil {
+				log.Printf("decode WhoHas failed: %v", err)
+				return nil
+			}
+			if decoded.ObjectID != nil {
+				log.Printf("received WhoHas for objectType=%d instanceID=%d", decoded.ObjectID.ObjectType, decoded.ObjectID.InstanceNumber)
+			} else {
+				log.Printf("received WhoHas for object name %q", decoded.ObjectName)
+			}
+			return nil
+		},
+		OnNetworkMessage: func(msg *plumbing.NetworkMessage) error {
+			if nets, err := msg.Networks(); err == nil {
+				log.Printf("received network-layer message type=0x%02x networks=%v from=%s", msg.Type, nets, remoteAddr)
+				return nil
+			}
+			log.Printf("received network-layer message type=0x%02x data=%x from=%s", msg.Type, msg.Data, remoteAddr)
 			return nil
 		},
 		OnUnknown: func(msg plumbing.BACnet) error {
@@ -561,11 +582,10 @@ func inferAPDUOffsetLenient(payload []byte, npduOffset int) (int, error) {
 		offset += 2 // DNET
 		dlen := int(payload[offset])
 		offset++
-		if len(payload) < offset+dlen+1 {
-			return 0, fmt.Errorf("NPDU DADR/hop too short")
+		if len(payload) < offset+dlen {
+			return 0, fmt.Errorf("NPDU DADR too short")
 		}
 		offset += dlen // DADR
-		offset++       // Hop
 	}
 
 	if (control & 0x08) != 0 {
@@ -579,6 +599,14 @@ func inferAPDUOffsetLenient(payload []byte, npduOffset int) (int, error) {
 			return 0, fmt.Errorf("NPDU SADR too short")
 		}
 		offset += slen // SADR
+	}
+
+	// The hop count follows the addresses, and only a destination brings one.
+	if (control & 0x20) != 0 {
+		if len(payload) <= offset {
+			return 0, fmt.Errorf("NPDU hop too short")
+		}
+		offset++ // Hop
 	}
 
 	return offset, nil
@@ -702,17 +730,18 @@ func handleConfirmedReadProperty(conn net.PacketConn, remoteAddr net.Addr, state
 	decoded, err := msg.Decode()
 	if err != nil {
 		log.Printf("decode ReadProperty failed: %v", err)
-		sendErrorReply(conn, remoteAddr, services.ServiceConfirmedReadProperty, objects.ErrorClassServices, objects.ErrorCodeServiceRequestDenied)
+		sendErrorReply(conn, remoteAddr, msg.APDU.InvokeID, services.ServiceConfirmedReadProperty, objects.ErrorClassServices, objects.ErrorCodeServiceRequestDenied)
 		return
 	}
 
 	value, ok := state.values[decoded.InstanceNum]
 	if !ok {
-		sendErrorReply(conn, remoteAddr, services.ServiceConfirmedReadProperty, objects.ErrorClassObject, objects.ErrorCodeUnknownObject)
+		sendErrorReply(conn, remoteAddr, msg.APDU.InvokeID, services.ServiceConfirmedReadProperty, objects.ErrorClassObject, objects.ErrorCodeUnknownObject)
 		return
 	}
 
-	reply, err := bacnet.NewCACK(
+	reply, err := bacnet.NewCACKReply(
+		msg.APDU.InvokeID,
 		services.ServiceConfirmedReadProperty,
 		decoded.ObjectType,
 		decoded.InstanceNum,
@@ -721,7 +750,7 @@ func handleConfirmedReadProperty(conn net.PacketConn, remoteAddr net.Addr, state
 	)
 	if err != nil {
 		log.Printf("build CACK failed: %v", err)
-		sendErrorReply(conn, remoteAddr, services.ServiceConfirmedReadProperty, objects.ErrorClassServices, objects.ErrorCodeServiceRequestDenied)
+		sendErrorReply(conn, remoteAddr, msg.APDU.InvokeID, services.ServiceConfirmedReadProperty, objects.ErrorClassServices, objects.ErrorCodeServiceRequestDenied)
 		return
 	}
 
@@ -736,7 +765,7 @@ func handleConfirmedWriteProperty(conn net.PacketConn, remoteAddr net.Addr, stat
 	decoded, err := msg.Decode()
 	if err != nil {
 		log.Printf("decode WriteProperty failed: %v", err)
-		sendErrorReply(conn, remoteAddr, services.ServiceConfirmedWriteProperty, objects.ErrorClassServices, objects.ErrorCodeServiceRequestDenied)
+		sendErrorReply(conn, remoteAddr, msg.APDU.InvokeID, services.ServiceConfirmedWriteProperty, objects.ErrorClassServices, objects.ErrorCodeServiceRequestDenied)
 		return
 	}
 
@@ -744,7 +773,7 @@ func handleConfirmedWriteProperty(conn net.PacketConn, remoteAddr net.Addr, stat
 		log.Printf("WriteProperty payload had no storable real value, preserving previous state for instance %d", decoded.InstanceNum)
 	}
 
-	sendSimpleAckReply(conn, remoteAddr, services.ServiceConfirmedWriteProperty)
+	sendSimpleAckReply(conn, remoteAddr, msg.APDU.InvokeID, services.ServiceConfirmedWriteProperty)
 }
 
 func extractAndStoreValue(state *orchState, decoded services.ConfirmedWritePropertyDec) bool {
@@ -804,8 +833,8 @@ func sendIAmReply(conn net.PacketConn, target net.Addr) {
 	log.Printf("replied with IAm to %s", target)
 }
 
-func sendSimpleAckReply(conn net.PacketConn, target net.Addr, service uint8) {
-	reply, err := bacnet.NewSACK(service)
+func sendSimpleAckReply(conn net.PacketConn, target net.Addr, invokeID uint8, service uint8) {
+	reply, err := bacnet.NewSACKReply(invokeID, service)
 	if err != nil {
 		log.Printf("build SACK failed: %v", err)
 		return
@@ -814,11 +843,11 @@ func sendSimpleAckReply(conn net.PacketConn, target net.Addr, service uint8) {
 		log.Printf("send SACK failed: %v", err)
 		return
 	}
-	log.Printf("replied with SACK service=%d to %s", service, target)
+	log.Printf("replied with SACK service=%d invokeID=%d to %s", service, invokeID, target)
 }
 
-func sendErrorReply(conn net.PacketConn, target net.Addr, service uint8, class uint8, code uint8) {
-	reply, err := bacnet.NewError(service, class, code)
+func sendErrorReply(conn net.PacketConn, target net.Addr, invokeID uint8, service uint8, class uint8, code uint8) {
+	reply, err := bacnet.NewErrorReply(invokeID, service, class, code)
 	if err != nil {
 		log.Printf("build Error failed: %v", err)
 		return
@@ -827,7 +856,7 @@ func sendErrorReply(conn net.PacketConn, target net.Addr, service uint8, class u
 		log.Printf("send Error failed: %v", err)
 		return
 	}
-	log.Printf("replied with Error service=%d class=%d code=%d to %s", service, class, code, target)
+	log.Printf("replied with Error service=%d invokeID=%d class=%d code=%d to %s", service, invokeID, class, code, target)
 }
 
 func shouldReplyToWhoIs(decoded services.UnconfirmedWhoIsDec, deviceInstance uint32) bool {

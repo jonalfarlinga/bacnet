@@ -17,8 +17,8 @@
 810a000a010040010310
 # ComplexAck, first segment of several: sequence 0, window 4, readProperty
 810a001201003c0100040c0c02000065194c
-# ComplexAck, last segment: sequence 2, window 4
-810a000b0100380102043f
+# ComplexAck, last segment: sequence 2, window 4, readProperty
+810a000c0100380102040c3f
 # I-Am inside a Forwarded-NPDU from 192.168.1.10:47808
 8104001a c0a8010abac0 0100 1000c4020000652205c491002107
 # I-Am routed from network 2709, MAC 01:02:03

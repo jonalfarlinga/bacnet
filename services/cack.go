@@ -182,10 +182,14 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 					return decCACK, fmt.Errorf("PropertyIdLogBuffer should use ComplexACK.DecodeRR()")
 				}
 				decCACK.PropertyId = propId
+			// Context tags 0, 1 and 3 directly inside the value are read as
+			// a device object property reference. Other constructed values
+			// use the same tag numbers for other things; those are skipped.
 			case combine(3, 0):
 				objId, err := objects.DecObjectIdentifier(obj)
 				if err != nil {
-					return decCACK, fmt.Errorf("decode Context object case 0: %v", err)
+					decCACK.Skipped = append(decCACK.Skipped, enc_obj)
+					continue
 				}
 				objs = append(objs, &objects.Object{
 					TagNumber: 0,
@@ -196,7 +200,8 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 			case combine(3, 1):
 				propId, err := objects.DecUnsignedInteger(obj)
 				if err != nil {
-					return decCACK, fmt.Errorf("decode Context object case 1: %v", err)
+					decCACK.Skipped = append(decCACK.Skipped, enc_obj)
+					continue
 				}
 				objs = append(objs, &objects.Object{
 					TagNumber: 1,
@@ -207,7 +212,8 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 			case combine(3, 3):
 				objId, err := objects.DecObjectIdentifier(obj)
 				if err != nil {
-					return decCACK, fmt.Errorf("decode Context object case 0: %v", err)
+					decCACK.Skipped = append(decCACK.Skipped, enc_obj)
+					continue
 				}
 				objs = append(objs, &objects.Object{
 					TagNumber: 3,

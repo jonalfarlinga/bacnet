@@ -27,6 +27,8 @@ type MessageDispatcher struct {
 	OnSegmentAck                    func(msg *services.SegmentACK) error
 	OnReadForeignDeviceTableAck     func(msg *plumbing.ReadForeignDeviceTableAck) error
 	OnBVLCResult                    func(msg *plumbing.BVLCResult) error
+	OnUnconfirmedWhoHas             func(msg *services.UnconfirmedWhoHas) error
+	OnNetworkMessage                func(msg *plumbing.NetworkMessage) error
 	OnSegmentedAPDU                 func(msg *services.SegmentedAPDU) error
 	OnUnknown                       func(msg plumbing.BACnet) error
 }
@@ -119,6 +121,14 @@ func DispatchMessage(msg plumbing.BACnet, dispatcher MessageDispatcher) error {
 	case *plumbing.BVLCResult:
 		if dispatcher.OnBVLCResult != nil {
 			return dispatcher.OnBVLCResult(m)
+		}
+	case *services.UnconfirmedWhoHas:
+		if dispatcher.OnUnconfirmedWhoHas != nil {
+			return dispatcher.OnUnconfirmedWhoHas(m)
+		}
+	case *plumbing.NetworkMessage:
+		if dispatcher.OnNetworkMessage != nil {
+			return dispatcher.OnNetworkMessage(m)
 		}
 	case *services.SegmentedAPDU:
 		if dispatcher.OnSegmentedAPDU != nil {

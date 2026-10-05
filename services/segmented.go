@@ -8,9 +8,9 @@ import (
 )
 
 // SegmentedAPDU wraps a single segment of a segmented ConfirmedReq message.
-// Only the first segment (APDU.SequenceNumber == 0) carries a service
-// choice, so the concrete service type generally can't be determined until
-// every segment has arrived - callers should feed each SegmentedAPDU to a
+// Every segment repeats the service choice, but its parameters are split
+// across the segments, so the message can't be decoded until every segment
+// has arrived - callers should feed each SegmentedAPDU to a
 // reassembler keyed on (source address, InvokeID, APDU type) and re-parse
 // the reassembled bytes once complete, rather than trying to Decode() this
 // type directly.

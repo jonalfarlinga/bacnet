@@ -32,6 +32,13 @@ func FuzzParse(f *testing.F) {
 			return
 		}
 
+		if npduMsg, err := ParseNPDU(b); err == nil {
+			decodeAll(npduMsg)
+		}
+		if !bytes.Equal(in, b) {
+			t.Fatalf("ParseNPDU changed its input: was %x, now %x", in, b)
+		}
+
 		decodeAll(msg)
 		if _, err := msg.MarshalBinary(); err != nil {
 			// A parsed message may be one this library cannot write back.

@@ -29,20 +29,8 @@ func ReadPropertyServerExample(cmd *cobra.Command, args []string) {
 	}
 	defer listenConn.Close()
 
-	mCACKs := [][]byte{}
-	for i := 0; i < 2; i++ {
-		mCACK, err := bacnet.NewCACK(
-			services.ServiceConfirmedReadProperty,
-			objects.ObjectTypeAnalogOutput,
-			uint32(i),
-			objects.PropertyIdPresentValue,
-			1.1*float32((i+1)),
-		)
-		if err != nil {
-			log.Fatalf("error generating CACK %d: %v\n", i, err)
-		}
-		mCACKs = append(mCACKs, mCACK)
-	}
+	// Present values of analog-output 0 and 1.
+	values := []float32{1.1, 2.2}
 
 	reqRaw := make([]byte, 1024)
 
@@ -69,8 +57,11 @@ func ReadPropertyServerExample(cmd *cobra.Command, args []string) {
 					decodedReadPropertyMessage.ObjectType, decodedReadPropertyMessage.InstanceNum,
 					decodedReadPropertyMessage.PropertyId)
 
-				if decodedReadPropertyMessage.InstanceNum >= uint32(len(mCACKs)) {
-					bErr, err := bacnet.NewError(services.ServiceConfirmedReadProperty, objects.ErrorClassObject, objects.ErrorCodeUnknownObject)
+				// A reply echoes the invoke ID of the request it answers.
+				invokeID := readPropertyMessage.APDU.InvokeID
+
+				if decodedReadPropertyMessage.InstanceNum >= uint32(len(values)) {
+					bErr, err := bacnet.NewErrorReply(invokeID, services.ServiceConfirmedReadProperty, objects.ErrorClassObject, objects.ErrorCodeUnknownObject)
 					if err != nil {
 						return err
 					}
@@ -81,7 +72,18 @@ func ReadPropertyServerExample(cmd *cobra.Command, args []string) {
 					return nil
 				}
 
-				if _, err := listenConn.WriteTo(mCACKs[decodedReadPropertyMessage.InstanceNum], remoteAddr); err != nil {
+				mCACK, err := bacnet.NewCACKReply(
+					invokeID,
+					services.ServiceConfirmedReadProperty,
+					objects.ObjectTypeAnalogOutput,
+					decodedReadPropertyMessage.InstanceNum,
+					objects.PropertyIdPresentValue,
+					values[decodedReadPropertyMessage.InstanceNum],
+				)
+				if err != nil {
+					return err
+				}
+				if _, err := listenConn.WriteTo(mCACK, remoteAddr); err != nil {
 					return err
 				}
 

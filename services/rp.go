@@ -19,6 +19,9 @@ type ConfirmedReadPropertyDec struct {
 	ObjectType  uint16
 	InstanceNum uint32
 	PropertyId  uint16
+	// ArrayIndex is nil unless the request asks for one element of an array
+	// property (index 0 being the element count).
+	ArrayIndex *uint32
 }
 
 func ConfirmedReadPropertyObjects(objectType uint16, instN uint32, propId uint16) []objects.APDUPayload {
@@ -169,7 +172,8 @@ func (c *ConfirmedReadProperty) SetLength() {
 func (c *ConfirmedReadProperty) Decode() (ConfirmedReadPropertyDec, error) {
 	decCRP := ConfirmedReadPropertyDec{}
 
-	if len(c.APDU.Objects) != 2 {
+	// Object identifier and property identifier, then an optional array index.
+	if n := len(c.APDU.Objects); n != 2 && n != 3 {
 		return decCRP, fmt.Errorf(
 			"failed to decode ConfirmedRP - object count %d: %v",
 			len(c.APDU.Objects),
@@ -212,13 +216,19 @@ func (c *ConfirmedReadProperty) Decode() (ConfirmedReadPropertyDec, error) {
 				}
 				decCRP.ObjectType = objId.ObjectType
 				decCRP.InstanceNum = objId.InstanceNumber
-			case combine(8, 2):
+			case combine(8, 1):
 				value, err := objects.DecUnsignedInteger(obj)
 				if err != nil {
 					return decCRP, fmt.Errorf("decoding ConfirmedRP: %v", err)
 				}
 				propId := uint16(value)
 				decCRP.PropertyId = propId
+			case combine(8, 2):
+				index, err := objects.DecUnsignedInteger(obj)
+				if err != nil {
+					return decCRP, fmt.Errorf("decoding ConfirmedRP: %v", err)
+				}
+				decCRP.ArrayIndex = &index
 			}
 		}
 	}

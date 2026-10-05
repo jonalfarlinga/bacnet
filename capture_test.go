@@ -13,23 +13,39 @@ import (
 	"github.com/jonalfarlinga/bacnet/test_utils"
 )
 
+// fixtureParser returns the function that parses a fixture frame, and how
+// many bytes it puts in front of the frame before parsing. Files named
+// *_npdu.hex hold frames that start at the NPDU; they go through ParseNPDU,
+// which adds a BVLC header.
+func fixtureParser(frame test_utils.Frame, fallback bool) (parse func([]byte) (plumbing.BACnet, error), added int) {
+	if strings.Contains(frame.Name, "_npdu.hex:") {
+		return ParseNPDU, plumbing.NewBVLC(plumbing.BVLCFuncUnicast).MarshalLen()
+	}
+	if fallback {
+		return ParseWithFallback, 0
+	}
+	return Parse, 0
+}
+
 // Every frame in testdata must parse without error.
 func TestFixtureFramesParse(t *testing.T) {
 	for _, frame := range test_utils.LoadHexFrames(t, "testdata/*.hex") {
 		t.Run(frame.Name, func(t *testing.T) {
-			if _, err := Parse(frame.Data); err != nil {
+			parse, _ := fixtureParser(frame, false)
+			if _, err := parse(frame.Data); err != nil {
 				t.Errorf("parsing %x: %v", frame.Data, err)
 			}
 		})
 	}
 }
 
-// The captured frames are plain, unsegmented messages, so marshalling the
-// parsed message must give back the captured bytes.
-func TestCaptureFramesRoundTrip(t *testing.T) {
-	for _, frame := range test_utils.LoadHexFrames(t, "testdata/BACnet_*.hex") {
+// Marshalling a parsed frame must give back the bytes it was parsed from.
+// That holds for a segment too, which is written back from its raw payload.
+func TestFixtureFramesRoundTrip(t *testing.T) {
+	for _, frame := range test_utils.LoadHexFrames(t, "testdata/*.hex") {
 		t.Run(frame.Name, func(t *testing.T) {
-			msg, err := Parse(frame.Data)
+			parse, added := fixtureParser(frame, false)
+			msg, err := parse(frame.Data)
 			if err != nil {
 				t.Fatalf("parsing %x: %v", frame.Data, err)
 			}
@@ -37,7 +53,7 @@ func TestCaptureFramesRoundTrip(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !bytes.Equal(frame.Data, got) {
+			if got = got[added:]; !bytes.Equal(frame.Data, got) {
 				t.Errorf("differs: want %x, got %x", frame.Data, got)
 			}
 		})
@@ -49,15 +65,16 @@ func TestCaptureFramesRoundTrip(t *testing.T) {
 func TestFixtureFramesTruncated(t *testing.T) {
 	for _, frame := range test_utils.LoadHexFrames(t, "testdata/*.hex") {
 		t.Run(frame.Name, func(t *testing.T) {
+			parse, added := fixtureParser(frame, true)
 			for n := 0; n < len(frame.Data); n++ {
 				// The backing array still holds the rest of the frame, as a
 				// reused receive buffer would.
-				msg, err := ParseWithFallback(frame.Data[:n])
+				msg, err := parse(frame.Data[:n])
 				if err != nil {
 					continue
 				}
 				decodeAll(msg)
-				if l := msg.MarshalLen(); l > n {
+				if l := msg.MarshalLen() - added; l > n {
 					t.Errorf("%d of %d bytes parsed into a %d-byte message", n, len(frame.Data), l)
 				}
 			}
@@ -123,6 +140,11 @@ func decodeAll(msg plumbing.BACnet) {
 		m.Decode()
 	case *services.UnconfirmedIAm:
 		m.Decode()
+	case *services.UnconfirmedWhoHas:
+		m.Decode()
+	case *plumbing.NetworkMessage:
+		m.Networks()
+		m.RejectReason()
 	case *services.COVNotification:
 		m.Decode()
 	case *services.ConfirmedReadProperty:

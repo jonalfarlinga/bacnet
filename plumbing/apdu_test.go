@@ -248,3 +248,58 @@ func FuzzObjectTags(f *testing.F) {
 		}
 	})
 }
+
+// A segment is written back as it was read: sequence number, window size,
+// service choice and the raw payload.
+func TestAPDUSegmentRoundTrip(t *testing.T) {
+	testcases := []struct {
+		description string
+		serialized  []byte
+		service     uint8
+		sequence    uint8
+		payload     []byte
+	}{
+		{
+			"confirmed request, first segment",
+			[]byte{0x0c, 0x75, 0x01, 0x00, 0x04, 0x0f, 0x0c, 0x00},
+			0x0f, 0, []byte{0x0c, 0x00},
+		},
+		{
+			"complex ack, first segment",
+			[]byte{0x3c, 0x01, 0x00, 0x04, 0x0c, 0x0c, 0x02},
+			0x0c, 0, []byte{0x0c, 0x02},
+		},
+		{
+			"complex ack, last segment",
+			[]byte{0x38, 0x01, 0x02, 0x04, 0x0c, 0x3f},
+			0x0c, 2, []byte{0x3f},
+		},
+	}
+
+	for _, c := range testcases {
+		t.Run(c.description, func(t *testing.T) {
+			a := new(plumbing.APDU)
+			if err := a.UnmarshalBinary(c.serialized); err != nil {
+				t.Fatal(err)
+			}
+			if a.Service != c.service || a.SequenceNumber != c.sequence || a.ProposedWindowSize != 4 {
+				t.Errorf("got service %#x sequence %d window %d, want %#x, %d and 4",
+					a.Service, a.SequenceNumber, a.ProposedWindowSize, c.service, c.sequence)
+			}
+			if !bytes.Equal(c.payload, a.Payload) {
+				t.Errorf("payload differs: want %x, got %x", c.payload, a.Payload)
+			}
+
+			if l := a.MarshalLen(); l != len(c.serialized) {
+				t.Fatalf("got marshal length %d, want %d", l, len(c.serialized))
+			}
+			got := bytes.Repeat([]byte{0xff}, a.MarshalLen())
+			if err := a.MarshalTo(got); err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(c.serialized, got) {
+				t.Errorf("differs: want %x, got %x", c.serialized, got)
+			}
+		})
+	}
+}

@@ -34,14 +34,22 @@ func NewIAm(instN uint32, vendorId uint16) ([]byte, error) {
 	return u.MarshalBinary()
 }
 
+// NewCACK builds a ComplexACK with invoke ID 1. A reply to a request has to
+// echo that request's invoke ID: use NewCACKReply for one.
 func NewCACK(service uint8, objectType uint16, instN uint32, propertyId uint16, value float32) ([]byte, error) {
+	return NewCACKReply(1, service, objectType, instN, propertyId, value)
+}
+
+// NewCACKReply builds the ComplexACK that answers the confirmed request with
+// the given invoke ID.
+func NewCACKReply(invokeID, service uint8, objectType uint16, instN uint32, propertyId uint16, value float32) ([]byte, error) {
 	bvlc := plumbing.NewBVLC(plumbing.BVLCFuncUnicast)
 	npdu := plumbing.NewNPDU(false, false, false, false)
 
 	c := services.NewComplexACK(bvlc, npdu)
 
 	c.APDU.Service = service
-	c.APDU.InvokeID = 1
+	c.APDU.InvokeID = invokeID
 	c.APDU.Objects = services.ComplexACKObjects(objectType, instN, propertyId, value)
 
 	c.SetLength()
@@ -49,28 +57,44 @@ func NewCACK(service uint8, objectType uint16, instN uint32, propertyId uint16, 
 	return c.MarshalBinary()
 }
 
+// NewSACK builds a SimpleACK with invoke ID 1. A reply to a request has to
+// echo that request's invoke ID: use NewSACKReply for one.
 func NewSACK(service uint8) ([]byte, error) {
+	return NewSACKReply(1, service)
+}
+
+// NewSACKReply builds the SimpleACK that answers the confirmed request with
+// the given invoke ID.
+func NewSACKReply(invokeID, service uint8) ([]byte, error) {
 	bvlc := plumbing.NewBVLC(plumbing.BVLCFuncUnicast)
 	npdu := plumbing.NewNPDU(false, false, false, false)
 
 	s := services.NewSimpleACK(bvlc, npdu)
 
 	s.APDU.Service = service
-	s.APDU.InvokeID = 1
+	s.APDU.InvokeID = invokeID
 
 	s.SetLength()
 
 	return s.MarshalBinary()
 }
 
+// NewError builds an Error with invoke ID 1. A reply to a request has to echo
+// that request's invoke ID: use NewErrorReply for one.
 func NewError(service, errorClass, errorCode uint8) ([]byte, error) {
+	return NewErrorReply(1, service, errorClass, errorCode)
+}
+
+// NewErrorReply builds the Error that answers the confirmed request with the
+// given invoke ID.
+func NewErrorReply(invokeID, service, errorClass, errorCode uint8) ([]byte, error) {
 	bvlc := plumbing.NewBVLC(plumbing.BVLCFuncUnicast)
 	npdu := plumbing.NewNPDU(false, false, false, false)
 
 	e := services.NewError(bvlc, npdu)
 
 	e.APDU.Service = service
-	e.APDU.InvokeID = 1
+	e.APDU.InvokeID = invokeID
 	e.APDU.Objects = services.ErrorObjects(errorClass, errorCode)
 
 	e.SetLength()

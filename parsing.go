@@ -9,14 +9,22 @@ import (
 	"github.com/jonalfarlinga/bacnet/services"
 )
 
-const bacnetLenMin = 8
+// bacnetLenMin is the shortest frame with an NPDU: a BVLC header, an NPDU
+// without addresses, and a one-byte network layer message.
+const bacnetLenMin = 7
 
-// Parse decodes the given bytes.
+// Parse decodes the given bytes, which must be one whole BACnet/IP datagram
+// starting at the BVLC header. A frame captured without one goes to ParseNPDU.
 func Parse(b []byte) (plumbing.BACnet, error) {
+	if len(b) > 0 && b[0] != plumbing.BVLCType {
+		return nil, fmt.Errorf(
+			"parsing BVLC type %#x, want %#x: %w", b[0], plumbing.BVLCType, common.ErrInvalidData,
+		)
+	}
 
 	// BVLC-only messages (BVLC-Result, Read-Foreign-Device-Table and its
 	// ack) carry no NPDU/APDU, so they can be as short as 4-6 bytes -
-	// shorter than bacnetLenMin, which assumes a full NPDU+APDU follows.
+	// shorter than bacnetLenMin, which assumes an NPDU follows.
 	// Peek at the BVLC function code before applying that length floor.
 	if len(b) >= 4 {
 		var bvlcPeek plumbing.BVLC
@@ -50,46 +58,56 @@ func Parse(b []byte) (plumbing.BACnet, error) {
 		)
 	}
 
-	bvlc, parseBuf, err := normalizeForwardedBVLC(b)
-	if err != nil {
-		return nil, err
+	var bvlc plumbing.BVLC
+	if err := bvlc.UnmarshalBinary(b); err != nil {
+		return nil, fmt.Errorf("parsing BVLC %x: %w", b, err)
 	}
-
-	var npdu plumbing.NPDU
 	offset := bvlc.MarshalLen()
 
-	if err := npdu.UnmarshalBinary(parseBuf[offset:]); err != nil {
-		return nil, fmt.Errorf("parsing NPDU %x: %w", parseBuf[offset:], err)
+	var npdu plumbing.NPDU
+	if err := npdu.UnmarshalBinary(b[offset:]); err != nil {
+		return nil, fmt.Errorf("parsing NPDU %x: %w", b[offset:], err)
 	}
 	offset += npdu.MarshalLen()
 
-	if (npdu.Control & 0x80) != 0 {
-		return nil, fmt.Errorf(
-			"parsing NPDU control %x: %w",
-			npdu.Control,
-			common.ErrNotImplemented,
-		)
+	if (npdu.Control & plumbing.NetworkLayerMessage) != 0 {
+		m := &plumbing.NetworkMessage{}
+		if err := m.UnmarshalBinary(b); err != nil {
+			return nil, fmt.Errorf("parsing network layer message %x: %w", b, err)
+		}
+		return m, nil
 	}
 
-	if len(parseBuf) <= offset {
-		return nil, fmt.Errorf(
-			"parsing APDU offset %d in %d bytes: %w",
-			offset,
-			len(parseBuf),
-			common.ErrTooShortToParse,
-		)
-	}
+	return parseAPDU(&bvlc, &npdu, b[offset:])
+}
 
-	var apdu plumbing.APDU
-	if err := apdu.UnmarshalBinary(parseBuf[offset:]); err != nil {
-		return nil, fmt.Errorf("parsing APDU %x: %w", parseBuf[offset:], err)
+// ParseNPDU decodes a message that starts at the NPDU, with no BVLC in front
+// of it: what a capture shows for BACnet over 802.3 with an LLC header. b
+// must end where the NPDU ends, so padding that the data link added has to
+// be cut off first.
+//
+// The message returned has an Original-Unicast BVLC header added, since the
+// message types cannot be marshalled without one. The NPDU bytes are what
+// its MarshalBinary returns after the first 4.
+func ParseNPDU(b []byte) (plumbing.BACnet, error) {
+	bvlc := plumbing.NewBVLC(plumbing.BVLCFuncUnicast)
+	total := bvlc.MarshalLen() + len(b)
+	if total > 0xFFFF {
+		return nil, fmt.Errorf("parsing NPDU of %d bytes: %w", len(b), common.ErrTooBigValue)
 	}
+	bvlc.Length = uint16(total)
 
-	return wrapParsedMessage(&bvlc, &npdu, &apdu)
+	framed := make([]byte, total)
+	if err := bvlc.MarshalTo(framed); err != nil {
+		return nil, err
+	}
+	copy(framed[bvlc.MarshalLen():], b)
+	return Parse(framed)
 }
 
 // ParseWithFallback first attempts strict decoding with Parse and, if that fails,
-// retries with a bounded lenient parser for known non-canonical routed NPDU layouts.
+// retries reading the NPDU in the layout that versions of this library wrote
+// before the field order was corrected (see parseNPDULegacy).
 // It skips the fallback when the strict parse already reached a fully-decoded NPDU/APDU
 // and only failed because the service or PDU type isn't implemented: a different NPDU
 // parsing strategy cannot change which service byte the APDU carries.
@@ -103,78 +121,63 @@ func ParseWithFallback(b []byte) (plumbing.BACnet, error) {
 		return nil, strictErr
 	}
 
-	fallbackMsg, fallbackErr := parseLenientRoutedNPDU(b)
+	fallbackMsg, fallbackErr := parseLegacyRoutedNPDU(b)
 	if fallbackErr == nil {
 		return fallbackMsg, nil
 	}
 
-	return nil, fmt.Errorf("strict parse failed: %v; fallback parse failed: %v", strictErr, fallbackErr)
+	return nil, fmt.Errorf("strict parse failed: %w; fallback parse failed: %v", strictErr, fallbackErr)
 }
 
-func parseLenientRoutedNPDU(b []byte) (plumbing.BACnet, error) {
-	bvlc, parseBuf, err := normalizeForwardedBVLC(b)
-	if err != nil {
-		return nil, err
+func parseLegacyRoutedNPDU(b []byte) (plumbing.BACnet, error) {
+	if len(b) > 0 && b[0] != plumbing.BVLCType {
+		return nil, fmt.Errorf(
+			"parsing BVLC type %#x, want %#x: %w", b[0], plumbing.BVLCType, common.ErrInvalidData,
+		)
 	}
 
+	var bvlc plumbing.BVLC
+	if err := bvlc.UnmarshalBinary(b); err != nil {
+		return nil, fmt.Errorf("parsing BVLC %x: %w", b, err)
+	}
 	offset := bvlc.MarshalLen()
-	npdu, npduLen, err := parseNPDULenient(parseBuf[offset:])
+
+	npdu, npduLen, err := parseNPDULegacy(b[offset:])
 	if err != nil {
-		return nil, fmt.Errorf("lenient NPDU parse %x: %v", parseBuf[offset:], err)
+		return nil, fmt.Errorf("legacy NPDU parse %x: %v", b[offset:], err)
 	}
 	offset += npduLen
 
-	if (npdu.Control & 0x80) != 0 {
+	// Those versions never wrote a network layer message.
+	if (npdu.Control & plumbing.NetworkLayerMessage) != 0 {
 		return nil, fmt.Errorf(
-			"parsing NPDU control %x: %w",
-			npdu.Control,
-			common.ErrNotImplemented,
+			"parsing NPDU control %x in the legacy layout: %w", npdu.Control, common.ErrInvalidData,
 		)
 	}
 
-	if len(parseBuf) <= offset {
-		return nil, fmt.Errorf(
-			"parsing APDU offset %d in %d bytes: %w",
-			offset,
-			len(parseBuf),
-			common.ErrTooShortToParse,
-		)
+	return parseAPDU(&bvlc, &npdu, b[offset:])
+}
+
+func parseAPDU(bvlc *plumbing.BVLC, npdu *plumbing.NPDU, b []byte) (plumbing.BACnet, error) {
+	if len(b) == 0 {
+		return nil, fmt.Errorf("parsing APDU: no bytes after the NPDU: %w", common.ErrTooShortToParse)
 	}
 
 	var apdu plumbing.APDU
-	if err := apdu.UnmarshalBinary(parseBuf[offset:]); err != nil {
-		return nil, fmt.Errorf("parsing APDU %x: %w", parseBuf[offset:], err)
+	if err := apdu.UnmarshalBinary(b); err != nil {
+		return nil, fmt.Errorf("parsing APDU %x: %w", b, err)
 	}
 
-	return wrapParsedMessage(&bvlc, &npdu, &apdu)
+	return wrapParsedMessage(bvlc, npdu, &apdu)
 }
 
-func normalizeForwardedBVLC(b []byte) (plumbing.BVLC, []byte, error) {
-	var bvlc plumbing.BVLC
-	if err := bvlc.UnmarshalBinary(b); err != nil {
-		return bvlc, nil, fmt.Errorf("parsing BVLC %x: %v", b, err)
-	}
-
-	parseBuf := b
-	if bvlc.Function == plumbing.BVLCFuncForwardedNPDU {
-		forwardedHdrOffset := bvlc.MarshalLen()
-		if len(b) < forwardedHdrOffset+6 {
-			return bvlc, nil, fmt.Errorf(
-				"parsing BVLC forwarded header %x: %v",
-				b,
-				common.ErrTooShortToParse,
-			)
-		}
-
-		parseBuf = make([]byte, 0, len(b)-6)
-		parseBuf = append(parseBuf, b[:forwardedHdrOffset]...)
-		parseBuf = append(parseBuf, b[forwardedHdrOffset+6:]...)
-	}
-
-	return bvlc, parseBuf, nil
-}
-
-func parseNPDULenient(b []byte) (plumbing.NPDU, int, error) {
+// parseNPDULegacy reads an NPDU that has both a destination and a source,
+// with the hop count ahead of the source instead of after it. The standard
+// puts the hop count last, and plumbing.NPDU reads and writes it there. This
+// library wrote it ahead of the source until that was corrected, so a peer
+// running an older version still sends this layout. It returns the NPDU and
+// the number of bytes it occupies.
+func parseNPDULegacy(b []byte) (plumbing.NPDU, int, error) {
 	var npdu plumbing.NPDU
 	if len(b) < 2 {
 		return npdu, 0, fmt.Errorf("NPDU header too short")
@@ -184,80 +187,32 @@ func parseNPDULenient(b []byte) (plumbing.NPDU, int, error) {
 	npdu.Control = b[1]
 	offset := 2
 
-	hasDest := (npdu.Control & 0x20) != 0
-	hasSource := (npdu.Control & 0x08) != 0
+	if (npdu.Control&0x20) == 0 || (npdu.Control&0x08) == 0 {
+		return npdu, 0, fmt.Errorf("NPDU control %x has only the standard layout", npdu.Control)
+	}
 
-	if hasDest {
-		if len(b) < offset+3 {
-			return npdu, 0, fmt.Errorf("NPDU destination fields too short")
-		}
-		npdu.DNET = uint16(b[offset])<<8 | uint16(b[offset+1])
-		offset += 2
-		npdu.DLEN = b[offset]
-		offset++
+	if len(b) < offset+3 {
+		return npdu, 0, fmt.Errorf("NPDU destination fields too short")
+	}
+	npdu.DNET = uint16(b[offset])<<8 | uint16(b[offset+1])
+	offset += 2
+	npdu.DLEN = b[offset]
+	offset++
 
-		if len(b) < offset+int(npdu.DLEN) {
-			return npdu, 0, fmt.Errorf("NPDU DADR too short")
-		}
+	if len(b) < offset+int(npdu.DLEN) {
+		return npdu, 0, fmt.Errorf("NPDU DADR too short")
+	}
+	if npdu.DLEN > 0 {
 		npdu.DADR = append([]byte(nil), b[offset:offset+int(npdu.DLEN)]...)
-		offset += int(npdu.DLEN)
-
-		if hasSource {
-			canon, canonOff, canonErr := parseAfterDestCanonical(npdu, b, offset)
-			if canonErr == nil {
-				return canon, canonOff, nil
-			}
-
-			alt, altOff, altErr := parseAfterDestSourceThenHop(npdu, b, offset)
-			if altErr == nil {
-				return alt, altOff, nil
-			}
-
-			return npdu, 0, fmt.Errorf("canonical: %v; source-then-hop: %v", canonErr, altErr)
-		}
-
-		if len(b) <= offset {
-			return npdu, 0, fmt.Errorf("NPDU hop too short")
-		}
-		npdu.Hop = b[offset]
-		offset++
-		return npdu, offset, nil
 	}
+	offset += int(npdu.DLEN)
 
-	if hasSource {
-		npduWithSource, nextOffset, err := parseSourceFields(npdu, b, offset)
-		if err != nil {
-			return npdu, 0, err
-		}
-		return npduWithSource, nextOffset, nil
-	}
-
-	return npdu, offset, nil
-}
-
-func parseAfterDestCanonical(npdu plumbing.NPDU, b []byte, offset int) (plumbing.NPDU, int, error) {
 	if len(b) <= offset {
 		return npdu, 0, fmt.Errorf("NPDU hop too short")
 	}
 	npdu.Hop = b[offset]
 	offset++
-	return parseSourceFields(npdu, b, offset)
-}
 
-func parseAfterDestSourceThenHop(npdu plumbing.NPDU, b []byte, offset int) (plumbing.NPDU, int, error) {
-	npduWithSource, nextOffset, err := parseSourceFields(npdu, b, offset)
-	if err != nil {
-		return npdu, 0, err
-	}
-	if len(b) <= nextOffset {
-		return npdu, 0, fmt.Errorf("NPDU trailing hop too short")
-	}
-	npduWithSource.Hop = b[nextOffset]
-	nextOffset++
-	return npduWithSource, nextOffset, nil
-}
-
-func parseSourceFields(npdu plumbing.NPDU, b []byte, offset int) (plumbing.NPDU, int, error) {
 	if len(b) < offset+3 {
 		return npdu, 0, fmt.Errorf("NPDU source fields too short")
 	}
@@ -269,7 +224,9 @@ func parseSourceFields(npdu plumbing.NPDU, b []byte, offset int) (plumbing.NPDU,
 	if len(b) < offset+int(npdu.SLEN) {
 		return npdu, 0, fmt.Errorf("NPDU SADR too short")
 	}
-	npdu.SADR = append([]byte(nil), b[offset:offset+int(npdu.SLEN)]...)
+	if npdu.SLEN > 0 {
+		npdu.SADR = append([]byte(nil), b[offset:offset+int(npdu.SLEN)]...)
+	}
 	offset += int(npdu.SLEN)
 
 	return npdu, offset, nil
@@ -285,15 +242,17 @@ func wrapParsedMessage(bvlc *plumbing.BVLC, npdu *plumbing.NPDU, apdu *plumbing.
 			bacnet = &services.UnconfirmedWhoIs{BVLC: bvlc, NPDU: npdu, APDU: apdu}
 		case services.ServiceUnconfirmedIAm:
 			bacnet = &services.UnconfirmedIAm{BVLC: bvlc, NPDU: npdu, APDU: apdu}
+		case services.ServiceUnconfirmedWhoHas:
+			bacnet = &services.UnconfirmedWhoHas{BVLC: bvlc, NPDU: npdu, APDU: apdu}
 		case services.ServiceUnconfirmedCOVNotification:
 			bacnet = &services.COVNotification{BVLC: bvlc, NPDU: npdu, APDU: apdu}
 		}
 	case plumbing.ConfirmedReq:
 		if apdu.IsSegmented() {
 			// Every segment (including segment 0) is routed uniformly
-			// through SegmentedAPDU: a continuation segment has no service
-			// choice of its own to switch on, since only segment 0 carries
-			// one. Callers reassemble the full byte stream and re-parse it
+			// through SegmentedAPDU: every segment repeats the service
+			// choice, but a lone segment's parameters are incomplete.
+			// Callers reassemble the full byte stream and re-parse it
 			// to get a concrete, fully-decoded service type.
 			bacnet = &services.SegmentedAPDU{BVLC: bvlc, NPDU: npdu, APDU: apdu}
 			break
