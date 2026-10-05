@@ -23,8 +23,8 @@ type ErrorDec struct {
 func ErrorObjects(errClass, errCode uint8) []objects.APDUPayload {
 	objs := make([]objects.APDUPayload, 2)
 
-	objs[0] = objects.EncEnumerated(errClass)
-	objs[1] = objects.EncEnumerated(errCode)
+	objs[0] = objects.EncEnumerated(uint32(errClass))
+	objs[1] = objects.EncEnumerated(uint32(errCode))
 
 	return objs
 }

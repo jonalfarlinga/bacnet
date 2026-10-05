@@ -2,7 +2,6 @@ package services
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
@@ -22,6 +21,8 @@ type ConfirmedCOVDec struct {
 	MonitoredInstNum uint32
 	ExpectConfirmed  bool
 	Lifetime         uint32
+	// Skipped holds the tags Decode did not recognise and left undecoded.
+	Skipped []*objects.Object
 }
 
 // IAmObjects creates an instance of ConfirmedCOV objects.
@@ -165,12 +166,12 @@ func (u *ConfirmedCOV) Decode() (ConfirmedCOVDec, error) {
 		}
 
 		// add or remove context based on opening and closing tags
-		if enc_obj.Length == 6 {
+		if enc_obj.Kind == objects.TagOpening {
 			context = append(context, enc_obj.TagNumber)
 			continue
 		}
-		if enc_obj.Length == 7 {
-			if len(context) == 0 {
+		if enc_obj.Kind == objects.TagClosing {
+			if len(context) <= 1 {
 				return decCOV, fmt.Errorf(
 					"LogBufferCACK object at index %d has mismatched closing tag: %v",
 					i, common.ErrInvalidObjectType,
@@ -211,10 +212,10 @@ func (u *ConfirmedCOV) Decode() (ConfirmedCOVDec, error) {
 				}
 				decCOV.Lifetime = life
 			default:
-				log.Printf("Unknown Context object: context %v tag class %t tag number %d\n", context, enc_obj.TagClass, enc_obj.TagNumber)
+				decCOV.Skipped = append(decCOV.Skipped, enc_obj)
 			}
 		} else {
-			log.Printf("Not encoded object: %+v\n", enc_obj)
+			decCOV.Skipped = append(decCOV.Skipped, enc_obj)
 		}
 	}
 

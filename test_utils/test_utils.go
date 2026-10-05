@@ -1,6 +1,7 @@
 package test_utils
 
 import (
+	"bytes"
 	"fmt"
 	"testing"
 
@@ -19,13 +20,14 @@ func AssertEqualTag(t *testing.T, expected *objects.Object, actual objects.APDUP
 	if expected.TagClass != actualTag.TagClass {
 		errs = append(errs, fmt.Sprintf("TagClass: expected %v, got %v", expected.TagClass, actualTag.TagClass))
 	}
+	if expected.Kind != actualTag.Kind {
+		errs = append(errs, fmt.Sprintf("Kind: expected %v, got %v", expected.Kind, actualTag.Kind))
+	}
 	if expected.Length != actualTag.Length {
 		errs = append(errs, fmt.Sprintf("Length: expected %v, got %v", expected.Length, actualTag.Length))
 	}
-	for i, b := range expected.Data {
-		if b != actualTag.Data[i] {
-			errs = append(errs, fmt.Sprintf("Data: expected %v, got %v", expected.Data, actualTag.Data))
-		}
+	if !bytes.Equal(expected.Data, actualTag.Data) {
+		errs = append(errs, fmt.Sprintf("Data: expected %v, got %v", expected.Data, actualTag.Data))
 	}
 	if len(errs) > 0 {
 		t.Errorf("Errors: %v", errs)

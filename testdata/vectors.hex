@@ -1,0 +1,35 @@
+# Hand-built frames, one per line; spaces only group the bytes. They cover
+# message shapes the captures in this directory lack, and seed the fuzz tests.
+
+# Who-Is, range 0..4194303
+810a000e0100100809001b3fffff
+# ReadProperty ack: device,101 object-identifier
+810a0017010030010c0c02000065194b3ec4020000653f
+# I-Am device,101
+810a001401001000c4020000652205c491002107
+# ReadPropertyMultiple ack: object-identifier and a 16-byte object-name (extended length)
+810a002f010030010e0c020000651e294b4ec4020000654f294d4e751000554f2d416e616c7973742d546573744f1f
+# Reject, invoke 1, unrecognized-service
+810a00090100600109
+# Abort from server, invoke 1, segmentation-not-supported
+810a00090100710104
+# Segment-ACK, invoke 1, sequence 3, window 16
+810a000a010040010310
+# ComplexAck, first segment of several: sequence 0, window 4, readProperty
+810a001201003c0100040c0c02000065194c
+# ComplexAck, last segment: sequence 2, window 4
+810a000b0100380102043f
+# I-Am inside a Forwarded-NPDU from 192.168.1.10:47808
+8104001a c0a8010abac0 0100 1000c4020000652205c491002107
+# I-Am routed from network 2709, MAC 01:02:03
+810a001a0108 0a95 03 010203 1000c4020000652205c491002107
+# Unconfirmed COV notification: present-value 42.0 and status-flags
+810a00280100100209011c020000652c0000000139004e09552e44422800002f096f2e8204002f4f
+# SubscribeCOV, process 1, analog-input,1, confirmed, lifetime 60
+810a0015 0104 00050105 0901 1c00000001 2901 393c
+# BVLC-Result, successful completion
+810000060000
+# Read-Foreign-Device-Table
+81060004
+# Read-Foreign-Device-Table-Ack, one entry
+8107000ec0a8010abac0012c010e

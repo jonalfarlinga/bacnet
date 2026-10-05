@@ -5,7 +5,7 @@ func EncOpeningTag(tagN uint8) *Object {
 
 	oTag.TagClass = true
 	oTag.TagNumber = tagN
-	oTag.Length = 0x6
+	oTag.Kind = TagOpening
 
 	return &oTag
 }
@@ -15,7 +15,7 @@ func EncClosingTag(tagN uint8) *Object {
 
 	cTag.TagClass = true
 	cTag.TagNumber = tagN
-	cTag.Length = 0x7
+	cTag.Kind = TagClosing
 
 	return &cTag
 }

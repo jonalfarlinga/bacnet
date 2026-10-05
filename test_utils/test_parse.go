@@ -76,14 +76,12 @@ func TestParseReadProperty(t *testing.T, Parse func([]byte) (plumbing.BACnet, er
 	open := &objects.Object{
 		TagNumber: 3,
 		TagClass:  true,
-		Data: []byte{},
-		Length: 6,
+		Kind:      objects.TagOpening,
 	}
 	close := &objects.Object{
 		TagNumber: 3,
 		TagClass:  true,
-		Data: []byte{},
-		Length: 7,
+		Kind:      objects.TagClosing,
 	}
 	AssertEqual(t, uint8(0x81), resultReadProp.BVLC.Type)
 	AssertEqual(t, uint8(0x0a), resultReadProp.BVLC.Function)
@@ -172,26 +170,22 @@ func TestParseReadPropertyMultiple(t *testing.T, Parse func([]byte) (plumbing.BA
 	open1 := &objects.Object{
 		TagNumber: 1,
 		TagClass:  true,
-		Data:      []byte{},
-		Length:    6,
+		Kind:      objects.TagOpening,
 	}
 	close1 := &objects.Object{
 		TagNumber: 1,
 		TagClass:  true,
-		Data:      []byte{},
-		Length:    7,
+		Kind:      objects.TagClosing,
 	}
 	open4 := &objects.Object{
 		TagNumber: 4,
 		TagClass:  true,
-		Data:      []byte{},
-		Length:    6,
+		Kind:      objects.TagOpening,
 	}
 	close4 := &objects.Object{
 		TagNumber: 4,
 		TagClass:  true,
-		Data:      []byte{},
-		Length:    7,
+		Kind:      objects.TagClosing,
 	}
 	pid1 := &objects.Object{
 		TagNumber: 2,

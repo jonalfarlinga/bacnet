@@ -2,7 +2,6 @@ package services
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
@@ -24,6 +23,8 @@ type COVNotificationDec struct {
 	ObjInstanceNum uint32
 	Lifetime       uint32
 	Tags           []*objects.Object
+	// Skipped holds the tags Decode did not recognise and left undecoded.
+	Skipped []*objects.Object
 }
 
 // NewConfirmedCOV creates a UnconfirmedCOVNotification.
@@ -153,12 +154,12 @@ func (u *COVNotification) Decode() (COVNotificationDec, error) {
 		}
 
 		// add or remove context based on opening and closing tags
-		if enc_obj.Length == 6 {
+		if enc_obj.Kind == objects.TagOpening {
 			context = append(context, enc_obj.TagNumber)
 			continue
 		}
-		if enc_obj.Length == 7 {
-			if len(context) == 0 {
+		if enc_obj.Kind == objects.TagClosing {
+			if len(context) <= 1 {
 				return decCOV, fmt.Errorf(
 					"LogBufferCACK object at index %d has mismatched closing tag: %v",
 					i, common.ErrInvalidObjectType,
@@ -206,13 +207,12 @@ func (u *COVNotification) Decode() (COVNotificationDec, error) {
 					TagNumber: 0,
 					TagClass:  true,
 					Value:     prop,
-					Length:    uint8(enc_obj.MarshalLen()),
+					Length:    uint32(enc_obj.MarshalLen()),
 				})
 			default:
-				log.Printf("Unknown Context object: context %v tag class %t tag number %d\n", context, enc_obj.TagClass, enc_obj.TagNumber)
+				decCOV.Skipped = append(decCOV.Skipped, enc_obj)
 			}
 		} else {
-			// log.Println("TagNumber", enc_obj.TagNumber)
 			tag, err := decodeAppTags(enc_obj, &obj)
 			if err != nil {
 				return decCOV, fmt.Errorf("decode Application Tag: %v", err)

@@ -29,7 +29,7 @@ func IAmObjects(instN uint32, acceptedSize uint16, supportedSeg uint8, vendorID 
 
 	objs[0] = objects.EncObjectIdentifier(false, objects.TagBACnetObjectIdentifier, 8, instN)
 	objs[1] = objects.EncUnsignedInteger(uint(acceptedSize))
-	objs[2] = objects.EncEnumerated(supportedSeg)
+	objs[2] = objects.EncEnumerated(uint32(supportedSeg))
 	objs[3] = objects.EncUnsignedInteger(uint(vendorID))
 
 	return objs

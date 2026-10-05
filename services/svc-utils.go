@@ -2,7 +2,6 @@ package services
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/jonalfarlinga/bacnet/objects"
 )
@@ -103,12 +102,12 @@ func decodeAppTags(enc_obj *objects.Object, obj *objects.APDUPayload) (*objects.
 		length = (*obj).MarshalLen()
 		value = objId
 	default:
-		log.Printf("Unknown AppTag object: tag class %t tag number %d\n", enc_obj.TagClass, enc_obj.TagNumber)
+		// Reserved application tag: returned undecoded, with a nil Value.
 	}
 	return &objects.Object{
 		TagNumber: enc_obj.TagNumber,
 		TagClass:  false,
-		Length:    uint8(length),
+		Length:    uint32(length),
 		Data:      enc_obj.Data,
 		Value:     value,
 	}, nil

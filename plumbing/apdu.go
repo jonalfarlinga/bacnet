@@ -82,18 +82,30 @@ func (a *APDU) IsServerAck() bool {
 
 // UnmarshalBinary sets the values retrieved from byte sequence in a APDU frame.
 func (a *APDU) UnmarshalBinary(b []byte) error {
+	if len(b) == 0 {
+		return fmt.Errorf("unmarshal APDU: missing PDU type: %w", common.ErrTooShortToParse)
+	}
 	a.Type = b[0] >> 4
 	a.Flags = b[0] & 0xF
 
 	var offset int = 1
+	var err error
 	switch a.Type {
 	case UnConfirmedReq:
+		if len(b) < offset+1 {
+			return fmt.Errorf("unmarshal APDU: missing service choice: %w", common.ErrTooShortToParse)
+		}
 		a.Service = b[offset]
 		offset++
 		if len(b) > 2 {
-			a.Objects = parseObjectTags(b, offset, false)
+			if a.Objects, err = parseObjectTags(b, offset); err != nil {
+				return fmt.Errorf("unmarshal APDU: %w", err)
+			}
 		}
 	case ConfirmedReq:
+		if len(b) < offset+2 {
+			return fmt.Errorf("unmarshal APDU: confirmed request header: %w", common.ErrTooShortToParse)
+		}
 		a.MaxSeg = b[offset] >> 4
 		a.MaxSize = b[offset] & 0xF
 		offset++
@@ -104,12 +116,18 @@ func (a *APDU) UnmarshalBinary(b []byte) error {
 			return a.unmarshalSegmentHeader(b, offset)
 		}
 
+		if len(b) < offset+1 {
+			return fmt.Errorf("unmarshal APDU: missing service choice: %w", common.ErrTooShortToParse)
+		}
 		a.Service = b[offset]
 		offset++
-		if len(b) > 2 {
-			a.Objects = parseObjectTags(b, offset, false)
+		if a.Objects, err = parseObjectTags(b, offset); err != nil {
+			return fmt.Errorf("unmarshal APDU: %w", err)
 		}
 	case ComplexAck:
+		if len(b) < offset+1 {
+			return fmt.Errorf("unmarshal APDU: missing InvokeID: %w", common.ErrTooShortToParse)
+		}
 		a.InvokeID = b[offset]
 		offset++
 
@@ -117,29 +135,39 @@ func (a *APDU) UnmarshalBinary(b []byte) error {
 			return a.unmarshalSegmentHeader(b, offset)
 		}
 
+		if len(b) < offset+1 {
+			return fmt.Errorf("unmarshal APDU: missing service choice: %w", common.ErrTooShortToParse)
+		}
 		a.Service = b[offset]
 		offset++
-		a.Objects = parseObjectTags(b, offset, true)
+		if a.Objects, err = parseObjectTags(b, offset); err != nil {
+			return fmt.Errorf("unmarshal APDU: %w", err)
+		}
 	case SimpleAck, Error:
+		if len(b) < offset+2 {
+			return fmt.Errorf("unmarshal APDU: missing InvokeID or service choice: %w", common.ErrTooShortToParse)
+		}
 		a.InvokeID = b[offset]
 		offset++
 		a.Service = b[offset]
 		offset++
-		a.Objects = parseObjectTags(b, offset, true)
+		if a.Objects, err = parseObjectTags(b, offset); err != nil {
+			return fmt.Errorf("unmarshal APDU: %w", err)
+		}
 	case Reject, Abort:
 		if len(b) <= offset {
-			return fmt.Errorf("unmarshal APDU: missing InvokeID: %s", common.ErrTooShortToParse)
+			return fmt.Errorf("unmarshal APDU: missing InvokeID: %w", common.ErrTooShortToParse)
 		}
 		a.InvokeID = b[offset]
 		offset++
 
 		if len(b) <= offset {
-			return fmt.Errorf("unmarshal APDU: missing reason: %s", common.ErrTooShortToParse)
+			return fmt.Errorf("unmarshal APDU: missing reason: %w", common.ErrTooShortToParse)
 		}
 		a.Reason = b[offset]
 	case SegmentAck:
 		if len(b) < offset+3 {
-			return fmt.Errorf("unmarshal APDU: segment ack too short: %s", common.ErrTooShortToParse)
+			return fmt.Errorf("unmarshal APDU: segment ack too short: %w", common.ErrTooShortToParse)
 		}
 		a.InvokeID = b[offset]
 		offset++
@@ -162,7 +190,7 @@ func (a *APDU) UnmarshalBinary(b []byte) error {
 func (a *APDU) unmarshalSegmentHeader(b []byte, offset int) error {
 	if len(b) < offset+2 {
 		return fmt.Errorf(
-			"unmarshal APDU: segmented header at offset %d: %v",
+			"unmarshal APDU: segmented header at offset %d: %w",
 			offset, common.ErrTooShortToParse,
 		)
 	}
@@ -174,7 +202,7 @@ func (a *APDU) unmarshalSegmentHeader(b []byte, offset int) error {
 	if a.SequenceNumber == 0 {
 		if len(b) <= offset {
 			return fmt.Errorf(
-				"unmarshal APDU: segmented service choice at offset %d: %v",
+				"unmarshal APDU: segmented service choice at offset %d: %w",
 				offset, common.ErrTooShortToParse,
 			)
 		}
@@ -186,46 +214,19 @@ func (a *APDU) unmarshalSegmentHeader(b []byte, offset int) error {
 	return nil
 }
 
-// parseObjectTags decodes a run of application/context tags starting at
-// offset. When decodeBoolean is true, application-tagged booleans (tag
-// number 1) are decoded inline as their length nibble, matching the
-// ComplexAck/SimpleAck/Error encoding.
-func parseObjectTags(b []byte, offset int, decodeBoolean bool) []objects.APDUPayload {
+// parseObjectTags decodes the run of application/context tags from offset to
+// the end of b. The decoded tags do not alias b.
+func parseObjectTags(b []byte, offset int) ([]objects.APDUPayload, error) {
 	objs := []objects.APDUPayload{}
 	for offset < len(b) {
-		o := objects.Object{
-			TagNumber: b[offset] >> 4,
-			TagClass:  common.IntToBool(int(b[offset]) & 0x8 >> 3),
-			Length:    b[offset] & 0x7,
+		o, n, err := objects.DecodeTag(b[offset:])
+		if err != nil {
+			return nil, fmt.Errorf("tag %d at offset %d: %w", len(objs), offset, err)
 		}
-
-		// Handle extended value case
-		if o.Length == 5 {
-			offset++
-			o.Length = uint8(b[offset])
-		} else if o.Length > 5 {
-			offset++
-			objs = append(objs, &o)
-			continue
-		}
-
-		// Handle boolean data
-		if decodeBoolean && !o.TagClass && o.TagNumber == 1 {
-			o.Value = o.Length
-			objs = append(objs, &o)
-			offset++
-			continue
-		}
-
-		o.Data = b[offset+1 : offset+int(o.Length)+1]
-		objs = append(objs, &o)
-		offset += int(o.Length) + 1
-
-		if offset >= len(b) {
-			break
-		}
+		objs = append(objs, o)
+		offset += n
 	}
-	return objs
+	return objs, nil
 }
 
 // MarshalTo puts the byte sequence in the byte array given as b.
@@ -242,11 +243,6 @@ func (a *APDU) MarshalTo(b []byte) error {
 	var offset int = 0
 	b[offset] = a.Type<<4 | a.Flags
 	offset++
-
-	if a.Flags&0x2 == 1 {
-		b[offset] = (a.MaxSeg & 0x7 << 4) | (a.MaxSize & 0xF)
-		offset++
-	}
 
 	switch a.Type {
 	case UnConfirmedReq:
@@ -309,7 +305,7 @@ func (a *APDU) MarshalTo(b []byte) error {
 			}
 		}
 	case ConfirmedReq:
-		b[offset] |= (a.MaxSeg & 0x7 << 4) | (a.MaxSize & 0xF)
+		b[offset] = (a.MaxSeg & 0x7 << 4) | (a.MaxSize & 0xF)
 		offset++
 		b[offset] = a.InvokeID
 		offset++

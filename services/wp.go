@@ -157,12 +157,12 @@ func (c *ConfirmedWriteProperty) Decode() (ConfirmedWritePropertyDec, error) {
 		}
 
 		// add or remove context based on opening and closing tags
-		if enc_obj.Length == 6 {
+		if enc_obj.Kind == objects.TagOpening {
 			context = append(context, enc_obj.TagNumber)
 			continue
 		}
-		if enc_obj.Length == 7 {
-			if len(context) == 0 {
+		if enc_obj.Kind == objects.TagClosing {
+			if len(context) <= 1 {
 				return decCWP, fmt.Errorf(
 					"LogBufferCACK object at index %d has mismatched closing tag: %v",
 					i, common.ErrInvalidObjectType,

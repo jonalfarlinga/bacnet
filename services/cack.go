@@ -2,7 +2,6 @@ package services
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
@@ -21,6 +20,8 @@ type ComplexACKDec struct {
 	InstanceId uint32
 	PropertyId uint16
 	Tags       []*objects.Object
+	// Skipped holds the tags Decode did not recognise and left undecoded.
+	Skipped []*objects.Object
 }
 
 func ComplexACKObjects(objectType uint16, instN uint32, propertyId uint16, value interface{}) []objects.APDUPayload {
@@ -146,12 +147,12 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 		}
 
 		// add or remove context based on opening and closing tags
-		if enc_obj.Length == 6 {
+		if enc_obj.Kind == objects.TagOpening {
 			context = append(context, enc_obj.TagNumber)
 			continue
 		}
-		if enc_obj.Length == 7 {
-			if len(context) == 0 {
+		if enc_obj.Kind == objects.TagClosing {
+			if len(context) <= 1 {
 				return decCACK, fmt.Errorf(
 					"LogBufferCACK object at index %d has mismatched closing tag: %v",
 					i, common.ErrInvalidObjectType,
@@ -189,7 +190,7 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 				objs = append(objs, &objects.Object{
 					TagNumber: 0,
 					TagClass:  true,
-					Length:    uint8(obj.MarshalLen()),
+					Length:    uint32(obj.MarshalLen()),
 					Value:     objId,
 				})
 			case combine(3, 1):
@@ -200,7 +201,7 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 				objs = append(objs, &objects.Object{
 					TagNumber: 1,
 					TagClass:  true,
-					Length:    uint8(obj.MarshalLen()),
+					Length:    uint32(obj.MarshalLen()),
 					Value:     propId,
 				})
 			case combine(3, 3):
@@ -211,11 +212,11 @@ func (c *ComplexACK) Decode() (ComplexACKDec, error) {
 				objs = append(objs, &objects.Object{
 					TagNumber: 3,
 					TagClass:  true,
-					Length:    uint8(obj.MarshalLen()),
+					Length:    uint32(obj.MarshalLen()),
 					Value:     objId,
 				})
 			default:
-				log.Printf("Unknown Context object: context %v tag class %t tag number %d\n", context, enc_obj.TagClass, enc_obj.TagNumber)
+				decCACK.Skipped = append(decCACK.Skipped, enc_obj)
 			}
 		} else {
 			tag, err := decodeAppTags(enc_obj, &obj)

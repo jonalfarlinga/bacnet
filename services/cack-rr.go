@@ -2,7 +2,6 @@ package services
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
@@ -25,6 +24,8 @@ type LogBufferCACKDec struct {
 	MoreItems  bool
 	ItemCount  uint32
 	Tags       []*objects.Object
+	// Skipped holds the tags Decode did not recognise and left undecoded.
+	Skipped []*objects.Object
 }
 
 type StatusFlags struct {
@@ -57,12 +58,12 @@ func (c *ComplexACK) DecodeRR() (LogBufferCACKDec, error) {
 		}
 
 		// add or remove context based on opening and closing tags
-		if enc_obj.Length == 6 {
+		if enc_obj.Kind == objects.TagOpening {
 			context = append(context, enc_obj.TagNumber)
 			continue
 		}
-		if enc_obj.Length == 7 {
-			if len(context) == 0 {
+		if enc_obj.Kind == objects.TagClosing {
+			if len(context) <= 1 {
 				return decCACK, fmt.Errorf(
 					"LogBufferCACK object at index %d has mismatched closing tag: %v",
 					i, common.ErrInvalidObjectType,
@@ -111,7 +112,7 @@ func (c *ComplexACK) DecodeRR() (LogBufferCACKDec, error) {
 				objs = append(objs, &objects.Object{
 					TagNumber: 2,
 					TagClass:  true,
-					Length:    uint8(obj.MarshalLen()),
+					Length:    uint32(obj.MarshalLen()),
 					Value:     value,
 				})
 			case combine(5, 2):
@@ -122,7 +123,7 @@ func (c *ComplexACK) DecodeRR() (LogBufferCACKDec, error) {
 				objs = append(objs, &objects.Object{
 					TagNumber: 2,
 					TagClass:  true,
-					Length:    uint8(obj.MarshalLen()),
+					Length:    uint32(obj.MarshalLen()),
 					Value:     value,
 				})
 			case combine(1, 0):
@@ -133,11 +134,11 @@ func (c *ComplexACK) DecodeRR() (LogBufferCACKDec, error) {
 				objs = append(objs, &objects.Object{
 					TagNumber: 0,
 					TagClass:  true,
-					Length:    uint8(obj.MarshalLen()),
+					Length:    uint32(obj.MarshalLen()),
 					Value:     value,
 				})
 			default:
-				log.Printf("Unknown Context object: context %v tag class %t tag number %d\n", context, enc_obj.TagClass, enc_obj.TagNumber)
+				decCACK.Skipped = append(decCACK.Skipped, enc_obj)
 			}
 		} else {
 			tag, err := decodeAppTags(enc_obj, &obj)
@@ -158,6 +159,11 @@ func decResultsFlag(obj objects.APDUPayload) (bool, bool, bool, error) {
 	if !ok {
 		return false, false, false, common.ErrInvalidObjectType
 	}
+	if len(enc_obj.Data) < 2 {
+		return false, false, false, fmt.Errorf(
+			"result flags data length %d: %w", len(enc_obj.Data), common.ErrTooShortToParse,
+		)
+	}
 	first = enc_obj.Data[1]&0x80 == 0x80
 	last = enc_obj.Data[1]&0x40 == 0x40
 	more = enc_obj.Data[1]&0x20 == 0x20
@@ -169,6 +175,11 @@ func decStatusFlags(obj objects.APDUPayload) (StatusFlags, error) {
 	enc_obj, ok := obj.(*objects.Object)
 	if !ok {
 		return status, common.ErrInvalidObjectType
+	}
+	if len(enc_obj.Data) < 2 {
+		return status, fmt.Errorf(
+			"status flags data length %d: %w", len(enc_obj.Data), common.ErrTooShortToParse,
+		)
 	}
 	status.InAlarm = enc_obj.Data[1]&0x80 == 0x80
 	status.Fault = enc_obj.Data[1]&0x40 == 0x40

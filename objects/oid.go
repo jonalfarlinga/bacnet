@@ -22,11 +22,11 @@ func DecObjectIdentifier(rawPayload APDUPayload) (ObjectIdentifier, error) {
 
 	switch rawObject.TagClass {
 	case true:
-		if rawObject.Length != 4 {
+		if len(rawObject.Data) != 4 {
 			return decObjectId, fmt.Errorf("failed to decode ObjectID %+v: %v", rawObject, common.ErrWrongStructure)
 		}
 	case false:
-		if rawObject.Length != 4 || rawObject.TagNumber != TagBACnetObjectIdentifier {
+		if len(rawObject.Data) != 4 || rawObject.TagNumber != TagBACnetObjectIdentifier {
 			return decObjectId, fmt.Errorf("failed to decode ObjectID %+v: %v", rawObject, common.ErrWrongStructure)
 		}
 	}
@@ -47,6 +47,6 @@ func EncObjectIdentifier(contextTag bool, tagN uint8, objType uint16, instN uint
 	newObj.TagNumber = tagN
 	newObj.TagClass = contextTag
 	newObj.Data = data
-	newObj.Length = uint8(len(data))
+	newObj.Length = uint32(len(data))
 	return &newObj
 }

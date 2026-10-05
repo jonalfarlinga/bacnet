@@ -74,6 +74,16 @@ func NewReadForeignDeviceTable() *ReadForeignDeviceTable {
 	return &ReadForeignDeviceTable{BVLC: NewBVLC(BVLCFuncReadForeignDeviceTable)}
 }
 
+// UnmarshalBinary sets the values retrieved from byte sequence in a ReadForeignDeviceTable frame.
+func (r *ReadForeignDeviceTable) UnmarshalBinary(b []byte) error {
+	bvlc := &BVLC{}
+	if err := bvlc.UnmarshalBinary(b); err != nil {
+		return fmt.Errorf("unmarshalling ReadForeignDeviceTable: %v", err)
+	}
+	r.BVLC = bvlc
+	return nil
+}
+
 // GetService returns 0: Read-Foreign-Device-Table has no application service choice.
 func (r *ReadForeignDeviceTable) GetService() uint8 {
 	return 0

@@ -25,6 +25,18 @@ var TagMap = map[uint8]string{
 	TagBACnetObjectIdentifier: "BACnetObjectIdentifier",
 }
 
+// decUint decodes a 1-4 byte big-endian unsigned value.
+func decUint(data []byte) (uint32, bool) {
+	if len(data) < 1 || len(data) > 4 {
+		return 0, false
+	}
+	var value uint32
+	for _, b := range data {
+		value = value<<8 | uint32(b)
+	}
+	return value, true
+}
+
 // TagNumber 0
 func DecNull(rawPayload APDUPayload) error {
 	rawObject, ok := rawPayload.(*Object)
@@ -93,15 +105,8 @@ func DecUnsignedInteger(rawPayload APDUPayload) (uint32, error) {
 		)
 	}
 
-	switch rawObject.Length {
-	case 1:
-		return uint32(rawObject.Data[0]), nil
-	case 2:
-		return uint32(binary.BigEndian.Uint16(rawObject.Data)), nil
-	case 3:
-		return uint32(uint16(uint32(rawObject.Data[0])<<16) | binary.BigEndian.Uint16(rawObject.Data[1:])), nil
-	case 4:
-		return binary.BigEndian.Uint32(rawObject.Data), nil
+	if value, ok := decUint(rawObject.Data); ok {
+		return value, nil
 	}
 
 	return 0, fmt.Errorf(
@@ -129,7 +134,7 @@ func EncUnsignedInteger(value uint) *Object {
 	newObj.TagNumber = TagUnsignedInteger
 	newObj.TagClass = false
 	newObj.Data = data
-	newObj.Length = uint8(len(data))
+	newObj.Length = uint32(len(data))
 
 	return &newObj
 }
@@ -142,15 +147,13 @@ func DecSignedInteger(rawPayload APDUPayload) (int, error) {
 			"failed to decode SignedInteger - %+v: %v", rawPayload, common.ErrWrongPayload,
 		)
 	}
-	switch rawObject.Length {
-	case 1:
-		return int(int8(rawObject.Data[0])), nil
-	case 2:
-		return int(int16(binary.BigEndian.Uint16(rawObject.Data))), nil
-	case 3:
-		return int(int32(uint32(rawObject.Data[0])<<16) | int32(binary.BigEndian.Uint16(rawObject.Data[1:]))), nil
-	case 4:
-		return int(binary.BigEndian.Uint32(rawObject.Data)), nil
+	// Sign-extend from the most significant data byte.
+	if l := len(rawObject.Data); l >= 1 && l <= 4 {
+		value := int32(int8(rawObject.Data[0]))
+		for _, b := range rawObject.Data[1:] {
+			value = value<<8 | int32(b)
+		}
+		return int(value), nil
 	}
 	return 0, fmt.Errorf(
 		"failed to decode SignedInteger - %+v: %v", rawObject.Data, common.ErrNotImplemented,
@@ -180,7 +183,7 @@ func EncSignedInteger(value int) *Object {
 	newObj.TagNumber = TagSignedInteger
 	newObj.TagClass = false
 	newObj.Data = data
-	newObj.Length = uint8(len(data))
+	newObj.Length = uint32(len(data))
 
 	return &newObj
 }
@@ -200,6 +203,12 @@ func DecReal(rawPayload APDUPayload) (float32, error) {
 		)
 	}
 
+	if len(rawObject.Data) != 4 {
+		return 0, fmt.Errorf(
+			"failed to decode Real - data length %d: %w", len(rawObject.Data), common.ErrInvalidData,
+		)
+	}
+
 	return math.Float32frombits(binary.BigEndian.Uint32(rawObject.Data)), nil
 }
 
@@ -212,7 +221,7 @@ func EncReal(value float32) *Object {
 	newObj.TagNumber = TagReal
 	newObj.TagClass = false
 	newObj.Data = data
-	newObj.Length = uint8(len(data))
+	newObj.Length = uint32(len(data))
 
 	return &newObj
 }
@@ -223,6 +232,11 @@ func DecDouble(rawPayload APDUPayload) (float64, error) {
 	if !ok {
 		return 0, fmt.Errorf(
 			"failed to decode Double - %+v: %v", rawPayload, common.ErrWrongPayload,
+		)
+	}
+	if len(rawObject.Data) != 8 {
+		return 0, fmt.Errorf(
+			"failed to decode Double - data length %d: %w", len(rawObject.Data), common.ErrInvalidData,
 		)
 	}
 	return math.Float64frombits(binary.BigEndian.Uint64(rawObject.Data)), nil
@@ -237,7 +251,7 @@ func EncDouble(value float64) *Object {
 	newObj.TagNumber = TagDouble
 	newObj.TagClass = false
 	newObj.Data = data
-	newObj.Length = uint8(len(data))
+	newObj.Length = uint32(len(data))
 
 	return &newObj
 }
@@ -259,7 +273,7 @@ func EncOctetString(value []byte) *Object {
 	newObj.TagNumber = TagOctetString
 	newObj.TagClass = false
 	newObj.Data = value
-	newObj.Length = uint8(len(value))
+	newObj.Length = uint32(len(value))
 
 	return &newObj
 }
@@ -278,6 +292,11 @@ func DecString(rawPayload APDUPayload) (string, error) {
 			"DecString wrong tag number - %+v: %v", rawObject.TagNumber, common.ErrWrongStructure,
 		)
 	}
+	if len(rawObject.Data) == 0 {
+		return "", fmt.Errorf(
+			"DecString missing character set octet: %w", common.ErrTooShortToParse,
+		)
+	}
 	return string(rawObject.Data[1:]), nil
 }
 
@@ -286,7 +305,7 @@ func EncString(value string) *Object {
 	newObj.TagNumber = TagCharacterString
 	newObj.TagClass = false
 	newObj.Data = append([]byte{0}, []byte(value)...)
-	newObj.Length = uint8(len(newObj.Data))
+	newObj.Length = uint32(len(newObj.Data))
 	return &newObj
 }
 
@@ -344,7 +363,7 @@ func EncBitString(value []bool) *Object {
 	newObj.TagNumber = TagBitString
 	newObj.TagClass = false
 	newObj.Data = data
-	newObj.Length = uint8(len(data))
+	newObj.Length = uint32(len(data))
 
 	return &newObj
 }
@@ -364,15 +383,8 @@ func DecEnumerated(rawPayload APDUPayload) (uint32, error) {
 		)
 	}
 
-	switch rawObject.Length {
-	case 1:
-		return uint32(rawObject.Data[0]), nil
-	case 2:
-		return uint32(binary.BigEndian.Uint16(rawObject.Data)), nil
-	case 3:
-		return uint32(uint16(uint32(rawObject.Data[0])<<16) | binary.BigEndian.Uint16(rawObject.Data[1:])), nil
-	case 4:
-		return binary.BigEndian.Uint32(rawObject.Data), nil
+	if value, ok := decUint(rawObject.Data); ok {
+		return value, nil
 	}
 
 	return 0, fmt.Errorf(
@@ -380,16 +392,27 @@ func DecEnumerated(rawPayload APDUPayload) (uint32, error) {
 	)
 }
 
-func EncEnumerated(value uint8) *Object {
+func EncEnumerated(value uint32) *Object {
 	newObj := Object{}
 
-	data := make([]byte, 1)
-	data[0] = value
+	var data []byte
+	switch {
+	case value <= 0xFF:
+		data = []byte{byte(value)}
+	case value <= 0xFFFF:
+		data = make([]byte, 2)
+		binary.BigEndian.PutUint16(data, uint16(value))
+	case value <= 0xFFFFFF:
+		data = []byte{byte(value >> 16), byte(value >> 8), byte(value)}
+	default:
+		data = make([]byte, 4)
+		binary.BigEndian.PutUint32(data, value)
+	}
 
 	newObj.TagNumber = TagEnumerated
 	newObj.TagClass = false
 	newObj.Data = data
-	newObj.Length = uint8(len(data))
+	newObj.Length = uint32(len(data))
 
 	return &newObj
 }
@@ -400,6 +423,12 @@ func DecDate(rawPayload APDUPayload) (time.Time, error) {
 	if !ok {
 		return time.Time{}, fmt.Errorf(
 			"failed to decode Date - %+v: %v", rawPayload, common.ErrWrongPayload,
+		)
+	}
+
+	if len(rawObject.Data) != 4 {
+		return time.Time{}, fmt.Errorf(
+			"failed to decode Date - data length %d: %w", len(rawObject.Data), common.ErrInvalidData,
 		)
 	}
 
@@ -424,9 +453,9 @@ func DecTime(rawPayload APDUPayload) (time.Time, error) {
 		)
 	}
 
-	if rawObject.Length != 4 {
+	if len(rawObject.Data) != 4 {
 		return time.Time{}, fmt.Errorf(
-			"failed to decode Time - wrong length - %+v: %v", rawObject.Length,
+			"failed to decode Time - wrong length - %+v: %v", len(rawObject.Data),
 			common.ErrWrongStructure,
 		)
 	}

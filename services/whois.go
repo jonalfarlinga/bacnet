@@ -2,7 +2,6 @@ package services
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
@@ -18,6 +17,8 @@ type UnconfirmedWhoIs struct {
 
 type UnconfirmedWhoIsDec struct {
 	Tags []*objects.Object
+	// Skipped holds the tags Decode did not recognise and left undecoded.
+	Skipped []*objects.Object
 }
 
 // NewUnconfirmedWhoIs creates a UnconfirmedWhoIs.
@@ -128,12 +129,12 @@ func (u *UnconfirmedWhoIs) Decode() (UnconfirmedWhoIsDec, error) {
 		}
 
 		// add or remove context based on opening and closing tags
-		if enc_obj.Length == 6 {
+		if enc_obj.Kind == objects.TagOpening {
 			context = append(context, enc_obj.TagNumber)
 			continue
 		}
-		if enc_obj.Length == 7 {
-			if len(context) == 0 {
+		if enc_obj.Kind == objects.TagClosing {
+			if len(context) <= 1 {
 				return decWhois, fmt.Errorf(
 					"LogBufferCACK object at index %d has mismatched closing tag: %v",
 					i, common.ErrInvalidObjectType,
@@ -155,7 +156,7 @@ func (u *UnconfirmedWhoIs) Decode() (UnconfirmedWhoIsDec, error) {
 					TagNumber: 0,
 					TagClass:  true,
 					Value:     lowRange,
-					Length:    uint8(obj.MarshalLen()),
+					Length:    uint32(obj.MarshalLen()),
 				})
 			case combine(8, 1):
 				highRange, err := objects.DecUnsignedInteger(obj)
@@ -166,10 +167,10 @@ func (u *UnconfirmedWhoIs) Decode() (UnconfirmedWhoIsDec, error) {
 					TagNumber: 1,
 					TagClass:  true,
 					Value:     highRange,
-					Length:    uint8(obj.MarshalLen()),
+					Length:    uint32(obj.MarshalLen()),
 				})
 			default:
-				log.Printf("Unknown Context object: context %v tag class %t tag number %d\n", context, enc_obj.TagClass, enc_obj.TagNumber)
+				decWhois.Skipped = append(decWhois.Skipped, enc_obj)
 			}
 		} else {
 			tag, err := decodeAppTags(enc_obj, &obj)

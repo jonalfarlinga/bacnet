@@ -46,7 +46,7 @@ func Parse(b []byte) (plumbing.BACnet, error) {
 
 	if len(b) < bacnetLenMin {
 		return nil, fmt.Errorf(
-			"parsing length %d: %v", len(b), common.ErrTooShortToParse,
+			"parsing length %d: %w", len(b), common.ErrTooShortToParse,
 		)
 	}
 
@@ -59,7 +59,7 @@ func Parse(b []byte) (plumbing.BACnet, error) {
 	offset := bvlc.MarshalLen()
 
 	if err := npdu.UnmarshalBinary(parseBuf[offset:]); err != nil {
-		return nil, fmt.Errorf("parsing NPDU %x: %v", parseBuf[offset:], err)
+		return nil, fmt.Errorf("parsing NPDU %x: %w", parseBuf[offset:], err)
 	}
 	offset += npdu.MarshalLen()
 
@@ -73,7 +73,7 @@ func Parse(b []byte) (plumbing.BACnet, error) {
 
 	if len(parseBuf) <= offset {
 		return nil, fmt.Errorf(
-			"parsing APDU offset %d in %d bytes: %v",
+			"parsing APDU offset %d in %d bytes: %w",
 			offset,
 			len(parseBuf),
 			common.ErrTooShortToParse,
@@ -82,7 +82,7 @@ func Parse(b []byte) (plumbing.BACnet, error) {
 
 	var apdu plumbing.APDU
 	if err := apdu.UnmarshalBinary(parseBuf[offset:]); err != nil {
-		return nil, fmt.Errorf("parsing APDU %x: %v", parseBuf[offset:], err)
+		return nil, fmt.Errorf("parsing APDU %x: %w", parseBuf[offset:], err)
 	}
 
 	return wrapParsedMessage(&bvlc, &npdu, &apdu)
@@ -134,7 +134,7 @@ func parseLenientRoutedNPDU(b []byte) (plumbing.BACnet, error) {
 
 	if len(parseBuf) <= offset {
 		return nil, fmt.Errorf(
-			"parsing APDU offset %d in %d bytes: %v",
+			"parsing APDU offset %d in %d bytes: %w",
 			offset,
 			len(parseBuf),
 			common.ErrTooShortToParse,
@@ -143,7 +143,7 @@ func parseLenientRoutedNPDU(b []byte) (plumbing.BACnet, error) {
 
 	var apdu plumbing.APDU
 	if err := apdu.UnmarshalBinary(parseBuf[offset:]); err != nil {
-		return nil, fmt.Errorf("parsing APDU %x: %v", parseBuf[offset:], err)
+		return nil, fmt.Errorf("parsing APDU %x: %w", parseBuf[offset:], err)
 	}
 
 	return wrapParsedMessage(&bvlc, &npdu, &apdu)

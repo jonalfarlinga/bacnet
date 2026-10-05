@@ -1,0 +1,6 @@
+# UDP payloads of traffcaps/BACnet_doc.pcapng, one frame per line, in capture order.
+# Regenerate: tshark -r traffcaps/BACnet_doc.pcapng -T fields -e udp.payload
+810b000801001008
+810b00190120ffff00ff1000c40200007b2205c49103220104
+810a001101040005010c0c004000011955
+810a0017010030010c0c0040000119553e443f8ccccd3f
