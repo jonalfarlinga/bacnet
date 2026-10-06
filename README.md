@@ -42,6 +42,50 @@ You can find more information on Task on its [official site](https://taskfile.de
 binary with no arguments to get an idea of what it can do. You can also take a look at its implementation: it's a
 good example of how to use the library on your own project!
 
+## Explorer
+`cmd/explorer` is a web UI for browsing a BACnet network, in the manner of YABE. On load it broadcasts a
+Who-Is and lists the devices that answer. Picking a device reads its object list and hangs the objects
+under it, with their names, present values and status flags; devices behind a router hang off the router,
+under their network number. Picking an object reads all of its properties.
+
+It is read-only: it sends Who-Is, ReadProperty and ReadPropertyMultiple requests, and the Segment-ACKs that
+segmented replies need, and refuses to send anything else. It does not write, subscribe, send an I-Am or
+answer what devices send to it.
+
+The UI is a React app in `web/` that is compiled into the binary, so it has to be built first (a current Node
+LTS):
+
+    # Build the UI into web/dist.
+    $ cd web
+    $ npm install
+    $ npm run build
+    $ cd ..
+
+    # Browse the network on an adapter, given by name or by IPv4 address.
+    $ go run ./cmd/explorer -interface "Ethernet 3"
+
+    # Or try it on simulated devices, with no network involved.
+    $ go run ./cmd/explorer -sim
+
+Then open http://127.0.0.1:8080. Without `-interface` the UI asks which adapter to use, unless there is only
+one, and remembers the answer. The explorer needs UDP port 47808 on that adapter to hear the I-Ams, so it
+cannot share an adapter with another BACnet program such as YABE. `-h` lists the other flags.
+
+To work on the UI, run the explorer and then `npm run dev` in `web/`: Vite serves the UI with hot reload and
+passes `/api` on to the explorer.
+
+| Directory | What is in it |
+|---|---|
+| `cmd/explorer` | The program: flags and wiring |
+| `internal/client` | One UDP socket, request and reply matching, segmented replies, the read-only guard |
+| `internal/discovery` | The devices and objects found so far, and the reads that fill them in |
+| `internal/api` | The HTTP API and the event stream the UI listens to |
+| `internal/sim` | The simulated devices behind `-sim`, which the tests also use |
+| `web` | The UI |
+
+This is the browsing part of [docs/explorer-spec.md](docs/explorer-spec.md). Foreign-device registration,
+historizing, charts and the packet log in that spec are not built yet.
+
 ## Running the examples
 In order to check our implementation is compliant, we interact with the server implementation offered by the
 [`bacnet-stack/bacnet-stack`](https://github.com/bacnet-stack/bacnet-stack/tree/master) project. We have added

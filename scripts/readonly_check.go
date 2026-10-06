@@ -5,13 +5,15 @@
 //
 //	go run scripts/readonly_check.go -remote 192.168.1.100
 //	go run scripts/readonly_check.go -remote 10.0.0.1 -dnet 16604 -dadr 0c
+//	go run scripts/readonly_check.go -remote 10.0.0.1 -routers -local :47808
 //
 // It never changes the device. The only things it sends are ReadProperty,
 // ReadPropertyMultiple and ReadRange requests, the Segment-ACKs that a
-// segmented reply needs, and, with -whois, one unicast Who-Is. Everything
-// goes through one send function that refuses anything else. It does not
-// subscribe, write, announce itself with an I-Am, or answer what the device
-// sends to it.
+// segmented reply needs, with -whois, one unicast Who-Is, and, with -routers,
+// one unicast Who-Is-Router-To-Network. Every APDU goes through one send
+// function that refuses anything else, and the router query is built in one
+// place with nothing in it to vary. It does not subscribe, write, announce
+// itself with an I-Am, or answer what the device sends to it.
 //
 // Requests go out one at a time with -delay between them. The exit status is
 // 0 when no check failed, 1 when one did, and 2 when it could not start.
@@ -43,6 +45,7 @@ var (
 	flagDADR    = flag.String("dadr", "", "MAC address of a routed device on -dnet, in hex (for example 0c, or c0a80164bac0)")
 	flagDevice  = flag.Int("device", -1, "device instance; found by reading the wildcard instance if left out")
 	flagWhoIs   = flag.Bool("whois", false, "also send one unicast Who-Is (the I-Am it triggers may be broadcast on the device's network)")
+	flagRouters = flag.Bool("routers", false, "also send one unicast Who-Is-Router-To-Network to -remote, to learn the networks behind it (the answer is usually broadcast: give -local :47808 from its subnet to hear it)")
 	flagSegment = flag.Bool("segment-test", false, "also re-read the object list with a 50-byte max-APDU, to make the device segment its reply")
 	flagMaxObj  = flag.Int("max-objects", 50, "how many objects of the object list to read")
 	flagHistory = flag.Int("history", 10, "how many records to read from each of the first 3 trend logs; 0 skips ReadRange")
@@ -123,12 +126,16 @@ func main() {
 
 	fmt.Printf("read-only check of %s from %s at %s\n", c.targetName(), c.conn.LocalAddr(), time.Now().Format(time.RFC3339))
 
+	if *flagRouters {
+		c.routers()
+	}
 	if *flagWhoIs {
 		c.whoIs()
 	}
 	inst, ok := c.identify()
 	if ok {
 		supported := c.device(inst)
+		c.addressBindings(inst)
 		objs := c.objectList(inst)
 		c.points(objs, supported)
 		c.priorityArray(objs)
@@ -575,6 +582,74 @@ func (c *checker) whoIs() {
 	}
 }
 
+// routers asks -remote which networks it routes to. The message is built here
+// and nowhere else: it names no network, so it asks about all of them, and it
+// changes nothing in the router.
+func (c *checker) routers() {
+	fmt.Println("\n== Routed networks")
+	const check = "Who-Is-Router-To-Network"
+	m := plumbing.NewNetworkMessage(
+		plumbing.NewBVLC(plumbing.BVLCFuncUnicast),
+		plumbing.NewNPDU(false, false, false, false),
+		plumbing.NetMsgWhoIsRouterToNetwork,
+		nil,
+	)
+	b, err := m.MarshalBinary()
+	if err == nil {
+		err = c.write(check, b)
+	}
+	if err != nil {
+		c.rec("routing", check, "FAIL", err.Error())
+		return
+	}
+
+	// A router may answer in more than one message, so listen until the
+	// timeout instead of stopping at the first.
+	var nets []string
+	deadline := time.Now().Add(*flagTimeout)
+	for {
+		msg, raw, err := c.recv(deadline)
+		if err != nil {
+			if raw != nil {
+				// Something else the device sent, which this library cannot parse.
+				continue
+			}
+			var ne net.Error
+			if !errors.As(err, &ne) || !ne.Timeout() {
+				c.rec("routing", check, "FAIL", err.Error())
+				return
+			}
+			break
+		}
+		nm, ok := msg.(*plumbing.NetworkMessage)
+		if !ok {
+			continue
+		}
+		switch nm.Type {
+		case plumbing.NetMsgIAmRouterToNetwork:
+			list, err := nm.Networks()
+			if err != nil {
+				c.rec("routing", check, "FAIL", "decoding the I-Am-Router-To-Network: "+err.Error())
+				return
+			}
+			for _, n := range list {
+				nets = append(nets, fmt.Sprint(n))
+			}
+		case plumbing.NetMsgRejectMessageToNetwork:
+			if reason, _, err := nm.RejectReason(); err == nil {
+				c.rec("routing", check, "INFO", "rejected: "+routerRejectName(reason)+"; it is probably not a router")
+				return
+			}
+		}
+	}
+	if len(nets) == 0 {
+		c.rec("routing", check, "INFO",
+			"no I-Am-Router-To-Network arrived here; either it routes to no other network, or it broadcast the answer, which a socket on another port or subnet does not see")
+		return
+	}
+	c.rec("routing", check, "PASS", "routes to network(s) "+strings.Join(nets, ", "))
+}
+
 // identify finds the device instance by reading the Device object under its
 // wildcard instance, which every device answers for itself.
 func (c *checker) identify() (uint32, bool) {
@@ -647,6 +722,89 @@ func (c *checker) device(inst uint32) []bool {
 		c.rec("device", "services it executes", "INFO", strings.Join(names, ", "))
 	}
 	return supported
+}
+
+// addressBindings reads the devices that this one holds an address for. One
+// on another network is reached through a router, so it is a device of its
+// own and not a set of objects in this one.
+func (c *checker) addressBindings(inst uint32) {
+	const check = "device-address-binding"
+	tags, _, err := c.readProperty(objects.ObjectTypeDevice, inst, objects.PropertyIdDeviceAddressBinding)
+	switch {
+	case declined(err):
+		c.rec("device", check, "INFO", err.Error())
+		return
+	case err != nil:
+		c.rec("device", check, "FAIL", err.Error())
+		return
+	case len(tags) == 0:
+		c.rec("device", check, "INFO", "empty: it holds no other device's address right now")
+		return
+	}
+
+	// Each binding is a device identifier, a network number and a MAC address.
+	type binding struct {
+		inst, network uint32
+		mac           []byte
+	}
+	var found []binding
+	for i := 0; i+2 < len(tags); i += 3 {
+		dev, okDev := tags[i].Value.(objects.ObjectIdentifier)
+		network, okNet := tags[i+1].Value.(uint32)
+		mac, okMAC := tags[i+2].Value.([]byte)
+		if !okDev || !okNet || !okMAC {
+			break
+		}
+		found = append(found, binding{dev.InstanceNumber, network, mac})
+	}
+	if len(found)*3 != len(tags) {
+		c.rec("device", check, "FAIL", "unexpected value: "+fmtTags(tags))
+		return
+	}
+	sort.Slice(found, func(i, j int) bool {
+		if found[i].network != found[j].network {
+			return found[i].network < found[j].network
+		}
+		return found[i].inst < found[j].inst
+	})
+
+	// A device may give its own network by number instead of as 0, so the
+	// count per network is all that can be said about which ones are routed.
+	var counts []string
+	for i, n := 0, 0; i < len(found); i += n {
+		for n = 1; i+n < len(found) && found[i+n].network == found[i].network; n++ {
+		}
+		counts = append(counts, fmt.Sprintf("%d on %s", n, networkName(found[i].network)))
+	}
+	c.rec("device", check, "PASS", fmt.Sprintf("%d device(s): %s", len(found), strings.Join(counts, ", ")))
+
+	for _, b := range found {
+		where := fmt.Sprintf("-dnet %d -dadr %x", b.network, b.mac)
+		if addr, ok := bipAddr(b.mac); ok {
+			// A BACnet/IP device answers at its own address, without a router.
+			where = "BACnet/IP, -remote " + addr
+		} else if b.network == 0 {
+			where = fmt.Sprintf("MAC %x", b.mac)
+		}
+		fmt.Printf("       device %d on %s: %s\n", b.inst, networkName(b.network), where)
+	}
+}
+
+func networkName(network uint32) string {
+	if network == 0 {
+		return "its own network"
+	}
+	return fmt.Sprintf("network %d", network)
+}
+
+// bipAddr renders a MAC address as an IP address and port when it is a
+// BACnet/IP one. Any 6 bytes could be one, so it goes by the port: BACnet/IP
+// uses 47808 to 47823 (0xBAC0 to 0xBACF).
+func bipAddr(mac []byte) (string, bool) {
+	if len(mac) != 6 || mac[4] != 0xBA || mac[5]&0xF0 != 0xC0 {
+		return "", false
+	}
+	return fmt.Sprintf("%s:%d", net.IP(mac[:4]), uint16(mac[4])<<8|uint16(mac[5])), true
 }
 
 func (c *checker) objectList(inst uint32) []objects.ObjectIdentifier {
