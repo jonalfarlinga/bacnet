@@ -72,6 +72,11 @@ Then open http://127.0.0.1:8080. Without `-interface` the UI asks which adapter 
 one, and remembers the answer. The explorer needs UDP port 47808 on that adapter to hear the I-Ams, so it
 cannot share an adapter with another BACnet program such as YABE. `-h` lists the other flags.
 
+When a device that should answer does not appear, run with `-log debug`: it prints every I-Am heard and every
+datagram dropped, with the reason, so you can tell a device that never answered from one whose answer was
+refused. `-frames file` writes every datagram sent and received to a file in hex, which the test fixtures can
+be made from.
+
 Devices behind BACnet routers are found through the Who-Is, which is addressed to every network; the
 explorer learns which router serves each network from their replies, and asks with Who-Is-Router-To-Network
 when it has to. A BACnet network on another IP subnet, which broadcasts do not reach, is reached through its
