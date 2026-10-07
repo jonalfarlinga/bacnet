@@ -93,6 +93,19 @@ or is read again (one listed by address is read again at once), a point when its
 A point the admin decided about stays listed if its device no longer has it, marked not responding, so that
 the loss is seen rather than silent.
 
+**Remove** in the admin panel forgets the picked points, for ones that have moved or are gone: they leave the
+registry and the tree. The button asks twice. A point the device still has comes back as new the next time
+the device is read.
+
+### The background walk
+Opening a device in the UI reads its points at once. The explorer also reads every device's points on its
+own, in the background, so that the registry fills without anyone clicking: the walk takes devices in turn,
+never walked first, then longest ago, and reads each one's object list and points. It is paced by a budget of
+points a minute, `-walk` (60 unless set; 0 turns it off), counted per object touched, so a device of 240
+points takes four minutes and the network barely notices. It stands aside whenever a device is being read
+for someone else, and comes back to a device after `-walk-again` (a day). The admin panel's footer shows
+where it stands.
+
 When a device that should answer does not appear, run with `-log debug`: it prints every I-Am heard and every
 datagram dropped, with the reason, so you can tell a device that never answered from one whose answer was
 refused. `-frames file` writes every datagram sent and received to a file in hex, which the test fixtures can
