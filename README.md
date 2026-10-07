@@ -97,14 +97,17 @@ passes `/api` on to the explorer.
 | Directory | What is in it |
 |---|---|
 | `cmd/explorer` | The program: flags and wiring |
-| `client` | One UDP socket, request and reply matching, segmented replies, the routing table, foreign-device registration, the read-only guard |
-| `internal/discovery` | The devices and objects found so far, and the reads that fill them in |
-| `internal/api` | The HTTP API and the event stream the UI listens to |
+| `internal/explorer` | The core: the node model, the `Source` interface, and the registry that holds what every source has found and streams it as events. It knows no protocol. |
+| `internal/source/bacnet` | The BACnet/IP source: discovery, add-by-address, how a device's objects and properties are read, and how values are rendered |
+| `internal/api` | The HTTP API and the event stream the UI listens to: sources and nodes, nothing protocol-shaped |
+| `client` | The BACnet/IP client the source reads through: one UDP socket, request and reply matching, segmented replies, the routing table, foreign-device registration, the read-only guard |
 | `client/sim` | The simulated devices behind `-sim`, which the tests also use |
-| `web` | The UI |
+| `web` | The UI: a tree of nodes and a detail pane, drawn from what the sources describe |
 
-This is the browsing part of [docs/explorer-spec.md](docs/explorer-spec.md). Historizing, charts and the
-packet log in that spec are not built yet.
+This is the browsing part of [docs/explorer-spec.md](docs/explorer-spec.md), built on the source-neutral
+core of [docs/explorer-sources-spec.md](docs/explorer-sources-spec.md): a second protocol is a second
+`Source`, and the core, API and UI do not change for it. Historizing, charts and the packet log in the
+explorer spec are not built yet.
 
 ## Running the examples
 In order to check our implementation is compliant, we interact with the server implementation offered by the
