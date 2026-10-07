@@ -24,3 +24,6 @@ node_modules/
 web/dist/*
 !web/dist/.gitkeep
 !web/public/.gitkeep
+
+# The explorer's store: what it found, and the admin's decisions.
+data/

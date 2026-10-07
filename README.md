@@ -78,6 +78,21 @@ listed by its address instead: **Add by address** in the header takes an IP (wit
 I-Am would have said and goes on as for any other device. The device must answer unicast from the machine,
 which across subnets needs an IP route to it; a device so listed is marked "added by address".
 
+### The store and the admin panel
+The explorer keeps what it finds in a directory, `-store` (`data` unless set). Every device and point it
+discovers goes into `temp.json` there, with what the source needs to reach it again, as it is discovered.
+The **Admin** button in the header lists the points by the decision taken about them: new, tracked or
+sidelined. Pick points, in batch, and press Track or Sideline. Each decision writes the whole registry anew to
+`registry_<datetime>.json`, so the latest file is the registry in force and the older ones are its history;
+the decided points, with their devices, leave `temp.json`. The decision is for the data consumers: the
+explorer shows every point either way, marked `new`, `tracked` or `sidelined`.
+
+On start, the explorer loads the latest registry and `temp.json` first and only then starts discovery.
+Everything loaded is marked "not responding" until it is heard from: a device when it answers the Who-Is
+or is read again (one listed by address is read again at once), a point when its device's points are read.
+A point the admin decided about stays listed if its device no longer has it, marked not responding, so that
+the loss is seen rather than silent.
+
 When a device that should answer does not appear, run with `-log debug`: it prints every I-Am heard and every
 datagram dropped, with the reason, so you can tell a device that never answered from one whose answer was
 refused. `-frames file` writes every datagram sent and received to a file in hex, which the test fixtures can
