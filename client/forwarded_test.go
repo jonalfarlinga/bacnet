@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jonalfarlinga/bacnet/internal/client"
+	"github.com/jonalfarlinga/bacnet/client"
 	"github.com/jonalfarlinga/bacnet/plumbing"
 	"github.com/jonalfarlinga/bacnet/services"
 )

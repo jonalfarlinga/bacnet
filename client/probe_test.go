@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jonalfarlinga/bacnet/internal/client"
-	"github.com/jonalfarlinga/bacnet/internal/sim"
+	"github.com/jonalfarlinga/bacnet/client"
+	"github.com/jonalfarlinga/bacnet/client/sim"
 )
 
 // A device that no Who-Is reaches is described by reading it.

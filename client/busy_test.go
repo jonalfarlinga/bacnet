@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jonalfarlinga/bacnet/internal/sim"
+	"github.com/jonalfarlinga/bacnet/client/sim"
 	"github.com/jonalfarlinga/bacnet/objects"
 	"github.com/jonalfarlinga/bacnet/plumbing"
 )

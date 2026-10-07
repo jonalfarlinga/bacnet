@@ -97,10 +97,10 @@ passes `/api` on to the explorer.
 | Directory | What is in it |
 |---|---|
 | `cmd/explorer` | The program: flags and wiring |
-| `internal/client` | One UDP socket, request and reply matching, segmented replies, the routing table, foreign-device registration, the read-only guard |
+| `client` | One UDP socket, request and reply matching, segmented replies, the routing table, foreign-device registration, the read-only guard |
 | `internal/discovery` | The devices and objects found so far, and the reads that fill them in |
 | `internal/api` | The HTTP API and the event stream the UI listens to |
-| `internal/sim` | The simulated devices behind `-sim`, which the tests also use |
+| `client/sim` | The simulated devices behind `-sim`, which the tests also use |
 | `web` | The UI |
 
 This is the browsing part of [docs/explorer-spec.md](docs/explorer-spec.md). Historizing, charts and the
@@ -219,7 +219,7 @@ to broadcast there.
 The same `-bbmd -only` query tells whether any BACnet/IP device is a BBMD: one answers with its tables,
 another refuses or stays silent. Run it against each panel on a subnet to find its BBMD.
 
-The same scenario runs without any of this on the simulated devices: the `internal/client` tests register
+The same scenario runs without any of this on the simulated devices: the `client` tests register
 with a simulated BBMD, discover and read the devices behind it, and are refused by one that NAKs.
 
 #### Testing our ReadProperty server
