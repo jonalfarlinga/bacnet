@@ -72,6 +72,12 @@ Then open http://127.0.0.1:8080. Without `-interface` the UI asks which adapter 
 one, and remembers the answer. The explorer needs UDP port 47808 on that adapter to hear the I-Ams, so it
 cannot share an adapter with another BACnet program such as YABE. `-h` lists the other flags.
 
+A device that no Who-Is reaches, because it is on another IP subnet or does not announce itself, can be
+listed by its address instead: **Add by address** in the header takes an IP (with `:port` when it is not
+47808), and `-add 10.22.60.3,10.22.60.4` does the same at startup. The explorer reads what the device's
+I-Am would have said and goes on as for any other device. The device must answer unicast from the machine,
+which across subnets needs an IP route to it; a device so listed is marked "added by address".
+
 When a device that should answer does not appear, run with `-log debug`: it prints every I-Am heard and every
 datagram dropped, with the reason, so you can tell a device that never answered from one whose answer was
 refused. `-frames file` writes every datagram sent and received to a file in hex, which the test fixtures can
