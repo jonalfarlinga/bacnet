@@ -48,9 +48,10 @@ Who-Is and lists the devices that answer. Picking a device reads its object list
 under it, with their names, present values and status flags; devices behind a router hang off the router,
 under their network number. Picking an object reads all of its properties.
 
-It is read-only: it sends Who-Is, ReadProperty and ReadPropertyMultiple requests, and the Segment-ACKs that
-segmented replies need, and refuses to send anything else. It does not write, subscribe, send an I-Am or
-answer what devices send to it.
+It is read-only: it sends Who-Is, ReadProperty and ReadPropertyMultiple requests, the Segment-ACKs that
+segmented replies need, Who-Is-Router-To-Network to find the router for a network, and with `-bbmd`, the
+foreign-device registration and the table reads of the BBMD, and refuses to send anything else. It does not
+write, subscribe, send an I-Am or answer what devices send to it.
 
 The UI is a React app in `web/` that is compiled into the binary, so it has to be built first (a current Node
 LTS):
@@ -71,20 +72,28 @@ Then open http://127.0.0.1:8080. Without `-interface` the UI asks which adapter 
 one, and remembers the answer. The explorer needs UDP port 47808 on that adapter to hear the I-Ams, so it
 cannot share an adapter with another BACnet program such as YABE. `-h` lists the other flags.
 
+Devices behind BACnet routers are found through the Who-Is, which is addressed to every network; the
+explorer learns which router serves each network from their replies, and asks with Who-Is-Router-To-Network
+when it has to. A BACnet network on another IP subnet, which broadcasts do not reach, is reached through its
+BBMD: with `-bbmd 10.0.124.2` the explorer registers with it as a foreign device, sends its broadcasts to it as
+Distribute-Broadcast-To-Network, and gets the subnet's broadcasts back forwarded. The registration lasts
+`-bbmd-ttl` (5 minutes unless set) and is renewed halfway through; if the BBMD refuses it or stops answering,
+the explorer tries again with a growing backoff, from 5 seconds to 5 minutes.
+
 To work on the UI, run the explorer and then `npm run dev` in `web/`: Vite serves the UI with hot reload and
 passes `/api` on to the explorer.
 
 | Directory | What is in it |
 |---|---|
 | `cmd/explorer` | The program: flags and wiring |
-| `internal/client` | One UDP socket, request and reply matching, segmented replies, the read-only guard |
+| `internal/client` | One UDP socket, request and reply matching, segmented replies, the routing table, foreign-device registration, the read-only guard |
 | `internal/discovery` | The devices and objects found so far, and the reads that fill them in |
 | `internal/api` | The HTTP API and the event stream the UI listens to |
 | `internal/sim` | The simulated devices behind `-sim`, which the tests also use |
 | `web` | The UI |
 
-This is the browsing part of [docs/explorer-spec.md](docs/explorer-spec.md). Foreign-device registration,
-historizing, charts and the packet log in that spec are not built yet.
+This is the browsing part of [docs/explorer-spec.md](docs/explorer-spec.md). Historizing, charts and the
+packet log in that spec are not built yet.
 
 ## Running the examples
 In order to check our implementation is compliant, we interact with the server implementation offered by the
@@ -156,6 +165,47 @@ From the VM we just need to run some clients:
 
 Do bear in mind you can find the predefined devices and mock data on `bacnet-stack`'s server on
 `bacnet-stack/apps/server/epics_vts3.tpi`.
+
+#### Testing as a foreign device
+The foreign-device code has to be tested with the client truly foreign: on a subnet whose broadcasts do not
+reach the devices, so that everything arrives through the BBMD. The `Vagrantfile` defines two subnets for
+that:
+
+    host (client)            foovm                         barvm
+    10.0.123.1  ── net A ──  10.0.123.2 | 10.0.124.2  ── net B ──  10.0.124.3
+                             IP router + bacserv (BBMD)             bacserv (device)
+                             BACnet bound to the net B side
+
+Net A is the private network above. Net B is a VirtualBox internal network the host is not attached to:
+`foovm` has a second adapter on it and forwards IP between the two, and `barvm` is on net B alone, with its
+route to net A through `foovm`. The host needs one static route for net B, which is the only manual step:
+
+    # Windows (as administrator); on Linux: ip route add 10.0.124.0/24 via 10.0.123.2
+    $ route add 10.0.124.0 mask 255.255.255.0 10.0.123.2
+
+Then on `foovm`, run `bacserv` as the BBMD, bound to its net B side (the Linux port of `bacnet-stack` is
+built with BBMD support), and on `barvm`, run it as an ordinary device:
+
+    # foovm: the BBMD, bound to the net B adapter.
+    $ export BACNET_IFACE=enp0s9
+    $ ./bacserv 124 bbmd
+
+    # barvm: a device on net B.
+    $ export BACNET_IFACE=enp0s8
+    $ ./bacserv 125 bar
+
+From the host, the explorer registers with the BBMD and finds `barvm` through it:
+
+    $ go run ./cmd/explorer -interface 10.0.123.1 -bbmd 10.0.124.2
+
+What to check: the explorer prints that it is a foreign device of the BBMD; device 125 appears, at
+10.0.124.3 and not at the BBMD's address; its objects read; `scripts/readonly_check.go -remote 10.0.124.2`
+lists the host in the BBMD's foreign device table; and without `-bbmd`, the same Who-Is finds nothing, which
+proves the client is foreign. If the BBMD does not forward the Who-Is onto net B, read its broadcast
+distribution table: it must contain its own net B address for it to broadcast there.
+
+The same scenario runs without any of this on the simulated devices: the `internal/client` tests register
+with a simulated BBMD, discover and read the devices behind it, and are refused by one that NAKs.
 
 #### Testing our ReadProperty server
 From macOS we can just run:

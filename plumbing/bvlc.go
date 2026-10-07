@@ -11,11 +11,17 @@ import (
 // BVLCType is used for BACnet/IP in BVLL.
 const BVLCType = 0x81
 
-// BVLCFunc determines unicast or broadcast in BVLL.
+// BVLC functions that carry an NPDU (ASHRAE 135 annex J.2). BVLC-Result,
+// Register-Foreign-Device and the table reads are with their message types.
 const (
 	BVLCFuncForwardedNPDU = 0x04
-	BVLCFuncUnicast       = 0x0a
-	BVLCFuncBroadcast     = 0x0b
+	// BVLCFuncDistributeBroadcastToNetwork asks a BBMD to broadcast the
+	// NPDU on its subnet and to every other foreign device, for a foreign
+	// device that cannot broadcast there itself. It wraps an NPDU the same
+	// way as Original-Broadcast-NPDU.
+	BVLCFuncDistributeBroadcastToNetwork = 0x09
+	BVLCFuncUnicast                      = 0x0a
+	BVLCFuncBroadcast                    = 0x0b
 )
 
 // BVLC is a BVLC frame.
