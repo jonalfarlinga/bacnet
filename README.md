@@ -210,10 +210,14 @@ From the host, the explorer registers with the BBMD and finds `barvm` through it
     $ go run ./cmd/explorer -interface 10.0.123.1 -bbmd 10.0.124.2
 
 What to check: the explorer prints that it is a foreign device of the BBMD; device 125 appears, at
-10.0.124.3 and not at the BBMD's address; its objects read; `scripts/readonly_check.go -remote 10.0.124.2`
-lists the host in the BBMD's foreign device table; and without `-bbmd`, the same Who-Is finds nothing, which
-proves the client is foreign. If the BBMD does not forward the Who-Is onto net B, read its broadcast
-distribution table: it must contain its own net B address for it to broadcast there.
+10.0.124.3 and not at the BBMD's address; its objects read; `go run scripts/readonly_check.go -remote
+10.0.124.2 -bbmd -only` lists the host in the BBMD's foreign device table; and without `-bbmd`, the same
+Who-Is finds nothing, which proves the client is foreign. If the BBMD does not forward the Who-Is onto net
+B, look at its broadcast distribution table in the same output: it must contain its own net B address for it
+to broadcast there.
+
+The same `-bbmd -only` query tells whether any BACnet/IP device is a BBMD: one answers with its tables,
+another refuses or stays silent. Run it against each panel on a subnet to find its BBMD.
 
 The same scenario runs without any of this on the simulated devices: the `internal/client` tests register
 with a simulated BBMD, discover and read the devices behind it, and are refused by one that NAKs.

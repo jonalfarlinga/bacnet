@@ -6,14 +6,17 @@
 //	go run scripts/readonly_check.go -remote 192.168.1.100
 //	go run scripts/readonly_check.go -remote 10.0.0.1 -dnet 16604 -dadr 0c
 //	go run scripts/readonly_check.go -remote 10.0.0.1 -routers -local :47808
+//	go run scripts/readonly_check.go -remote 10.0.0.1 -bbmd -only
 //
 // It never changes the device. The only things it sends are ReadProperty,
 // ReadPropertyMultiple and ReadRange requests, the Segment-ACKs that a
-// segmented reply needs, with -whois, one unicast Who-Is, and, with -routers,
-// one unicast Who-Is-Router-To-Network. Every APDU goes through one send
-// function that refuses anything else, and the router query is built in one
-// place with nothing in it to vary. It does not subscribe, write, announce
-// itself with an I-Am, or answer what the device sends to it.
+// segmented reply needs, with -whois, one unicast Who-Is, with -routers,
+// one unicast Who-Is-Router-To-Network, and with -bbmd, one
+// Read-Broadcast-Distribution-Table and one Read-Foreign-Device-Table. Every
+// APDU goes through one send function that refuses anything else, and the
+// router and BBMD queries are built in one place each with nothing in them to
+// vary. It does not subscribe, write, register with a BBMD, announce itself
+// with an I-Am, or answer what the device sends to it.
 //
 // Requests go out one at a time with -delay between them. The exit status is
 // 0 when no check failed, 1 when one did, and 2 when it could not start.
@@ -46,6 +49,8 @@ var (
 	flagDevice  = flag.Int("device", -1, "device instance; found by reading the wildcard instance if left out")
 	flagWhoIs   = flag.Bool("whois", false, "also send one unicast Who-Is (the I-Am it triggers may be broadcast on the device's network)")
 	flagRouters = flag.Bool("routers", false, "also send one unicast Who-Is-Router-To-Network to -remote, to learn the networks behind it (the answer is usually broadcast: give -local :47808 from its subnet to hear it)")
+	flagBBMD    = flag.Bool("bbmd", false, "also read -remote's broadcast distribution and foreign device tables, which only a BBMD has, to learn whether it is one and which BBMDs it peers with")
+	flagOnly    = flag.Bool("only", false, "stop after the -whois, -routers and -bbmd queries, without reading the device")
 	flagSegment = flag.Bool("segment-test", false, "also re-read the object list with a 50-byte max-APDU, to make the device segment its reply")
 	flagMaxObj  = flag.Int("max-objects", 50, "how many objects of the object list to read")
 	flagHistory = flag.Int("history", 10, "how many records to read from each of the first 3 trend logs; 0 skips ReadRange")
@@ -126,11 +131,17 @@ func main() {
 
 	fmt.Printf("read-only check of %s from %s at %s\n", c.targetName(), c.conn.LocalAddr(), time.Now().Format(time.RFC3339))
 
+	if *flagBBMD {
+		c.bbmd()
+	}
 	if *flagRouters {
 		c.routers()
 	}
 	if *flagWhoIs {
 		c.whoIs()
+	}
+	if *flagOnly {
+		os.Exit(c.summary())
 	}
 	inst, ok := c.identify()
 	if ok {
@@ -648,6 +659,68 @@ func (c *checker) routers() {
 		return
 	}
 	c.rec("routing", check, "PASS", "routes to network(s) "+strings.Join(nets, ", "))
+}
+
+// bbmd asks -remote for its broadcast distribution table and its foreign
+// device table. Only a BBMD has them: a BBMD answers with the tables, another
+// BACnet/IP device with a NAK or not at all. The two requests are built here
+// and nowhere else; each is a bare BVLC header that changes nothing.
+func (c *checker) bbmd() {
+	fmt.Println("\n== BBMD")
+	for _, q := range []struct {
+		check string
+		msg   plumbing.BACnet
+		nak   uint16
+	}{
+		{"Read-Broadcast-Distribution-Table", plumbing.NewReadBroadcastDistributionTable(), plumbing.BVLCResultReadBroadcastDistributionNAK},
+		{"Read-Foreign-Device-Table", plumbing.NewReadForeignDeviceTable(), plumbing.BVLCResultReadForeignDeviceTableNAK},
+	} {
+		b, err := q.msg.MarshalBinary()
+		if err == nil {
+			err = c.write(q.check, b)
+		}
+		if err != nil {
+			c.rec("bbmd", q.check, "FAIL", err.Error())
+			continue
+		}
+		msg, raw, err := c.recv(time.Now().Add(*flagTimeout))
+		switch {
+		case err != nil && raw != nil:
+			c.rec("bbmd", q.check, "FAIL", "the reply could not be parsed: "+err.Error())
+			continue
+		case err != nil:
+			var ne net.Error
+			if errors.As(err, &ne) && ne.Timeout() {
+				c.rec("bbmd", q.check, "INFO", "no reply; a device that is not a BBMD usually ignores this")
+			} else {
+				c.rec("bbmd", q.check, "FAIL", err.Error())
+			}
+			continue
+		}
+		switch m := msg.(type) {
+		case *plumbing.ReadBroadcastDistributionTableAck:
+			peers := make([]string, 0, len(m.Entries))
+			for _, e := range m.Entries {
+				peers = append(peers, fmt.Sprintf("%s mask %s", e.AddrPort(), net.IP(e.Mask[:])))
+			}
+			c.rec("bbmd", q.check, "PASS", fmt.Sprintf("it is a BBMD; %d BDT entries: %s", len(peers), strings.Join(peers, ", ")))
+		case *plumbing.ReadForeignDeviceTableAck:
+			fds := make([]string, 0, len(m.Entries))
+			for _, e := range m.Entries {
+				fds = append(fds, fmt.Sprintf("%s:%d (TTL %ds, %ds left)", net.IP(e.IP[:]), e.Port, e.TTL, e.RemainingTime))
+			}
+			c.rec("bbmd", q.check, "PASS", fmt.Sprintf("%d foreign devices registered: %s", len(fds), strings.Join(fds, ", ")))
+		case *plumbing.BVLCResult:
+			name := plumbing.BVLCResultCodeMap[m.ResultCode]
+			if m.ResultCode == q.nak {
+				c.rec("bbmd", q.check, "INFO", name+": it is a BACnet/IP device, but it refuses the read; it is probably not a BBMD")
+			} else {
+				c.rec("bbmd", q.check, "INFO", fmt.Sprintf("answered %s (%#04x)", name, m.ResultCode))
+			}
+		default:
+			c.rec("bbmd", q.check, "INFO", fmt.Sprintf("answered with %T, which is not an answer to this", msg))
+		}
+	}
 }
 
 // identify finds the device instance by reading the Device object under its
