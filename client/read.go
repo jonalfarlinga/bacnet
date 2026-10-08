@@ -18,8 +18,8 @@ type ReadSpec struct {
 	Props  []uint16
 }
 
-// PropertyResult is one property of a ReadPropertyMultiple reply: its value,
-// or the error the device gave for it.
+// PropertyResult is one property of a ReadPropertyMultiple reply or of a COV
+// notification: its value, or the error the device gave for it.
 type PropertyResult struct {
 	ID     uint32
 	Index  *uint32

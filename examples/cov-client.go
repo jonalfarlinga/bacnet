@@ -5,157 +5,103 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log"
-	"net"
+	"os"
+	"os/signal"
 	"time"
 
-	"github.com/jonalfarlinga/bacnet"
-	"github.com/jonalfarlinga/bacnet/plumbing"
-	"github.com/jonalfarlinga/bacnet/services"
+	"github.com/jonalfarlinga/bacnet/client"
 	"github.com/spf13/cobra"
 )
 
 func init() {
-	COVClient.Flags().Uint16Var(&covObjectType, "object-type", 0, "Object type to read.")
-	COVClient.Flags().Uint32Var(&covInstanceId, "instance-id", 0, "Instance ID to read.") // Analog-input
-	COVClient.Flags().UintVar(&covProcessId, "process-id", 85, "Property ID to read.")    // Cucovent-value
-	COVClient.Flags().UintVar(&covLifetime, "lifetime", 240, "Lifetime of subscription in minutes.")
-	COVClient.Flags().BoolVar(&covExpectConf, "expect-confirmed", true, "Expect a confirmed notification.")
-	COVClient.Flags().IntVar(&covPeriod, "period", 1, "Period, in seconds, between requests.")
-	COVClient.Flags().IntVar(&covN, "messages", 1, "Number of messages to send, being 0 unlimited.")
-	COVClient.Flags().BoolVar(&covCancellation, "cancel", false, "Cancel the subscription.")
+	COVClient.Flags().Uint16Var(&covObjectType, "object-type", 0, "Object type to subscribe to.")
+	COVClient.Flags().Uint32Var(&covInstanceId, "instance-id", 0, "Instance ID to subscribe to.")
+	COVClient.Flags().Uint32Var(&covProcessId, "process-id", 0, "Subscriber process identifier; 0 is the client's default.")
+	COVClient.Flags().DurationVar(&covLifetime, "lifetime", client.DefaultCOVLifetime, "How long the device keeps the subscription without a renewal; the client renews it at half of that.")
+	COVClient.Flags().BoolVar(&covConfirmed, "confirmed", false, "Ask for confirmed notifications, which the client acknowledges.")
+	COVClient.Flags().DurationVar(&covListen, "listen", 0, "How long to listen before cancelling; 0 listens until interrupted.")
 }
 
 var (
-	covObjectType   uint16
-	covInstanceId   uint32
-	covProcessId    uint
-	covPeriod       int
-	covN            int
-	covCancellation bool
-	covLifetime     uint
-	covExpectConf   bool
+	covObjectType uint16
+	covInstanceId uint32
+	covProcessId  uint32
+	covLifetime   time.Duration
+	covConfirmed  bool
+	covListen     time.Duration
 
 	COVClient = &cobra.Command{
 		Use:   "cov",
-		Short: "Send ReadRange requests.",
-		Long:  "There's not much more really. This command sends a configurable ReadProperty request.",
-		Args:  argValidation,
-		Run:   COVClientExample,
+		Short: "Subscribe to an object's changes of value.",
+		Long: "Subscribes to one object at --remote-address, or of the device on --dnet at\n" +
+			"--dadr behind the router there, and prints the notifications the device\n" +
+			"sends. The client renews the subscription halfway through its lifetime and\n" +
+			"acknowledges confirmed notifications. After --listen, or when interrupted,\n" +
+			"it cancels the subscription.",
+		Args: argValidation,
+		Run:  COVClientExample,
 	}
 )
 
 func COVClientExample(cmd *cobra.Command, args []string) {
-	remoteUDPAddr, err := net.ResolveUDPAddr("udp", rAddr)
+	c := openClient(nil)
+	defer c.Close()
+
+	obj := client.ObjectID{Type: covObjectType, Instance: covInstanceId}
+	name := fmt.Sprintf("%s %d", objectTypeName(obj.Type), obj.Instance)
+	stamp := func() string { return time.Now().Format("15:04:05.000") }
+
+	sub, err := c.SubscribeCOV(context.Background(), target(), obj,
+		client.COVOptions{Confirmed: covConfirmed, Lifetime: covLifetime, ProcessID: covProcessId},
+		func(n client.COVNotification) {
+			kind := "unconfirmed"
+			if n.Confirmed {
+				kind = "confirmed"
+			}
+			fmt.Printf("%s %s notification from device %d, process %d, %s remaining\n",
+				stamp(), kind, n.Device, n.ProcessID, n.Remaining)
+			for _, p := range n.Props {
+				fmt.Printf("  %-28s %s\n", propertyName(p.ID), formatValues(p.Values))
+			}
+		})
 	if err != nil {
-		log.Fatalf("Failed to resolve UDP address: %s", err)
+		log.Fatalf("subscribing to %s: %v", name, err)
+	}
+	fmt.Printf("%s subscribed to %s of %v until %s\n", stamp(), name, target(), sub.Status().Expires.Format("15:04:05"))
+
+	// Listen, saying so whenever the client has renewed the subscription.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	if covListen > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, covListen)
+		defer cancel()
+	}
+	renewed := sub.Status().Renewed
+	tick := time.NewTicker(250 * time.Millisecond)
+	defer tick.Stop()
+	for listening := true; listening; {
+		select {
+		case <-ctx.Done():
+			listening = false
+		case <-tick.C:
+			if st := sub.Status(); st.Renewed.After(renewed) {
+				renewed = st.Renewed
+				fmt.Printf("%s renewed until %s\n", renewed.Format("15:04:05.000"), st.Expires.Format("15:04:05"))
+			}
+		}
 	}
 
-	listenConn, err := net.ListenPacket("udp", bAddr)
-	if err != nil {
-		log.Fatalf("failed to begin listening for packets: %v\n", err)
+	st := sub.Status()
+	if err := sub.Cancel(context.Background()); err != nil {
+		log.Fatalf("cancelling the subscription to %s: %v", name, err)
 	}
-	defer listenConn.Close()
-
-	message, err := bacnet.NewSubscribeCOV(covObjectType, covInstanceId, covProcessId, covLifetime, covExpectConf, covCancellation)
-	if err != nil {
-		log.Fatalf("error generating initial ReadProperty: %v\n", err)
+	fmt.Printf("%s cancelled after %d notifications", stamp(), st.Notifications)
+	if st.Err != nil {
+		fmt.Printf("; the last renewal failed: %v", st.Err)
 	}
-
-	replyRaw := make([]byte, 2048)
-	sentRequests := 0
-	for {
-		if _, err := listenConn.WriteTo(message, remoteUDPAddr); err != nil {
-			log.Fatalf("Failed to write the request: %s\n", err)
-		}
-
-		log.Printf("sent: %x", message)
-
-		listenConn.SetDeadline(time.Now().Add(1 * time.Second))
-		nBytes, remoteAddr, err := listenConn.ReadFrom(replyRaw)
-		if err != nil {
-			log.Fatalf("error reading incoming packet: %v\n", err)
-		}
-
-		log.Printf("read %d bytes from %s: %x\n", nBytes, remoteAddr, replyRaw[:nBytes])
-
-		serviceMsg, err := bacnet.Parse(replyRaw[:nBytes])
-		if err != nil {
-			log.Fatalf("error parsing the received message: %v\n", err)
-		}
-
-		// switch between recieved message type
-		t := serviceMsg.GetType()
-		switch t {
-		case plumbing.UnConfirmedReq:
-			unConf, ok := serviceMsg.(*services.COVNotification)
-			if !ok {
-				log.Fatalf("we didn't receive an UnconfirmedCOVNotification reply...\n")
-			}
-			log.Printf("unmarshalled BVLC: %#v\n", unConf.BVLC)
-			log.Printf("unmarshalled NPDU: %#v\n", unConf.NPDU)
-
-			decodedUnConf, err := unConf.Decode()
-			if err != nil {
-				log.Fatalf("couldn't decode the UnconfirmedCOVNotification reply: %v\n", err)
-			}
-			printCOVNot(&decodedUnConf)
-		case plumbing.SimpleAck:
-			sACK, ok := serviceMsg.(*services.SimpleACK)
-			if !ok {
-				log.Fatalf("we didn't receive a SACK reply...\n")
-			}
-			log.Printf("unmarshalled BVLC: %#v\n", sACK.BVLC)
-			log.Printf("unmarshalled NPDU: %#v\n", sACK.NPDU)
-			log.Printf("decoded SimpleACK reply:\n\n\tService Choice: %d\n\tInvoke ID: %d\n\n", sACK.APDU.Service, sACK.APDU.InvokeID)
-		case plumbing.ComplexAck:
-			cACK, ok := serviceMsg.(*services.ComplexACK)
-			if !ok {
-				log.Fatalf("we didn't receive a CACK reply...\n")
-			}
-			log.Printf("unmarshalled BVLC: %#v\n", cACK.BVLC)
-			log.Printf("unmarshalled NPDU: %#v\n", cACK.NPDU)
-
-			decodedLogBuffer, err := cACK.DecodeRR()
-			if err != nil {
-				log.Fatalf("couldn't decode the LogBuffer reply: %v\n", err)
-			}
-			printLogBuffer(&decodedLogBuffer)
-		case plumbing.Error:
-			errEnc, ok := serviceMsg.(*services.Error)
-			if !ok {
-				log.Fatalf("we didn't receive an Error reply...\n")
-			}
-			log.Printf("unmarshalled BVLC: %#v\n", errEnc.BVLC)
-			log.Printf("unmarshalled NPDU: %#v\n", errEnc.NPDU)
-
-			decodedErr, err := errEnc.Decode()
-			if err != nil {
-				log.Fatalf("couldn't decode the Error reply: %v\n", err)
-			}
-			log.Printf("decoded Error reply:\n\tError Class: %d\n\tError Code: %d\n",
-				decodedErr.ErrorClass, decodedErr.ErrorCode,
-			)
-		case plumbing.ConfirmedReq:
-			cReq, ok := serviceMsg.(*services.COVNotification)
-			if !ok {
-				log.Fatalf("we didn't receive a ConfirmedRequest reply...\n")
-			}
-			log.Printf("unmarshalled BVLC: %#v\n", cReq.BVLC)
-			log.Printf("unmarshalled NPDU: %#v\n", cReq.NPDU)
-			decodedCOVNot, err := cReq.Decode()
-			if err != nil {
-				log.Fatalf("couldn't decode the ConfirmedRequest reply: %v\n", err)
-			}
-			printCOVNot(&decodedCOVNot)
-		}
-
-		sentRequests++
-
-		if sentRequests == covN {
-			break
-		}
-
-		time.Sleep(time.Duration(covPeriod) * time.Second)
-	}
+	fmt.Println()
 }

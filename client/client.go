@@ -1,18 +1,22 @@
 // Package client is a BACnet/IP client: one UDP socket, a read loop that
-// matches replies to requests, and the read services. It is the part of the
-// client in docs/library-upgrade-spec.md §7 that browsing takes; the explorer
-// is its first user.
+// matches replies to requests, the read services, and change-of-value
+// subscriptions. It is the part of the client in docs/library-upgrade-spec.md
+// §7 that browsing takes; the explorer is its first user.
 //
 // It reaches devices on the local subnet, behind BACnet routers (it learns
 // which router serves each network), and on remote IP subnets through a BBMD
 // that it registers with as a foreign device.
 //
-// It is read-only. Everything it sends goes through one function that refuses
-// any service except Who-Is, ReadProperty, ReadPropertyMultiple, ReadRange,
-// the Segment-ACKs and Aborts a segmented reply needs, Who-Is-Router-To-Network,
-// and the BBMD functions Register-Foreign-Device, Read-Foreign-Device-Table
-// and Read-Broadcast-Distribution-Table. It has no device identity: it never
-// sends an I-Am and never answers a request.
+// It writes nothing. Everything it sends goes through one function that
+// refuses any service except Who-Is, ReadProperty, ReadPropertyMultiple,
+// ReadRange, the Segment-ACKs and Aborts a segmented reply needs,
+// Who-Is-Router-To-Network, the BBMD functions Register-Foreign-Device,
+// Read-Foreign-Device-Table and Read-Broadcast-Distribution-Table, and for
+// subscriptions, SubscribeCOV and the SimpleACK a confirmed COV notification
+// waits for. With Config.ReadOnly it refuses those two as well, and is then
+// read-only: it leaves nothing behind on a device. It has no device identity:
+// it never sends an I-Am, and answers nothing but the notifications of its
+// own subscriptions.
 //
 // It talks to every device it can reach, except those on its deny list
 // (Config.Denied, SetDenied). It limits what it has in flight to each device
@@ -114,6 +118,11 @@ type Config struct {
 	// DefaultMaxRequestsPerSec; below 0 is no limit.
 	MaxRequestsPerSec float64
 
+	// ReadOnly makes the client refuse what leaves state on a device or
+	// answers one: SubscribeCOV fails with ErrServiceNotAllowed, and no
+	// notification is acknowledged.
+	ReadOnly bool
+
 	// MaxSegments is the most segments the client reassembles into one
 	// reply; a longer reply is aborted and fails with ErrResponseTooLarge.
 	// 0 is DefaultMaxSegments.
@@ -151,9 +160,11 @@ type PacketEvent struct {
 }
 
 var (
-	ErrTimeout           = errors.New("no reply from the device")
-	ErrClosed            = errors.New("client closed")
-	ErrServiceNotAllowed = errors.New("not a read-only service")
+	ErrTimeout = errors.New("no reply from the device")
+	ErrClosed  = errors.New("client closed")
+	// ErrServiceNotAllowed is a message the client does not send: one that
+	// is not on its list, or with Config.ReadOnly, one that is not a read.
+	ErrServiceNotAllowed = errors.New("not a service the client sends")
 	// ErrNetworkUnreachable is a router's Reject-Message-To-Network: it
 	// does not reach the network the request was for.
 	ErrNetworkUnreachable = errors.New("no router reaches the network")
@@ -225,6 +236,8 @@ type Client struct {
 	routerWatch map[*routerWatcher]struct{}
 	// bvlcWait is the BBMD requests waiting for a BVLC-only reply.
 	bvlcWait map[bvlcKey]chan plumbing.BACnet
+	// subs is the COV subscriptions whose notifications are delivered.
+	subs map[covKey]*Subscription
 
 	fd *foreign // nil unless ForeignDevice is configured
 
@@ -330,6 +343,7 @@ func Open(cfg Config) (*Client, error) {
 		available:   make(chan struct{}),
 		routerWatch: map[*routerWatcher]struct{}{},
 		bvlcWait:    map[bvlcKey]chan plumbing.BACnet{},
+		subs:        map[covKey]*Subscription{},
 		closed:      make(chan struct{}),
 		done:        make(chan struct{}),
 	}
@@ -408,14 +422,15 @@ func (f *frame) GetService() uint8            { return f.apdu.Service }
 // allowed reports whether a message is one this client may send: a read
 // service or a Segment-ACK in a unicast, broadcast or distribute envelope, a
 // Who-Is-Router-To-Network, or one of the BBMD functions that change nothing
-// but the client's own registration.
-func allowed(msg plumbing.BACnet) error {
+// but the client's own registration; and unless readOnly, what a COV
+// subscription takes.
+func allowed(msg plumbing.BACnet, readOnly bool) error {
 	switch m := msg.(type) {
 	case *frame:
 		if err := envelopeAllowed(m.bvlc.Function); err != nil {
 			return err
 		}
-		if !apduAllowed(m.apdu) {
+		if !apduAllowed(m.apdu) && (readOnly || !covAllowed(m.apdu)) {
 			return fmt.Errorf("PDU type %d service %d: %w", m.apdu.Type, m.apdu.Service, ErrServiceNotAllowed)
 		}
 		return nil
@@ -455,6 +470,19 @@ func apduAllowed(a *plumbing.APDU) bool {
 		// The client's own abort of a reply it cannot take, never a
 		// server's.
 		return a.Flags&0x1 == 0
+	}
+	return false
+}
+
+// covAllowed reports whether an APDU is one a subscription takes: the
+// SubscribeCOV that makes, renews or cancels it, or the SimpleACK of a
+// confirmed notification.
+func covAllowed(a *plumbing.APDU) bool {
+	switch a.Type {
+	case plumbing.ConfirmedReq:
+		return a.Service == services.ServiceConfirmedSubscribeCOV
+	case plumbing.SimpleAck:
+		return a.Service == services.ServiceConfirmedCOVNotification
 	}
 	return false
 }
@@ -501,7 +529,7 @@ func destination(to netip.AddrPort, msg plumbing.BACnet) (Address, bool) {
 // send marshals one message and sends it. It is the only place the client
 // writes to the network.
 func (c *Client) send(to netip.AddrPort, msg plumbing.BACnet) error {
-	if err := allowed(msg); err != nil {
+	if err := allowed(msg, c.cfg.ReadOnly); err != nil {
 		c.log.Warn("refused to send", "to", to, "error", err)
 		return err
 	}
@@ -703,6 +731,8 @@ func (c *Client) dispatch(src netip.AddrPort, msg plumbing.BACnet) {
 		c.deliver(src, m.NPDU, m.APDU)
 	case *services.SimpleACK:
 		c.deliver(src, m.NPDU, m.APDU)
+	case *services.COVNotification:
+		c.covNotification(src, m.NPDU, m.APDU)
 	case *plumbing.NetworkMessage:
 		c.networkMessage(src, m)
 	case *plumbing.BVLCResult:
@@ -794,9 +824,10 @@ func (c *Client) failAll(err error) {
 // the request is safe.
 var errNoReply = errors.New("no reply yet")
 
-// confirmed sends one read request and returns the tags of the ComplexACK
-// that answers it, reassembled if it came in segments. A request that gets no
-// reply is resent with the same invoke ID.
+// confirmed sends one request and returns the tags of the ComplexACK that
+// answers it, reassembled if it came in segments, or none for a service that
+// is answered with a SimpleACK. A request that gets no reply is resent with
+// the same invoke ID.
 func (c *Client) confirmed(ctx context.Context, to Address, service uint8, payload []objects.APDUPayload) ([]*objects.Object, error) {
 	return c.exchange(ctx, to, service, payload, false)
 }
@@ -986,6 +1017,9 @@ func (c *Client) await(ctx context.Context, ch chan inbound, to Address, invokeI
 		case plumbing.Abort:
 			return nil, &AbortError{Reason: a.Reason}
 		case plumbing.SimpleAck:
+			if service == services.ServiceConfirmedSubscribeCOV {
+				return nil, nil
+			}
 			return nil, errors.New("SimpleACK in reply to a read request")
 		case plumbing.ComplexAck:
 		default:

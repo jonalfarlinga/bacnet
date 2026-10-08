@@ -23,6 +23,7 @@ var (
 	exDNET      uint
 	exDADR      string
 	exTimeout   time.Duration
+	exDebug     bool
 )
 
 func clientFlags(cmd *cobra.Command) {
@@ -32,6 +33,7 @@ func clientFlags(cmd *cobra.Command) {
 	f.UintVar(&exDNET, "dnet", 0, "Network number of a device behind a BACnet router at --remote-address; 0 for a device at the address itself.")
 	f.StringVar(&exDADR, "dadr", "", "MAC address of the device on --dnet, in hex (for example 05, or c0a8016fbac0).")
 	f.DurationVar(&exTimeout, "timeout", 3*time.Second, "How long to wait for each reply.")
+	f.BoolVar(&exDebug, "debug", false, "Log what the client hears and leaves unanswered as well.")
 }
 
 // openClient opens a client as the flags say, logging what it does to
@@ -54,7 +56,11 @@ func openClient(onIAm func(client.Device)) *client.Client {
 	cfg.Timeout = exTimeout
 	cfg.Retries = 1
 	cfg.OnIAm = onIAm
-	cfg.Logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	level := slog.LevelInfo
+	if exDebug {
+		level = slog.LevelDebug
+	}
+	cfg.Logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 	c, err := client.Open(cfg)
 	if err != nil {
 		log.Fatalf("opening the client: %v", err)

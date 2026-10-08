@@ -423,6 +423,8 @@ PRs 1 to 8 are delivered, with these differences from the text above, kept becau
 
 The deny list, the in-flight limits, the rate limit, `Stats`, `ReadMany`, the ranged Who-Is and the cap logging of §7.4 are in.
 
+COV is delivered, from the roadmap (§11), 2026-10-08: `SubscribeCOV` returns a `Subscription` that the client renews at half its lifetime, with a backoff after a failure, until `Cancel`; notifications reach a callback as `COVNotification`, and a confirmed one is answered with a SimpleACK. `CancelCOV` drops a subscription the client does not hold. The send guard takes SubscribeCOV and that SimpleACK, and nothing else new: a notification for no subscription of the client's gets no answer. `Config.ReadOnly` refuses both, which is how the explorer stays read-only. There is no subscription without a lifetime, no SubscribeCOVProperty, and `Close` does not cancel. The simulator takes subscriptions and notifies on `NotifyCOV`.
+
 PR 9 is delivered: `ReadRange` with `LogRecords` for trend logs, the `whois`, `rpc`, `rpm` and `rrc` examples rewritten on `client`, a `probe` example, and the reassembler moved to `client.Reassembler` for the orchestrator. The name lookups of §5.4 live in `objects/names.go`. ReadRange by time is not sent, for want of date and time encoders; by position and by sequence number are.
 
 ## 11. Roadmap (after this upgrade)
@@ -432,7 +434,7 @@ This upgrade delivers read-only access over BACnet/IP on UDP. That is the first 
 | Item | Notes |
 |---|---|
 | Other IP transports | UDP is the starting point. `Address`, the peer key, and `Config.Conn` are specific to B/IP on UDP in this upgrade and will need a transport boundary inside `client` when a second transport is added. |
-| COV | SubscribeCOV, subscription renewal, and delivery of COV notifications. Needs a general hook for inbound unconfirmed services; confirmed notifications also need the client to answer with a SimpleACK. |
+| COV | Delivered, see §10.1. Left: SubscribeCOVProperty with a COV increment, and unsubscribed notifications. |
 | Write services | WriteProperty with priority and relinquish, for devices switched to writable (§7.7). Writes must not be retransmitted blindly, so this needs a per-call retry override and an error that separates "sent, no answer" from "never sent". |
 | Alarms | GetEventInformation (a read; add to the allow-list), then AcknowledgeAlarm as a write service. |
 

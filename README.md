@@ -51,7 +51,8 @@ under their network number. Picking an object reads all of its properties.
 It is read-only: it sends Who-Is, ReadProperty and ReadPropertyMultiple requests, the Segment-ACKs that
 segmented replies need, Who-Is-Router-To-Network to find the router for a network, and with `-bbmd`, the
 foreign-device registration and the table reads of the BBMD, and refuses to send anything else. It does not
-write, subscribe, send an I-Am or answer what devices send to it.
+write, subscribe, send an I-Am or answer what devices send to it. That is the explorer's rule, not the
+library's: it opens the client with `ReadOnly`, without which the client also takes COV subscriptions.
 
 The UI is a React app in `web/` that is compiled into the binary, so it has to be built first (a current Node
 LTS):
@@ -153,7 +154,7 @@ passes `/api` on to the explorer.
 | `internal/explorer` | The core: the node model, the `Source` interface, and the registry that holds what every source has found and streams it as events. It knows no protocol. |
 | `internal/source/bacnet` | The BACnet/IP source: discovery, add-by-address, the daily sweep, how a device's objects and properties are read, and how values are rendered |
 | `internal/api` | The HTTP API and the event stream the UI listens to: sources and nodes, nothing protocol-shaped |
-| `client` | The BACnet/IP client the source reads through: one UDP socket, request and reply matching, segmented replies, the routing table, foreign-device registration, the read-only guard |
+| `client` | The BACnet/IP client the source reads through: one UDP socket, request and reply matching, segmented replies, the routing table, foreign-device registration, COV subscriptions (`SubscribeCOV`: renewed halfway through their lifetime, confirmed notifications acknowledged), and the guard on what it sends, which `ReadOnly` narrows to reads |
 | `client/sim` | The simulated devices behind `-sim`, which the tests also use |
 | `web` | The UI: a tree of nodes and a detail pane, drawn from what the sources describe |
 

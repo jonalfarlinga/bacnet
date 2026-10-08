@@ -154,6 +154,7 @@ func (d *Device) finish() *Device {
 	services := make([]bool, 40)
 	services[12], services[26], services[34] = true, true, true // readProperty, i-Am, who-Is
 	services[14] = !d.NoRPM                                     // readPropertyMultiple
+	services[5] = true                                          // subscribeCOV
 	types := make([]bool, 30)
 	for _, o := range d.objs {
 		if int(o.id.ObjectType) < len(types) {

@@ -10,9 +10,15 @@ import (
 	"github.com/jonalfarlinga/bacnet/services"
 )
 
-// The client must refuse every service that is not a read.
+// The client must refuse every service that is not a read or part of a COV
+// subscription, and with ReadOnly, every service that is not a read.
 func TestSendRefusesAllButReads(t *testing.T) {
-	c, err := Open(Config{Local: netip.MustParseAddrPort("127.0.0.1:0")})
+	t.Run("with subscriptions", func(t *testing.T) { sendRefusesAllBut(t, false) })
+	t.Run("read-only", func(t *testing.T) { sendRefusesAllBut(t, true) })
+}
+
+func sendRefusesAllBut(t *testing.T, readOnly bool) {
+	c, err := Open(Config{Local: netip.MustParseAddrPort("127.0.0.1:0"), ReadOnly: readOnly})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -23,7 +29,8 @@ func TestSendRefusesAllButReads(t *testing.T) {
 	for service := 0; service < 256; service++ {
 		want := service == int(services.ServiceConfirmedReadProperty) ||
 			service == int(services.ServiceConfirmedReadPropMultiple) ||
-			service == int(services.ServiceConfirmedReadRange)
+			service == int(services.ServiceConfirmedReadRange) ||
+			(!readOnly && service == int(services.ServiceConfirmedSubscribeCOV))
 		a := plumbing.NewAPDU(plumbing.ConfirmedReq, uint8(service), nil)
 		err := c.sendAPDU(plumbing.BVLCFuncUnicast, to.IP, npduTo(to, true), a)
 		if got := !errors.Is(err, ErrServiceNotAllowed); got != want {
@@ -38,10 +45,14 @@ func TestSendRefusesAllButReads(t *testing.T) {
 			t.Errorf("unconfirmed service %d: sent %t, want %t", service, got, want)
 		}
 	}
+	// Of the replies, only the SimpleACK of a confirmed COV notification.
 	for _, pduType := range []uint8{plumbing.SimpleAck, plumbing.ComplexAck, plumbing.Error, plumbing.Reject} {
-		err := c.sendAPDU(plumbing.BVLCFuncUnicast, to.IP, npduTo(to, false), &plumbing.APDU{Type: pduType})
-		if !errors.Is(err, ErrServiceNotAllowed) {
-			t.Errorf("PDU type %d was sent: the client answers nothing", pduType)
+		for service := 0; service < 256; service++ {
+			want := !readOnly && pduType == plumbing.SimpleAck && service == int(services.ServiceConfirmedCOVNotification)
+			err := c.sendAPDU(plumbing.BVLCFuncUnicast, to.IP, npduTo(to, false), &plumbing.APDU{Type: pduType, Service: uint8(service)})
+			if got := !errors.Is(err, ErrServiceNotAllowed); got != want {
+				t.Errorf("PDU type %d service %d: sent %t, want %t", pduType, service, got, want)
+			}
 		}
 	}
 	// The client aborts a reply it will not take, but never as a server.

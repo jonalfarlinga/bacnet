@@ -5,7 +5,9 @@
 // device that cannot segment and one without ReadPropertyMultiple. The
 // router answers Who-Is-Router-To-Network and rejects requests for networks
 // it does not have. A station can be a BBMD, which registers foreign devices
-// and forwards broadcasts to and from them.
+// and forwards broadcasts to and from them. The devices take COV
+// subscriptions to the objects that have a present value, and notify the
+// subscribers when one is made and when NotifyCOV says so.
 //
 // Loopback has no broadcast address, so a frame sent as an
 // Original-Broadcast-NPDU to any station is heard by every station, as a
@@ -111,6 +113,12 @@ type station struct {
 	// fdt is the Foreign Device Table of a BBMD station: when each
 	// registration expires.
 	fdt map[netip.AddrPort]fdEntry
+	// cov is the COV subscriptions the station's devices hold, unacked the
+	// confirmed notifications waiting for their SimpleACK, and covInvoke the
+	// invoke ID of the last one sent.
+	cov       []*covSub
+	unacked   map[txKey]*covSub
+	covInvoke uint8
 }
 
 type fdEntry struct {
@@ -156,6 +164,7 @@ func StartDevices(stations [][]*Device) (*Network, error) {
 		n.stations = append(n.stations, &station{
 			conn: conn, devices: devices,
 			sending: map[txKey]*segmented{}, fdt: map[netip.AddrPort]fdEntry{},
+			unacked: map[txKey]*covSub{},
 		})
 	}
 	for _, st := range n.stations {
@@ -262,6 +271,10 @@ func (st *station) handle(src netip.AddrPort, raw []byte) {
 		st.confirmed(src, m.NPDU, m.APDU)
 	case *services.ConfirmedReadRange:
 		st.confirmed(src, m.NPDU, m.APDU)
+	case *services.ConfirmedCOV:
+		st.subscribe(src, m.NPDU, m.APDU)
+	case *services.SimpleACK:
+		st.covAcked(src, m.APDU)
 	case *services.SegmentACK:
 		st.continueReply(src, m.APDU)
 	case *services.Abort:
