@@ -201,7 +201,7 @@ type Client struct {
 	invokes map[txKey]uint8
 	// inflight is the slots for requests to each device reached directly
 	// and to each routed network.
-	inflight map[limitKey]chan struct{}
+	inflight map[limitKey]*slots
 	// limiter paces the requests to all devices together.
 	limiter *bucket
 	stats   map[txKey]*PeerStats
@@ -320,7 +320,7 @@ func Open(cfg Config) (*Client, error) {
 		log:         cfg.Logger,
 		pending:     map[txKey]chan inbound{},
 		invokes:     map[txKey]uint8{},
-		inflight:    map[limitKey]chan struct{}{},
+		inflight:    map[limitKey]*slots{},
 		stats:       map[txKey]*PeerStats{},
 		noRPM:       map[txKey]bool{},
 		denied:      append([]SourceRule(nil), cfg.Denied...),
@@ -567,6 +567,18 @@ func (c *Client) WhoIsRange(low, high uint32) error {
 	return c.whoIs(payload)
 }
 
+// WhoIsAt sends a Who-Is to one address instead of broadcasting it, for a
+// device that is known to be there and not which it is. Its I-Am arrives
+// through OnIAm if it reaches the client: many devices broadcast it on their
+// own subnet, whatever the Who-Is came as.
+func (c *Client) WhoIsAt(to netip.AddrPort) error {
+	if err := c.limiter.wait(context.Background(), c.closed); err != nil {
+		return err
+	}
+	whoIs := plumbing.NewAPDU(plumbing.UnConfirmedReq, services.ServiceUnconfirmedWhoIs, nil)
+	return c.sendAPDU(plumbing.BVLCFuncUnicast, to, plumbing.NewNPDU(false, false, false, false), whoIs)
+}
+
 func (c *Client) whoIs(payload []objects.APDUPayload) error {
 	if err := c.limiter.wait(context.Background(), c.closed); err != nil {
 		return err
@@ -786,8 +798,18 @@ var errNoReply = errors.New("no reply yet")
 // that answers it, reassembled if it came in segments. A request that gets no
 // reply is resent with the same invoke ID.
 func (c *Client) confirmed(ctx context.Context, to Address, service uint8, payload []objects.APDUPayload) ([]*objects.Object, error) {
+	return c.exchange(ctx, to, service, payload, false)
+}
+
+// exchange is confirmed, or with once set, the same for an address where
+// there may be nobody: the request is sent once and not again, and when
+// nothing answers at an address the client has not talked to before, the
+// client keeps nothing about it, no counters and no invoke ID.
+func (c *Client) exchange(ctx context.Context, to Address, service uint8, payload []objects.APDUPayload, once bool) ([]*objects.Object, error) {
 	if rule, denied := c.isDenied(to, 0); denied {
-		c.count(to, func(s *PeerStats) { s.Denied++ })
+		if !once {
+			c.count(to, func(s *PeerStats) { s.Denied++ })
+		}
 		return nil, fmt.Errorf("%w: %s", ErrSourceDenied, rule)
 	}
 	via, function, err := c.resolve(ctx, to)
@@ -800,6 +822,25 @@ func (c *Client) confirmed(ctx context.Context, to Address, service uint8, paylo
 		return nil, err
 	}
 	defer release()
+
+	retries := c.cfg.Retries
+	stranger, heard := false, false
+	if once {
+		retries = 0
+		who := keyOf(to, 0)
+		c.mu.Lock()
+		_, talked := c.invokes[who]
+		c.mu.Unlock()
+		stranger = !talked
+		defer func() {
+			if stranger && !heard {
+				c.mu.Lock()
+				delete(c.invokes, who)
+				delete(c.stats, who)
+				c.mu.Unlock()
+			}
+		}()
+	}
 
 	req := plumbing.NewAPDU(plumbing.ConfirmedReq, service, payload)
 	req.SetAPDUFlags(true, false, false) // segmented reply accepted
@@ -815,7 +856,7 @@ func (c *Client) confirmed(ctx context.Context, to Address, service uint8, paylo
 	// Segment-ACKs go back the way the request went.
 	peer := to
 	to.IP = via
-	for attempt := 0; attempt <= c.cfg.Retries; attempt++ {
+	for attempt := 0; attempt <= retries; attempt++ {
 		if to.Routed() {
 			if err := c.waitAvailable(ctx, to.Net, ch); err != nil {
 				return nil, err
@@ -838,8 +879,12 @@ func (c *Client) confirmed(ctx context.Context, to Address, service uint8, paylo
 			if Declined(err) {
 				c.count(peer, func(s *PeerStats) { s.Errors++ })
 			}
+			heard = err == nil || Declined(err)
 			return tags, err
 		}
+	}
+	if stranger {
+		return nil, ErrTimeout
 	}
 	c.count(peer, func(s *PeerStats) { s.Timeouts++ })
 	if to.Routed() && function == plumbing.BVLCFuncUnicast {

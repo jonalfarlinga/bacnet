@@ -106,6 +106,31 @@ points takes four minutes and the network barely notices. It stands aside whenev
 for someone else, and comes back to a device after `-walk-again` (a day). The admin panel's footer shows
 where it stands.
 
+### The daily sweep
+A device that neither answers the Who-Is nor was added by its address is found by trying addresses. The
+sweep is off until it is given ranges: `-sweep 0.1-255.254`, or **Daily sweep** in the settings the UI asks
+for. A range is over the last two bytes of the address only, first to last, and several go with commas
+(`4.1-4.254,9.1-11.254`); the first two bytes are always the adapter's own, so a sweep cannot be pointed at
+another network. Once a day, at `-sweep-at` (02:00 unless set; `now` sweeps ten seconds after the network
+is opened and a day after each start), the explorer sends each address one ReadProperty for the Device
+object's identifier, through the wildcard instance, on the UDP port it listens on. It sends it once: an
+address that does not answer is not tried again until the next day, and nothing is kept about it. A device
+that answers and is not listed yet is read and listed as one added by address is.
+
+The sweep is paced at `-sweep-rate` addresses a second (10 unless set), so all 65,000 of `0.1-255.254` take
+about two hours. Left out are every address a device is already listed at, whether it answered in this run or is kept in
+the store from an earlier one, the machine's own address, the adapter's subnet address and broadcast address,
+and outside the adapter's subnet, where the subnets are not known, the addresses ending in .0 and .255. A
+device too old to be read through the wildcard instance answers with an error; the explorer then sends that
+one address a Who-Is, and lists the device if its I-Am comes back. If it does not, the address is named in
+the status. The status is in the tooltip of the header's BACnet/IP badge: the ranges, the next sweep, how far
+a running one is, and what the last one found.
+
+To the network a sweep looks like a port scan of UDP 47808, and every unused address on the adapter's subnet
+costs an ARP broadcast: tell whoever watches the network before giving it ranges, and keep to the ranges
+where devices can be. It finds BACnet/IP devices only: when one of them is a router, the devices behind it
+are not listed by the sweep.
+
 When a device that should answer does not appear, run with `-log debug`: it prints every I-Am heard and every
 datagram dropped, with the reason, so you can tell a device that never answered from one whose answer was
 refused. `-frames file` writes every datagram sent and received to a file in hex, which the test fixtures can
@@ -126,7 +151,7 @@ passes `/api` on to the explorer.
 |---|---|
 | `cmd/explorer` | The program: flags and wiring |
 | `internal/explorer` | The core: the node model, the `Source` interface, and the registry that holds what every source has found and streams it as events. It knows no protocol. |
-| `internal/source/bacnet` | The BACnet/IP source: discovery, add-by-address, how a device's objects and properties are read, and how values are rendered |
+| `internal/source/bacnet` | The BACnet/IP source: discovery, add-by-address, the daily sweep, how a device's objects and properties are read, and how values are rendered |
 | `internal/api` | The HTTP API and the event stream the UI listens to: sources and nodes, nothing protocol-shaped |
 | `client` | The BACnet/IP client the source reads through: one UDP socket, request and reply matching, segmented replies, the routing table, foreign-device registration, the read-only guard |
 | `client/sim` | The simulated devices behind `-sim`, which the tests also use |

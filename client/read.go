@@ -50,6 +50,11 @@ func (c *Client) readProperty(ctx context.Context, to Address, payload []objects
 	if err != nil {
 		return nil, err
 	}
+	return propertyValue(tags)
+}
+
+// propertyValue takes the value out of a ReadProperty ack.
+func propertyValue(tags []*objects.Object) ([]Value, error) {
 	// Object identifier [0], property [1] and perhaps an array index [2],
 	// then the value between opening and closing tag 3.
 	for i, t := range tags {

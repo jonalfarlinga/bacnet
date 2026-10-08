@@ -44,6 +44,9 @@ type Device struct {
 	Segmentation uint8
 	// NoRPM makes the device reject ReadPropertyMultiple.
 	NoRPM bool
+	// NoWildcard makes the device older than the wildcard instance: its
+	// Device object is read by its own instance only.
+	NoWildcard bool
 	// Net and MAC place the device behind the router that is its station's
 	// first device. Net is 0 for a device with a BACnet/IP address of its own.
 	Net uint16
@@ -656,7 +659,7 @@ func (st *station) abortReply(from netip.AddrPort, abort *plumbing.APDU) {
 }
 
 func (d *Device) find(id objects.ObjectIdentifier) *object {
-	if id.ObjectType == objects.ObjectTypeDevice && id.InstanceNumber == wildcardInstance {
+	if id.ObjectType == objects.ObjectTypeDevice && id.InstanceNumber == wildcardInstance && !d.NoWildcard {
 		id.InstanceNumber = d.Instance
 	}
 	for _, o := range d.objs {

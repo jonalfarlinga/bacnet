@@ -21,6 +21,15 @@ type limitKey struct {
 	net uint16
 }
 
+// slots is the in-flight slots of one device or routed network.
+type slots struct {
+	sem chan struct{}
+	// users is the requests that hold a slot or wait for one. The slots are
+	// forgotten when the last one leaves, so that an address tried once and
+	// never again leaves nothing behind.
+	users int
+}
+
 // acquire takes a slot for a request to the device, waiting while the
 // device, or the routed network it is on, has as many in flight as the
 // configuration allows. It returns the function that gives the slot back.
@@ -34,19 +43,32 @@ func (c *Client) acquire(ctx context.Context, to Address) (func(), error) {
 	size = max(1, size)
 
 	c.mu.Lock()
-	sem := c.inflight[key]
-	if sem == nil {
-		sem = make(chan struct{}, size)
-		c.inflight[key] = sem
+	s := c.inflight[key]
+	if s == nil {
+		s = &slots{sem: make(chan struct{}, size)}
+		c.inflight[key] = s
 	}
+	s.users++
 	c.mu.Unlock()
+	leave := func() {
+		c.mu.Lock()
+		if s.users--; s.users == 0 {
+			delete(c.inflight, key)
+		}
+		c.mu.Unlock()
+	}
 
 	select {
-	case sem <- struct{}{}:
-		return func() { <-sem }, nil
+	case s.sem <- struct{}{}:
+		return func() {
+			<-s.sem
+			leave()
+		}, nil
 	case <-ctx.Done():
+		leave()
 		return nil, ctx.Err()
 	case <-c.closed:
+		leave()
 		return nil, ErrClosed
 	}
 }

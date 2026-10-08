@@ -4,9 +4,44 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/netip"
 
 	"github.com/jonalfarlinga/bacnet/objects"
+	"github.com/jonalfarlinga/bacnet/services"
 )
+
+// Knock asks whether a BACnet device is at an address, and which: one read
+// of the Device object's identifier through the wildcard instance, sent once
+// and not again. It is for trying addresses where there may be nobody. An
+// address that does not answer fails with ErrTimeout, and the client keeps
+// nothing about it. A device that answers and will not say which it is, as
+// one older than the wildcard instance does, fails with an error that
+// Declined reports.
+//
+// A device denied by its instance, at an address the client has not heard it
+// from, can only be told by its answer: it gets this one request, fails with
+// ErrSourceDenied, and gets none after.
+func (c *Client) Knock(ctx context.Context, to netip.AddrPort) (uint32, error) {
+	addr := Address{IP: to}
+	tags, err := c.exchange(ctx, addr, services.ServiceConfirmedReadProperty,
+		services.ConfirmedReadPropertyObjects(objects.ObjectTypeDevice, WildcardInstance, objects.PropertyIdObjectIdentifier), true)
+	if err != nil {
+		return 0, err
+	}
+	values, err := propertyValue(tags)
+	if err != nil {
+		return 0, err
+	}
+	if len(values) != 1 || values[0].Kind != KindObjectID || values[0].Object.Type != objects.ObjectTypeDevice {
+		return 0, fmt.Errorf("the device's identifier is %+v, not a Device object", values)
+	}
+	instance := values[0].Object.Instance
+	c.learnInstance(instance, addr)
+	if rule, denied := c.isDenied(addr, instance); denied {
+		return instance, fmt.Errorf("%w: %s", ErrSourceDenied, rule)
+	}
+	return instance, nil
+}
 
 // Probe learns what an I-Am would have said about the device at an address,
 // by reading it: for a device that a Who-Is cannot reach, on another IP
