@@ -8,11 +8,15 @@
 // that it registers with as a foreign device.
 //
 // It is read-only. Everything it sends goes through one function that refuses
-// any service except Who-Is, ReadProperty, ReadPropertyMultiple, the
-// Segment-ACKs a segmented reply needs, Who-Is-Router-To-Network, and the
-// BBMD functions Register-Foreign-Device, Read-Foreign-Device-Table and
-// Read-Broadcast-Distribution-Table. It has no device identity: it never
+// any service except Who-Is, ReadProperty, ReadPropertyMultiple, ReadRange,
+// the Segment-ACKs and Aborts a segmented reply needs, Who-Is-Router-To-Network,
+// and the BBMD functions Register-Foreign-Device, Read-Foreign-Device-Table
+// and Read-Broadcast-Distribution-Table. It has no device identity: it never
 // sends an I-Am and never answers a request.
+//
+// It talks to every device it can reach, except those on its deny list
+// (Config.Denied, SetDenied). It limits what it has in flight to each device
+// and to each routed network, and how many requests it sends in a second.
 package client
 
 import (
@@ -92,6 +96,29 @@ type Config struct {
 	Timeout time.Duration // wait for each reply; 3s if not set
 	Retries int           // resends of a request that got no reply
 
+	// Denied is the sources the client leaves alone: it sends them nothing
+	// but broadcasts and drops what they send. SetDenied changes the list
+	// while the client runs.
+	Denied []SourceRule
+
+	// MaxInFlightDevice says how many requests may be in flight at once to
+	// a device reached directly, by its BACnet/IP address. nil allows
+	// DefaultMaxInFlightDevice.
+	MaxInFlightDevice func(Address) int
+	// MaxInFlightNet says how many requests may be in flight at once to all
+	// the devices of one routed network together: a serial trunk behind a
+	// router carries one exchange at a time. nil allows DefaultMaxInFlightNet.
+	MaxInFlightNet func(net uint16) int
+	// MaxRequestsPerSec limits the requests the client sends, to all devices
+	// together: a token bucket that allows a burst of a second's worth. 0 is
+	// DefaultMaxRequestsPerSec; below 0 is no limit.
+	MaxRequestsPerSec float64
+
+	// MaxSegments is the most segments the client reassembles into one
+	// reply; a longer reply is aborted and fails with ErrResponseTooLarge.
+	// 0 is DefaultMaxSegments.
+	MaxSegments int
+
 	// OnPacket is called from the read loop for every datagram received,
 	// and from the sender for every one sent, before anything is done with
 	// it. It must not block. Data is the datagram, which the receiver may
@@ -130,10 +157,37 @@ var (
 	// ErrNetworkUnreachable is a router's Reject-Message-To-Network: it
 	// does not reach the network the request was for.
 	ErrNetworkUnreachable = errors.New("no router reaches the network")
+	// ErrSourceDenied is a request to a device on the deny list.
+	ErrSourceDenied = errors.New("source denied")
+	// ErrResponseTooLarge is a segmented reply longer than the client
+	// reassembles. The error carries the sizes, as a *ResponseTooLargeError.
+	ErrResponseTooLarge = errors.New("the reply is longer than the client reassembles")
 )
 
-// maxReassembled bounds a segmented reply.
-const maxReassembled = 4 << 20
+// ResponseTooLargeError says which reply was too long, and by how much.
+type ResponseTooLargeError struct {
+	Peer        Address
+	InvokeID    uint8
+	Service     uint8
+	Segments    int // received before the client gave up
+	Bytes       int // received before the client gave up
+	MaxSegments int // what the client reassembles at most
+}
+
+func (e *ResponseTooLargeError) Error() string {
+	return fmt.Sprintf("%v: %d bytes in %d segments from %v, more than the %d segments the client reassembles",
+		ErrResponseTooLarge, e.Bytes, e.Segments, e.Peer, e.MaxSegments)
+}
+
+func (e *ResponseTooLargeError) Unwrap() error { return ErrResponseTooLarge }
+
+// DefaultMaxSegments is the most segments a reply may have: at up to 1476
+// bytes each, about 94 kB.
+const DefaultMaxSegments = 64
+
+// The client takes windows of up to 64 segments, the most a device may
+// propose.
+const maxWindow = 64
 
 // Client owns the socket.
 type Client struct {
@@ -143,7 +197,20 @@ type Client struct {
 
 	mu      sync.Mutex
 	pending map[txKey]chan inbound
-	peers   map[netip.AddrPort]*peer
+	// invokes is the last invoke ID given to a request to each device.
+	invokes map[txKey]uint8
+	// inflight is the slots for requests to each device reached directly
+	// and to each routed network.
+	inflight map[limitKey]chan struct{}
+	// limiter paces the requests to all devices together.
+	limiter *bucket
+	stats   map[txKey]*PeerStats
+	// noRPM marks the devices that have turned ReadPropertyMultiple down.
+	noRPM map[txKey]bool
+	// denied is the deny list, and known the address each device instance
+	// was last heard from, which rules by instance are applied to.
+	denied []SourceRule
+	known  map[uint32]Address
 	// routes is the router for each network number, learned from
 	// I-Am-Router-To-Network and from the source of routed messages.
 	routes map[uint16]netip.AddrPort
@@ -182,11 +249,12 @@ func keyOf(a Address, invoke uint8) txKey {
 	return txKey{ip: a.IP, invoke: invoke}
 }
 
-// peer is the state kept per BACnet/IP address. Requests to one address go
-// out one at a time, which also covers every device behind one router.
-type peer struct {
-	busy   chan struct{}
-	invoke uint8
+// address is the device the key names.
+func (k txKey) address() Address {
+	if k.net != 0 {
+		return Address{Net: k.net, MAC: []byte(k.mac)}
+	}
+	return Address{IP: k.ip}
 }
 
 // inbound is a reply PDU on its way to the request that waits for it, or the
@@ -206,6 +274,23 @@ func Open(cfg Config) (*Client, error) {
 	}
 	if cfg.Logger == nil {
 		cfg.Logger = slog.New(slog.DiscardHandler)
+	}
+	if cfg.MaxInFlightDevice == nil {
+		cfg.MaxInFlightDevice = func(Address) int { return DefaultMaxInFlightDevice }
+	}
+	if cfg.MaxInFlightNet == nil {
+		cfg.MaxInFlightNet = func(uint16) int { return DefaultMaxInFlightNet }
+	}
+	if cfg.MaxRequestsPerSec == 0 {
+		cfg.MaxRequestsPerSec = DefaultMaxRequestsPerSec
+	}
+	if cfg.MaxSegments <= 0 {
+		cfg.MaxSegments = DefaultMaxSegments
+	}
+	for _, r := range cfg.Denied {
+		if err := r.validate(); err != nil {
+			return nil, err
+		}
 	}
 	if cfg.ForeignDevice != nil {
 		if !cfg.ForeignDevice.BBMD.IsValid() || cfg.ForeignDevice.BBMD.Port() == 0 {
@@ -234,7 +319,12 @@ func Open(cfg Config) (*Client, error) {
 		conn:        conn,
 		log:         cfg.Logger,
 		pending:     map[txKey]chan inbound{},
-		peers:       map[netip.AddrPort]*peer{},
+		invokes:     map[txKey]uint8{},
+		inflight:    map[limitKey]chan struct{}{},
+		stats:       map[txKey]*PeerStats{},
+		noRPM:       map[txKey]bool{},
+		denied:      append([]SourceRule(nil), cfg.Denied...),
+		known:       map[uint32]Address{},
 		routes:      map[uint16]netip.AddrPort{},
 		busy:        map[uint16]time.Time{},
 		available:   make(chan struct{}),
@@ -242,6 +332,9 @@ func Open(cfg Config) (*Client, error) {
 		bvlcWait:    map[bvlcKey]chan plumbing.BACnet{},
 		closed:      make(chan struct{}),
 		done:        make(chan struct{}),
+	}
+	if cfg.MaxRequestsPerSec > 0 {
+		c.limiter = newBucket(cfg.MaxRequestsPerSec)
 	}
 	if cfg.ForeignDevice != nil {
 		c.fd = newForeign(*cfg.ForeignDevice)
@@ -352,13 +445,57 @@ func apduAllowed(a *plumbing.APDU) bool {
 	switch a.Type {
 	case plumbing.ConfirmedReq:
 		return a.Service == services.ServiceConfirmedReadProperty ||
-			a.Service == services.ServiceConfirmedReadPropMultiple
+			a.Service == services.ServiceConfirmedReadPropMultiple ||
+			a.Service == services.ServiceConfirmedReadRange
 	case plumbing.UnConfirmedReq:
-		return a.Service == services.ServiceUnconfirmedWhoIs && len(a.Objects) == 0
+		return a.Service == services.ServiceUnconfirmedWhoIs && whoIsRangeOnly(a.Objects)
 	case plumbing.SegmentAck:
 		return true
+	case plumbing.Abort:
+		// The client's own abort of a reply it cannot take, never a
+		// server's.
+		return a.Flags&0x1 == 0
 	}
 	return false
+}
+
+// whoIsRangeOnly reports whether a Who-Is carries nothing, or just the range
+// of instances asked for: context tags 0 and 1.
+func whoIsRangeOnly(payload []objects.APDUPayload) bool {
+	if len(payload) == 0 {
+		return true
+	}
+	if len(payload) != 2 {
+		return false
+	}
+	for i, p := range payload {
+		t, ok := p.(*objects.Object)
+		if !ok || !t.TagClass || t.Kind != objects.TagPrimitive || int(t.TagNumber) != i {
+			return false
+		}
+	}
+	return true
+}
+
+// destination says which device a message is for, and whether it is a
+// unicast: a broadcast cannot leave one device out, so the deny list is
+// applied to unicasts only.
+func destination(to netip.AddrPort, msg plumbing.BACnet) (Address, bool) {
+	dst := Address{IP: to}
+	f, ok := msg.(*frame)
+	if !ok {
+		return dst, true
+	}
+	if f.bvlc.Function != plumbing.BVLCFuncUnicast {
+		return dst, false
+	}
+	if f.npdu.Control&0x20 != 0 {
+		if f.npdu.DNET == 0xFFFF || len(f.npdu.DADR) == 0 {
+			return dst, false // a broadcast on a remote network
+		}
+		dst.Net, dst.MAC = f.npdu.DNET, f.npdu.DADR
+	}
+	return dst, true
 }
 
 // send marshals one message and sends it. It is the only place the client
@@ -367,6 +504,13 @@ func (c *Client) send(to netip.AddrPort, msg plumbing.BACnet) error {
 	if err := allowed(msg); err != nil {
 		c.log.Warn("refused to send", "to", to, "error", err)
 		return err
+	}
+	if dst, unicast := destination(to, msg); unicast {
+		if rule, denied := c.isDenied(dst, 0); denied {
+			c.count(dst, func(s *PeerStats) { s.Denied++ })
+			c.log.Debug("refused to send to a denied source", "to", dst, "rule", rule)
+			return fmt.Errorf("%w: %s", ErrSourceDenied, rule)
+		}
 	}
 	b, err := msg.MarshalBinary()
 	if err != nil {
@@ -409,10 +553,28 @@ func (c *Client) broadcastTarget() (netip.AddrPort, uint8) {
 // WhoIs broadcasts one Who-Is addressed to every network, so that devices
 // behind routers answer as well. The I-Ams it draws arrive through OnIAm.
 func (c *Client) WhoIs() error {
+	return c.whoIs(nil)
+}
+
+// WhoIsRange is a WhoIs that only the devices with an instance from low to
+// high answer: on a large network, discovery in slices rather than a storm
+// of I-Ams at once.
+func (c *Client) WhoIsRange(low, high uint32) error {
+	payload, err := services.WhoIsObjects(low, high)
+	if err != nil {
+		return err
+	}
+	return c.whoIs(payload)
+}
+
+func (c *Client) whoIs(payload []objects.APDUPayload) error {
+	if err := c.limiter.wait(context.Background(), c.closed); err != nil {
+		return err
+	}
 	npdu := plumbing.NewNPDU(false, true, false, false)
 	npdu.DNET = 0xFFFF
 	npdu.Hop = 255
-	whoIs := plumbing.NewAPDU(plumbing.UnConfirmedReq, services.ServiceUnconfirmedWhoIs, nil)
+	whoIs := plumbing.NewAPDU(plumbing.UnConfirmedReq, services.ServiceUnconfirmedWhoIs, payload)
 	to, function := c.broadcastTarget()
 	return c.sendAPDU(function, to, npdu, whoIs)
 }
@@ -503,13 +665,18 @@ func (c *Client) dispatch(src netip.AddrPort, msg plumbing.BACnet) {
 			c.log.Warn("dropped an I-Am for an object that is not a device", "from", sourceOf(src, m.NPDU), "type", d.DeviceType, "instance", d.InstanceNum)
 			return
 		}
-		c.log.Debug("I-Am", "device", d.InstanceNum, "from", sourceOf(src, m.NPDU))
+		from := sourceOf(src, m.NPDU)
+		c.learnInstance(d.InstanceNum, from)
+		if c.dropDenied(from, d.InstanceNum) {
+			return
+		}
+		c.log.Debug("I-Am", "device", d.InstanceNum, "from", from)
 		if c.cfg.OnIAm == nil {
 			return
 		}
 		c.cfg.OnIAm(Device{
 			Instance:     d.InstanceNum,
-			Addr:         sourceOf(src, m.NPDU),
+			Addr:         from,
 			MaxAPDU:      d.MaxAPDULength,
 			Segmentation: d.SegmentationSupported,
 			VendorID:     d.VendorId,
@@ -555,9 +722,23 @@ func (c *Client) noteSource(src netip.AddrPort, npdu *plumbing.NPDU) {
 	}
 }
 
+// dropDenied reports whether a message from a device is to be dropped for
+// the device being on the deny list, and logs it.
+func (c *Client) dropDenied(from Address, instance uint32) bool {
+	rule, denied := c.isDenied(from, instance)
+	if denied {
+		c.log.Debug("dropped a message from a denied source", "from", from, "rule", rule)
+	}
+	return denied
+}
+
 func (c *Client) deliver(src netip.AddrPort, npdu *plumbing.NPDU, a *plumbing.APDU) {
 	c.noteSource(src, npdu)
-	key := keyOf(sourceOf(src, npdu), a.InvokeID)
+	from := sourceOf(src, npdu)
+	if c.dropDenied(from, 0) {
+		return
+	}
+	key := keyOf(from, a.InvokeID)
 	c.mu.Lock()
 	ch := c.pending[key]
 	c.mu.Unlock()
@@ -605,40 +786,26 @@ var errNoReply = errors.New("no reply yet")
 // that answers it, reassembled if it came in segments. A request that gets no
 // reply is resent with the same invoke ID.
 func (c *Client) confirmed(ctx context.Context, to Address, service uint8, payload []objects.APDUPayload) ([]*objects.Object, error) {
+	if rule, denied := c.isDenied(to, 0); denied {
+		c.count(to, func(s *PeerStats) { s.Denied++ })
+		return nil, fmt.Errorf("%w: %s", ErrSourceDenied, rule)
+	}
 	via, function, err := c.resolve(ctx, to)
 	if err != nil {
 		return nil, err
 	}
 
-	c.mu.Lock()
-	p := c.peers[via]
-	if p == nil {
-		p = &peer{busy: make(chan struct{}, 1)}
-		c.peers[via] = p
+	release, err := c.acquire(ctx, to)
+	if err != nil {
+		return nil, err
 	}
-	c.mu.Unlock()
+	defer release()
 
-	select {
-	case p.busy <- struct{}{}:
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-c.closed:
-		return nil, ErrClosed
-	}
-	defer func() { <-p.busy }()
-
-	p.invoke++
 	req := plumbing.NewAPDU(plumbing.ConfirmedReq, service, payload)
 	req.SetAPDUFlags(true, false, false) // segmented reply accepted
 	req.MaxSeg = 7                       // more than 64 segments
 	req.MaxSize = 5                      // up to 1476 bytes
-	req.InvokeID = p.invoke
-
-	key := keyOf(to, req.InvokeID)
-	ch := make(chan inbound, 64)
-	c.mu.Lock()
-	c.pending[key] = ch
-	c.mu.Unlock()
+	key, ch := c.begin(to, req)
 	defer func() {
 		c.mu.Lock()
 		delete(c.pending, key)
@@ -646,26 +813,61 @@ func (c *Client) confirmed(ctx context.Context, to Address, service uint8, paylo
 	}()
 
 	// Segment-ACKs go back the way the request went.
+	peer := to
 	to.IP = via
 	for attempt := 0; attempt <= c.cfg.Retries; attempt++ {
 		if to.Routed() {
-			if err := c.waitAvailable(ctx, to.Net); err != nil {
+			if err := c.waitAvailable(ctx, to.Net, ch); err != nil {
 				return nil, err
 			}
+		}
+		if err := c.limiter.wait(ctx, c.closed); err != nil {
+			return nil, err
 		}
 		if err := c.sendAPDU(function, via, npduTo(to, true), req); err != nil {
 			return nil, err
 		}
-		tags, err := c.await(ctx, ch, to, req.InvokeID)
+		c.count(peer, func(s *PeerStats) {
+			s.Sent++
+			if attempt > 0 {
+				s.Retries++
+			}
+		})
+		tags, err := c.await(ctx, ch, to, req.InvokeID, service)
 		if !errors.Is(err, errNoReply) {
+			if Declined(err) {
+				c.count(peer, func(s *PeerStats) { s.Errors++ })
+			}
 			return tags, err
 		}
 	}
+	c.count(peer, func(s *PeerStats) { s.Timeouts++ })
 	if to.Routed() && function == plumbing.BVLCFuncUnicast {
 		// The router may have moved: find it again next time.
 		c.dropRoute(to.Net, via)
 	}
 	return nil, ErrTimeout
+}
+
+// begin gives a request the next invoke ID for its device, one that no
+// request in flight to the device has, and registers where its reply goes.
+func (c *Client) begin(to Address, req *plumbing.APDU) (txKey, chan inbound) {
+	ch := make(chan inbound, 64)
+	peer := keyOf(to, 0)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	id := c.invokes[peer]
+	for range 256 {
+		id++
+		if _, used := c.pending[keyOf(to, id)]; !used {
+			break
+		}
+	}
+	c.invokes[peer] = id
+	req.InvokeID = id
+	key := keyOf(to, id)
+	c.pending[key] = ch
+	return key, ch
 }
 
 // resolve says where a request for to goes: the device's own address, the
@@ -696,12 +898,15 @@ func (c *Client) resolve(ctx context.Context, to Address) (netip.AddrPort, uint8
 	return bcast, function, nil
 }
 
-func (c *Client) await(ctx context.Context, ch chan inbound, to Address, invokeID uint8) ([]*objects.Object, error) {
+func (c *Client) await(ctx context.Context, ch chan inbound, to Address, invokeID, service uint8) ([]*objects.Object, error) {
 	var (
 		data     []byte
 		nextSeq  uint8
 		sinceAck uint8
 		segments int
+		// window is the segments the device sends between acknowledgements,
+		// settled from its proposal on the first segment.
+		window uint8
 	)
 	timer := time.NewTimer(c.cfg.Timeout)
 	defer timer.Stop()
@@ -709,11 +914,15 @@ func (c *Client) await(ctx context.Context, ch chan inbound, to Address, invokeI
 		var in inbound
 		select {
 		case <-ctx.Done():
+			if segments > 0 {
+				c.abort(to, invokeID, objects.AbortReasonOther)
+			}
 			return nil, ctx.Err()
 		case <-c.closed:
 			return nil, ErrClosed
 		case <-timer.C:
 			if segments > 0 {
+				c.abort(to, invokeID, objects.AbortReasonTSMTimeout)
 				return nil, fmt.Errorf("%w: the reply stopped after %d segments", ErrTimeout, segments)
 			}
 			return nil, errNoReply
@@ -742,24 +951,40 @@ func (c *Client) await(ctx context.Context, ch chan inbound, to Address, invokeI
 			return toTags(a.Objects)
 		}
 
+		if window == 0 {
+			window = max(1, a.ProposedWindowSize)
+			if window > maxWindow {
+				c.log.Warn("segment window clamped", "peer", to, "invoke", invokeID, "service", service,
+					"proposed", window, "actual", maxWindow)
+				c.count(to, func(s *PeerStats) { s.WindowClamped++ })
+				window = maxWindow
+			}
+		}
 		if a.SequenceNumber != nextSeq {
 			// A duplicate or a gap: ask again from the last one in order.
-			c.segmentAck(to, invokeID, nextSeq-1, a.ProposedWindowSize, true)
+			c.segmentAck(to, invokeID, nextSeq-1, window, true)
 			continue
 		}
 		data = append(data, a.Payload...)
-		if len(data) > maxReassembled {
-			return nil, fmt.Errorf("the reply is longer than %d bytes", maxReassembled)
+		segments++
+		if segments > c.cfg.MaxSegments {
+			c.abort(to, invokeID, objects.AbortReasonBufferOverflow)
+			c.log.Error("reply too large", "peer", to, "invoke", invokeID, "service", service,
+				"segments", segments, "bytes", len(data), "max_segments", c.cfg.MaxSegments)
+			c.count(to, func(s *PeerStats) { s.ResponseTooLarge++ })
+			return nil, &ResponseTooLargeError{
+				Peer: to, InvokeID: invokeID, Service: service,
+				Segments: segments, Bytes: len(data), MaxSegments: c.cfg.MaxSegments,
+			}
 		}
 		nextSeq++
 		sinceAck++
-		segments++
 
 		// The first segment is acknowledged alone, then each full window,
 		// then the last segment.
 		more := a.HasMoreSegments()
-		if a.SequenceNumber == 0 || sinceAck >= a.ProposedWindowSize || !more {
-			c.segmentAck(to, invokeID, a.SequenceNumber, a.ProposedWindowSize, false)
+		if a.SequenceNumber == 0 || sinceAck >= window || !more {
+			c.segmentAck(to, invokeID, a.SequenceNumber, window, false)
 			sinceAck = 0
 		}
 		if more {
@@ -797,6 +1022,12 @@ func (c *Client) segmentAck(to Address, invokeID, sequence, window uint8, negati
 		ack.Flags = 0x2
 	}
 	c.sendAPDU(plumbing.BVLCFuncUnicast, to.IP, npduTo(to, false), ack)
+}
+
+// abort tells a device to stop a segmented reply the client will not take.
+func (c *Client) abort(to Address, invokeID, reason uint8) {
+	c.sendAPDU(plumbing.BVLCFuncUnicast, to.IP, npduTo(to, false),
+		&plumbing.APDU{Type: plumbing.Abort, InvokeID: invokeID, Reason: reason})
 }
 
 func toTags(payload []objects.APDUPayload) ([]*objects.Object, error) {

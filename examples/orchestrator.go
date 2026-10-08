@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jonalfarlinga/bacnet"
+	"github.com/jonalfarlinga/bacnet/client"
 	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
 	"github.com/jonalfarlinga/bacnet/plumbing"
@@ -90,7 +91,7 @@ var (
 
 type orchState struct {
 	values      map[uint32]float32
-	reassembler *SegmentReassembler
+	reassembler *client.Reassembler
 }
 
 type outboundBuilder struct {
@@ -194,7 +195,9 @@ func newOrchestratorState() *orchState {
 	for i := uint16(0); i < orchStateInstances; i++ {
 		values[uint32(i)] = orchDefaultValue * float32(i+1)
 	}
-	return &orchState{values: values, reassembler: NewSegmentReassembler(segmentReassemblyTTL)}
+	// A reassembly left incomplete for 30 seconds, as by a lost final
+	// segment, is dropped.
+	return &orchState{values: values, reassembler: client.NewReassembler(30 * time.Second)}
 }
 
 func buildOutboundPlan(kinds []string) ([]outboundBuilder, error) {
@@ -615,19 +618,22 @@ func inferAPDUOffsetLenient(payload []byte, npduOffset int) (int, error) {
 func handleSegment(conn net.PacketConn, remoteAddr net.Addr, state *orchState, bvlc *plumbing.BVLC, npdu *plumbing.NPDU, apdu *plumbing.APDU) {
 	dumpSegment(orchDumpDir, remoteAddr, apdu)
 
-	raw, complete, accepted := state.reassembler.Feed(remoteAddr, bvlc, npdu, apdu)
-	if accepted {
+	res := state.reassembler.Feed(remoteAddr.String(), bvlc, npdu, apdu)
+	if res.Dropped != "" {
+		log.Printf("reassembly: %s", res.Dropped)
+	}
+	if res.Accepted {
 		sendSegmentAck(conn, remoteAddr, apdu)
 	}
-	if !complete {
+	if !res.Complete {
 		return
 	}
 	log.Printf(
 		"reassembled %d-byte message from %d segment(s) (invokeID=%d) from %s",
-		len(raw), apdu.SequenceNumber+1, apdu.InvokeID, remoteAddr,
+		len(res.Raw), apdu.SequenceNumber+1, apdu.InvokeID, remoteAddr,
 	)
-	dumpReassembled(orchDumpDir, raw, apdu.InvokeID)
-	handleIncoming(conn, remoteAddr, state, raw)
+	dumpReassembled(orchDumpDir, res.Raw, apdu.InvokeID)
+	handleIncoming(conn, remoteAddr, state, res.Raw)
 }
 
 // dumpRawPacket writes the complete, unparsed bytes of one incoming UDP

@@ -57,11 +57,11 @@ func WritePropertyClientExample(cmd *cobra.Command, args []string) {
 	defer listenConn.Close()
 
 	var data interface{}
-	switch wpValue{
-		case "real":
-			data = wpReal
-		case "string":
-			data = wpString
+	switch wpValue {
+	case "real":
+		data = wpReal
+	case "string":
+		data = wpString
 	}
 
 	mWriteProperty, err := bacnet.NewWriteProperty(wpObjectType, wpInstanceId, wpPropertyId, data)

@@ -139,8 +139,10 @@ func (c *Client) setAvailable(nets []uint16) {
 	c.available = make(chan struct{})
 }
 
-// waitAvailable returns once no router has said it is busy for the network.
-func (c *Client) waitAvailable(ctx context.Context, net uint16) error {
+// waitAvailable returns once no router has said it is busy for the network,
+// or with the error that ends the waiting request, if one arrives on its
+// channel meanwhile: its network rejected, or its device denied.
+func (c *Client) waitAvailable(ctx context.Context, net uint16, ch <-chan inbound) error {
 	for {
 		c.mu.Lock()
 		until := c.busy[net]
@@ -154,6 +156,11 @@ func (c *Client) waitAvailable(ctx context.Context, net uint16) error {
 		select {
 		case <-timer.C:
 		case <-available:
+		case in := <-ch:
+			if in.err != nil {
+				timer.Stop()
+				return in.err
+			}
 		case <-ctx.Done():
 			timer.Stop()
 			return ctx.Err()

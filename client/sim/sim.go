@@ -54,13 +54,31 @@ type Device struct {
 	BBMD bool
 	// RefuseForeign makes a BBMD NAK every registration.
 	RefuseForeign bool
+	// Window is the segment window the device proposes; 0 is the default.
+	Window uint8
 
 	objs []*object
+}
+
+// window is the segment window the device proposes.
+func (d *Device) window() uint8 {
+	if d.Window == 0 {
+		return segmentWindow
+	}
+	return d.Window
 }
 
 type object struct {
 	id    objects.ObjectIdentifier
 	props []property
+	// records is the log-buffer of a trend log, read with ReadRange.
+	records []logRecord
+}
+
+// logRecord is one record of a trend log.
+type logRecord struct {
+	at    time.Time
+	value float32
 }
 
 type property struct {
@@ -82,6 +100,9 @@ type station struct {
 	devices []*Device
 
 	mu sync.Mutex
+	// silent makes the station drop everything it receives, as one that
+	// has been switched off would.
+	silent bool
 	// sending holds the segments of replies that are still going out.
 	sending map[txKey]*segmented
 	// fdt is the Foreign Device Table of a BBMD station: when each
@@ -111,6 +132,12 @@ const segmentWindow = 4
 // Start runs the default set of devices.
 func Start() (*Network, error) {
 	return StartDevices(defaultStations())
+}
+
+// Default is the default set of devices, for a caller to change before
+// StartDevices runs it.
+func Default() [][]*Device {
+	return defaultStations()
 }
 
 // StartDevices runs the given stations: each is the devices that share one
@@ -162,6 +189,22 @@ func (n *Network) Close() {
 	n.wg.Wait()
 }
 
+// Silence switches a station off, or back on: while silent it drops
+// everything it receives, as a device that has been stopped does, and
+// forgets nothing.
+func (n *Network) Silence(station int, silent bool) {
+	st := n.stations[station]
+	st.mu.Lock()
+	st.silent = silent
+	st.mu.Unlock()
+}
+
+func (st *station) isSilent() bool {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return st.silent
+}
+
 func (st *station) addr() netip.AddrPort {
 	ap := st.conn.LocalAddr().(*net.UDPAddr).AddrPort()
 	return netip.AddrPortFrom(ap.Addr().Unmap(), ap.Port())
@@ -175,6 +218,9 @@ func (n *Network) serve(st *station) {
 		size, src, err := st.conn.ReadFromUDPAddrPort(buf)
 		if err != nil {
 			return
+		}
+		if st.isSilent() {
+			continue
 		}
 		src = netip.AddrPortFrom(src.Addr().Unmap(), src.Port())
 		raw := append([]byte(nil), buf[:size]...)
@@ -204,19 +250,19 @@ func (st *station) handle(src netip.AddrPort, raw []byte) {
 	}
 	switch m := msg.(type) {
 	case *services.UnconfirmedWhoIs:
-		st.iAm(src, m.NPDU)
+		st.iAm(src, m.NPDU, m.APDU)
 	case *services.UnconfirmedIAm:
 		// A broadcast on the subnet: a BBMD passes it to its foreign
 		// devices.
 		st.forwardToForeign(src, raw)
 	case *services.ConfirmedReadProperty:
-		if dev := st.target(m.NPDU); dev != nil {
-			st.read(src, dev, m.APDU)
-		} else if m.NPDU.Control&0x20 != 0 && len(st.nets()) > 0 {
-			st.rejectNetwork(src, m.NPDU.DNET)
-		}
+		st.confirmed(src, m.NPDU, m.APDU)
+	case *services.ConfirmedReadRange:
+		st.confirmed(src, m.NPDU, m.APDU)
 	case *services.SegmentACK:
 		st.continueReply(src, m.APDU)
+	case *services.Abort:
+		st.abortReply(src, m.APDU)
 	case *plumbing.NetworkMessage:
 		st.networkMessage(src, m)
 	case *plumbing.RegisterForeignDevice:
@@ -225,6 +271,16 @@ func (st *station) handle(src netip.AddrPort, raw []byte) {
 		st.readFDT(src)
 	case *plumbing.ReadBroadcastDistributionTable:
 		st.readBDT(src)
+	}
+}
+
+// confirmed answers a read request for the device it is addressed to, or
+// rejects the network it is for when the station routes to no such network.
+func (st *station) confirmed(src netip.AddrPort, npdu *plumbing.NPDU, apdu *plumbing.APDU) {
+	if dev := st.target(npdu); dev != nil {
+		st.read(src, dev, apdu)
+	} else if npdu.Control&0x20 != 0 && len(st.nets()) > 0 {
+		st.rejectNetwork(src, npdu.DNET)
 	}
 }
 
@@ -425,9 +481,22 @@ func forwarded(raw []byte, origin netip.AddrPort) []byte {
 	return out
 }
 
-// iAm answers a Who-Is for each device of the station it reaches.
-func (st *station) iAm(to netip.AddrPort, npdu *plumbing.NPDU) {
+// iAm answers a Who-Is for each device of the station it reaches, and in
+// the range of instances it asks for, if it asks for one.
+func (st *station) iAm(to netip.AddrPort, npdu *plumbing.NPDU, apdu *plumbing.APDU) {
+	low, high := uint32(0), uint32(wildcardInstance)
+	if len(apdu.Objects) == 2 {
+		if lo, ok := apdu.Objects[0].(*objects.Object); ok && context(lo, 0) {
+			low = uintOf(lo)
+		}
+		if hi, ok := apdu.Objects[1].(*objects.Object); ok && context(hi, 1) {
+			high = uintOf(hi)
+		}
+	}
 	for _, d := range st.devices {
+		if d.Instance < low || d.Instance > high {
+			continue
+		}
 		if npdu.Control&0x20 != 0 && npdu.DNET != 0xFFFF && npdu.DNET != d.Net {
 			continue
 		}
@@ -480,6 +549,11 @@ func (st *station) read(to netip.AddrPort, dev *Device, req *plumbing.APDU) {
 		fault = &plumbing.APDU{Type: plumbing.Reject, Reason: objects.RejectReasonUnrecognizedService}
 	case req.Service == services.ServiceConfirmedReadPropMultiple:
 		reply = dev.readMultiple(tags)
+	case req.Service == services.ServiceConfirmedReadRange:
+		var class, code uint8
+		if reply, class, code = dev.readRange(tags); reply == nil {
+			fault = plumbing.NewAPDU(plumbing.Error, req.Service, services.ErrorObjects(class, code))
+		}
 	default:
 		var class, code uint8
 		if reply, class, code = dev.readOne(tags); reply == nil {
@@ -546,7 +620,7 @@ func (st *station) sendSegments(key txKey, tx *segmented, from, count int) {
 			Flags:              0x8, // segmented
 			InvokeID:           key.invoke,
 			SequenceNumber:     uint8(i),
-			ProposedWindowSize: segmentWindow,
+			ProposedWindowSize: tx.dev.window(),
 			Service:            tx.service,
 			Payload:            tx.segments[i],
 		}
@@ -558,7 +632,7 @@ func (st *station) sendSegments(key txKey, tx *segmented, from, count int) {
 }
 
 // continueReply sends the segments that follow the one a Segment-ACK
-// acknowledges.
+// acknowledges: a window of them, as the acknowledgement sizes it.
 func (st *station) continueReply(from netip.AddrPort, ack *plumbing.APDU) {
 	key := txKey{peer: from, invoke: ack.InvokeID}
 	st.mu.Lock()
@@ -570,8 +644,15 @@ func (st *station) continueReply(from netip.AddrPort, ack *plumbing.APDU) {
 	}
 	st.mu.Unlock()
 	if tx != nil {
-		st.sendSegments(key, tx, next, segmentWindow)
+		st.sendSegments(key, tx, next, max(1, int(ack.ActualWindowSize)))
 	}
+}
+
+// abortReply drops a segmented reply the client has aborted.
+func (st *station) abortReply(from netip.AddrPort, abort *plumbing.APDU) {
+	st.mu.Lock()
+	delete(st.sending, txKey{peer: from, invoke: abort.InvokeID})
+	st.mu.Unlock()
 }
 
 func (d *Device) find(id objects.ObjectIdentifier) *object {
@@ -618,6 +699,101 @@ func uintOf(t *objects.Object) uint32 {
 		v = v<<8 | uint32(b)
 	}
 	return v
+}
+
+// intOf decodes a signed integer of up to 4 bytes.
+func intOf(t *objects.Object) int32 {
+	if len(t.Data) == 0 || len(t.Data) > 4 {
+		return 0
+	}
+	v := int32(int8(t.Data[0]))
+	for _, b := range t.Data[1:] {
+		v = v<<8 | int32(b)
+	}
+	return v
+}
+
+// readRange answers a ReadRange of a trend log's log-buffer: object [0],
+// property [1], perhaps an array index [2], and the range by position [3]
+// or by sequence number [6], or none for the whole buffer. A record's
+// sequence number is its position.
+func (d *Device) readRange(req []*objects.Object) (reply []*objects.Object, class, code uint8) {
+	if len(req) < 2 || !context(req[0], 0) || len(req[0].Data) != 4 || !context(req[1], 1) {
+		return nil, objects.ErrorClassServices, 9 // inconsistent parameters
+	}
+	id, _ := objects.DecObjectIdentifier(req[0])
+	o := d.find(id)
+	if o == nil {
+		return nil, objects.ErrorClassObject, 31 // unknown object
+	}
+	propID := uintOf(req[1])
+	if o.find(uint16(propID)) == nil && propID != uint32(objects.PropertyIdLogBuffer) {
+		return nil, objects.ErrorClassProperty, 32 // unknown property
+	}
+	if propID != uint32(objects.PropertyIdLogBuffer) || o.records == nil {
+		return nil, objects.ErrorClassProperty, 22 // property is not a list
+	}
+	rest := req[2:]
+	if len(rest) > 0 && context(rest[0], 2) {
+		rest = rest[1:]
+	}
+
+	// Which records: all, or count from a position or sequence number,
+	// backwards when count is negative.
+	first, last := 1, len(o.records)
+	bySequence := false
+	if len(rest) == 4 && rest[0].Kind == objects.TagOpening && (rest[0].TagNumber == 3 || rest[0].TagNumber == 6) {
+		bySequence = rest[0].TagNumber == 6
+		start, count := int(uintOf(rest[1])), int(intOf(rest[2]))
+		switch {
+		case count > 0:
+			first, last = start, start+count-1
+		case count < 0:
+			first, last = start+count+1, start
+		default:
+			return nil, objects.ErrorClassServices, 9
+		}
+		first, last = max(first, 1), min(last, len(o.records))
+	}
+
+	flags := []bool{first == 1, last == len(o.records), false}
+	reply = []*objects.Object{
+		objects.EncObjectIdentifier(true, 0, id.ObjectType, id.InstanceNumber),
+		objects.ContextTag(1, objects.EncUnsignedInteger(uint(propID))),
+		objects.ContextTag(3, objects.EncBitString(flags)),
+		objects.ContextTag(4, objects.EncUnsignedInteger(uint(max(0, last-first+1)))),
+		objects.EncOpeningTag(5),
+	}
+	for i := first; i <= last; i++ {
+		r := o.records[i-1]
+		reply = append(reply,
+			objects.EncOpeningTag(0), dateOf(r.at), timeOf(r.at), objects.EncClosingTag(0),
+			objects.EncOpeningTag(1), objects.ContextTag(2, objects.EncReal(r.value)), objects.EncClosingTag(1),
+			objects.ContextTag(2, objects.EncBitString([]bool{false, false, false, false})),
+		)
+	}
+	reply = append(reply, objects.EncClosingTag(5))
+	if bySequence {
+		reply = append(reply, objects.ContextTag(6, objects.EncUnsignedInteger(uint(first))))
+	}
+	return reply, 0, 0
+}
+
+// dateOf encodes a BACnet Date: year since 1900, month, day, and the day of
+// the week with Monday as 1.
+func dateOf(t time.Time) *objects.Object {
+	weekday := uint8(t.Weekday())
+	if weekday == 0 {
+		weekday = 7
+	}
+	return &objects.Object{TagNumber: objects.TagDate, Length: 4,
+		Data: []byte{uint8(t.Year() - 1900), uint8(t.Month()), uint8(t.Day()), weekday}}
+}
+
+// timeOf encodes a BACnet Time: hour, minute, second and hundredths.
+func timeOf(t time.Time) *objects.Object {
+	return &objects.Object{TagNumber: objects.TagTime, Length: 4,
+		Data: []byte{uint8(t.Hour()), uint8(t.Minute()), uint8(t.Second()), uint8(t.Nanosecond() / 10_000_000)}}
 }
 
 func context(t *objects.Object, number uint8) bool {

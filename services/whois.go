@@ -197,3 +197,21 @@ func (u *UnconfirmedWhoIs) GetService() uint8 {
 func (u *UnconfirmedWhoIs) GetType() uint8 {
 	return u.APDU.Type
 }
+
+// MaxInstance is the largest device instance a Who-Is range can name.
+const MaxInstance = 4194303
+
+// WhoIsObjects encodes the range of a Who-Is: the devices whose instance is
+// from low to high answer it.
+func WhoIsObjects(low, high uint32) ([]objects.APDUPayload, error) {
+	if high > MaxInstance {
+		return nil, fmt.Errorf("device instance %d is above %d", high, MaxInstance)
+	}
+	if low > high {
+		return nil, fmt.Errorf("device instance range %d to %d is backwards", low, high)
+	}
+	return []objects.APDUPayload{
+		objects.ContextTag(0, objects.EncUnsignedInteger(uint(low))),
+		objects.ContextTag(1, objects.EncUnsignedInteger(uint(high))),
+	}, nil
+}

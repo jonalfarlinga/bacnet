@@ -5,122 +5,79 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log"
-	"net"
-	"time"
 
-	"github.com/jonalfarlinga/bacnet"
-	"github.com/jonalfarlinga/bacnet/plumbing"
-	"github.com/jonalfarlinga/bacnet/services"
+	"github.com/jonalfarlinga/bacnet/client"
+	"github.com/jonalfarlinga/bacnet/objects"
 	"github.com/spf13/cobra"
 )
 
 func init() {
-	ReadRangeClientCmd.Flags().Uint16Var(&rrObjectType, "object-type", 0, "Object type to read.")
-	ReadRangeClientCmd.Flags().Uint32Var(&rrInstanceId, "instance-id", 0, "Instance ID to read.")  // Analog-input
-	ReadRangeClientCmd.Flags().Uint16Var(&rrPropertyId, "property-id", 131, "Property ID to read.") // Current-value
-	ReadRangeClientCmd.Flags().Uint16Var(&rrRangeStart, "range-start", 1, "Range start index.")
-	ReadRangeClientCmd.Flags().Int32Var(&rrLength, "length", 50, "Length of results.")
-	ReadRangeClientCmd.Flags().IntVar(&rrPeriod, "period", 1, "Period, in seconds, between requests.")
-	ReadRangeClientCmd.Flags().IntVar(&rrN, "messages", 1, "Number of messages to send, being 0 unlimited.")
+	ReadRangeClientCmd.Flags().Uint16Var(&rrObjectType, "object-type", objects.ObjectTypeTrendLog, "Object type to read.")
+	ReadRangeClientCmd.Flags().Uint32Var(&rrInstanceId, "instance-id", 0, "Instance ID to read.")
+	ReadRangeClientCmd.Flags().Uint16Var(&rrPropertyId, "property-id", objects.PropertyIdLogBuffer, "Property ID to read.")
+	ReadRangeClientCmd.Flags().Uint32Var(&rrRangeStart, "range-start", 1, "Position, or with --by-sequence the sequence number, to count from.")
+	ReadRangeClientCmd.Flags().Int32Var(&rrLength, "length", 50, "How many items; negative counts backwards from --range-start. 0 asks for the whole list.")
+	ReadRangeClientCmd.Flags().BoolVar(&rrBySequence, "by-sequence", false, "Count from a sequence number rather than a position.")
 }
 
 var (
 	rrObjectType uint16
 	rrInstanceId uint32
 	rrPropertyId uint16
-	rrRangeStart uint16
+	rrRangeStart uint32
 	rrLength     int32
-	rrPeriod     int
-	rrN          int
+	rrBySequence bool
 
 	ReadRangeClientCmd = &cobra.Command{
 		Use:   "rrc",
-		Short: "Send ReadRange requests.",
-		Long:  "There's not much more really. This command sends a configurable ReadProperty request.",
-		Args:  argValidation,
-		Run:   ReadRangeClientExample,
+		Short: "Send a ReadRange request.",
+		Long: "Reads part of a list property, a trend log's log-buffer unless told otherwise,\n" +
+			"and prints the records: when each was logged, what, and its status flags.",
+		Args: argValidation,
+		Run:  ReadRangeClientExample,
 	}
 )
 
 func ReadRangeClientExample(cmd *cobra.Command, args []string) {
-	remoteUDPAddr, err := net.ResolveUDPAddr("udp", rAddr)
+	c := openClient(nil)
+	defer c.Close()
+
+	req := client.ReadRangeRequest{
+		Object:   client.ObjectID{Type: rrObjectType, Instance: rrInstanceId},
+		Property: rrPropertyId,
+	}
+	switch {
+	case rrLength == 0:
+	case rrBySequence:
+		req.Range = client.BySequence(rrRangeStart, rrLength)
+	default:
+		req.Range = client.ByPosition(rrRangeStart, rrLength)
+	}
+	res, err := c.ReadRange(context.Background(), target(), req)
 	if err != nil {
-		log.Fatalf("Failed to resolve UDP address: %s", err)
+		log.Fatalf("reading: %v", err)
 	}
 
-	listenConn, err := net.ListenPacket("udp", bAddr)
-	if err != nil {
-		log.Fatalf("failed to begin listening for packets: %v\n", err)
+	fmt.Printf("%s %d %s: %d item(s), first %t, last %t, more %t",
+		objectTypeName(res.Object.Type), res.Object.Instance, propertyName(res.Property),
+		res.ItemCount, res.FirstItem, res.LastItem, res.MoreItems)
+	if res.FirstSequence != nil {
+		fmt.Printf(", from sequence number %d", *res.FirstSequence)
 	}
-	defer listenConn.Close()
-
-	mReadRange, err := bacnet.NewReadRange(rrObjectType, rrInstanceId, rrPropertyId, rrRangeStart, rrLength)
-	if err != nil {
-		log.Fatalf("error generating initial ReadProperty: %v\n", err)
+	fmt.Println()
+	records := res.LogRecords()
+	if len(records) == 0 {
+		fmt.Printf("  items: %s\n", formatValues(res.Items))
+		return
 	}
-
-	replyRaw := make([]byte, 2048)
-	sentRequests := 0
-	for {
-		listenConn.SetDeadline(time.Now().Add(5 * time.Second))
-		if _, err := listenConn.WriteTo(mReadRange, remoteUDPAddr); err != nil {
-			log.Fatalf("Failed to write the request: %s\n", err)
+	for _, r := range records {
+		at := "wildcard time"
+		if !r.At.IsZero() {
+			at = r.At.Format("2006-01-02 15:04:05")
 		}
-
-		log.Printf("sent: %x", mReadRange)
-
-		nBytes, remoteAddr, err := listenConn.ReadFrom(replyRaw)
-		if err != nil {
-			log.Fatalf("error reading incoming packet: %v\n", err)
-		}
-
-		log.Printf("read %d bytes from %s: %x\n", nBytes, remoteAddr, replyRaw[:nBytes])
-
-		serviceMsg, err := bacnet.Parse(replyRaw[:nBytes])
-		if err != nil {
-			log.Fatalf("error parsing the received message: %v\n", err)
-		}
-
-		// switch between recieved message type
-		t := serviceMsg.GetType()
-		switch t {
-		case plumbing.ComplexAck:
-			cACK, ok := serviceMsg.(*services.ComplexACK)
-			if !ok {
-				log.Fatalf("we didn't receive a CACK reply...\n")
-			}
-			log.Printf("unmarshalled BVLC: %#v\n", cACK.BVLC)
-			log.Printf("unmarshalled NPDU: %#v\n", cACK.NPDU)
-
-			decodedLogBuffer, err := cACK.DecodeRR()
-			if err != nil {
-				log.Fatalf("couldn't decode the LogBuffer reply: %v\n", err)
-			}
-			printLogBuffer(&decodedLogBuffer)
-		case plumbing.Error:
-			errEnc, ok := serviceMsg.(*services.Error)
-			if !ok {
-				log.Fatalf("we didn't receive an Error reply...\n")
-			}
-			log.Printf("unmarshalled BVLC: %#v\n", errEnc.BVLC)
-			log.Printf("unmarshalled NPDU: %#v\n", errEnc.NPDU)
-
-			decodedErr, err := errEnc.Decode()
-			if err != nil {
-				log.Fatalf("couldn't decode the Error reply: %v\n", err)
-			}
-			log.Printf("decoded Error reply:\n\tError Class: %d\n\tError Code: %d\n",
-				decodedErr.ErrorClass, decodedErr.ErrorCode,
-			)
-		}
-
-		sentRequests++
-
-		if sentRequests == rpN {
-			break
-		}
-
-		time.Sleep(time.Duration(rpPeriod) * time.Second)
+		fmt.Printf("  %s  %-24s %s\n", at, formatValue(r.Datum), formatValue(client.Value{Kind: client.KindBits, Bits: r.Status}))
 	}
 }

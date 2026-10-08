@@ -24,9 +24,12 @@ func init() {
 	rootCmd.AddCommand(WritePropertyServerCmd)
 	rootCmd.AddCommand(WritePropertyClientCmd)
 	rootCmd.AddCommand(ReadRangeClientCmd)
+	rootCmd.AddCommand(probeCmd)
 
 	rootCmd.PersistentFlags().StringVar(&rAddr, "remote-address", "127.0.0.1:47808", "Remote IP:Port tuple to connect to.")
-	rootCmd.PersistentFlags().StringVar(&bAddr, "broadcast-address", ":47808", "Default broadcast address to bind to.")
+	rootCmd.PersistentFlags().StringVar(&bAddr, "broadcast-address", ":47808", "Default broadcast address to bind to (the server and raw-socket examples).")
+	// The examples built on the client package: whois, rpc, rpm, rrc, probe.
+	clientFlags(rootCmd)
 }
 
 var (

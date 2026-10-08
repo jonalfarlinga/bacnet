@@ -5,118 +5,55 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log"
-	"net"
-	"time"
 
-	"github.com/jonalfarlinga/bacnet"
-	"github.com/jonalfarlinga/bacnet/plumbing"
-	"github.com/jonalfarlinga/bacnet/services"
+	"github.com/jonalfarlinga/bacnet/client"
 	"github.com/spf13/cobra"
 )
 
 func init() {
 	ReadPropertyClientCmd.Flags().Uint16Var(&rpObjectType, "object-type", 0, "Object type to read.")
-	ReadPropertyClientCmd.Flags().Uint32Var(&rpInstanceId, "instance-id", 0, "Instance ID to read.") // Analog-input
-	ReadPropertyClientCmd.Flags().Uint16Var(&rpPropertyId, "property-id", 85, "Property ID to read.") // Current-value
-	ReadPropertyClientCmd.Flags().IntVar(&rpPeriod, "period", 1, "Period, in seconds, between requests.")
-	ReadPropertyClientCmd.Flags().IntVar(&rpN, "messages", 1, "Number of messages to send, being 0 unlimited.")
+	ReadPropertyClientCmd.Flags().Uint32Var(&rpInstanceId, "instance-id", 0, "Instance ID to read.")  // Analog-input
+	ReadPropertyClientCmd.Flags().Uint16Var(&rpPropertyId, "property-id", 85, "Property ID to read.") // Present-value
+	ReadPropertyClientCmd.Flags().Int64Var(&rpIndex, "index", -1, "Array index to read; -1 reads the whole property.")
 }
 
 var (
 	rpObjectType uint16
 	rpInstanceId uint32
 	rpPropertyId uint16
-	rpPeriod     int
-	rpN          int
+	rpIndex      int64
 
 	ReadPropertyClientCmd = &cobra.Command{
 		Use:   "rpc",
-		Short: "Send ReadProperty requests.",
-		Long:  "There's not much more really. This command sends a configurable ReadProperty request.",
-		Args:  argValidation,
-		Run:   ReadPropertyClientExample,
+		Short: "Send a ReadProperty request.",
+		Long: "Reads one property of one object at --remote-address, or of the device on\n" +
+			"--dnet at --dadr behind the router there, and prints the value. The client\n" +
+			"matches the reply to the request, retries it, and reassembles it when the\n" +
+			"device segments it.",
+		Args: argValidation,
+		Run:  ReadPropertyClientExample,
 	}
 )
 
 func ReadPropertyClientExample(cmd *cobra.Command, args []string) {
-	remoteUDPAddr, err := net.ResolveUDPAddr("udp", rAddr)
+	c := openClient(nil)
+	defer c.Close()
+
+	obj := client.ObjectID{Type: rpObjectType, Instance: rpInstanceId}
+	var (
+		values []client.Value
+		err    error
+	)
+	if rpIndex < 0 {
+		values, err = c.ReadProperty(context.Background(), target(), obj, rpPropertyId)
+	} else {
+		values, err = c.ReadPropertyIndex(context.Background(), target(), obj, rpPropertyId, uint32(rpIndex))
+	}
 	if err != nil {
-		log.Fatalf("Failed to resolve UDP address: %s", err)
+		log.Fatalf("reading %s of %s %d: %v", propertyName(uint32(rpPropertyId)), objectTypeName(obj.Type), obj.Instance, err)
 	}
-
-	listenConn, err := net.ListenPacket("udp", bAddr)
-	if err != nil {
-		log.Fatalf("failed to begin listening for packets: %v\n", err)
-	}
-	defer listenConn.Close()
-
-	mReadProperty, err := bacnet.NewReadProperty(rpObjectType, rpInstanceId, rpPropertyId)
-	if err != nil {
-		log.Fatalf("error generating initial ReadProperty: %v\n", err)
-	}
-
-	replyRaw := make([]byte, 1024)
-	sentRequests := 0
-	for {
-		listenConn.SetDeadline(time.Now().Add(5 * time.Second))
-		if _, err := listenConn.WriteTo(mReadProperty, remoteUDPAddr); err != nil {
-			log.Fatalf("Failed to write the request: %s\n", err)
-		}
-
-		log.Printf("sent: %x", mReadProperty)
-
-		nBytes, remoteAddr, err := listenConn.ReadFrom(replyRaw)
-		if err != nil {
-			log.Fatalf("error reading incoming packet: %v\n", err)
-		}
-
-		log.Printf("read %d bytes from %s: %x\n", nBytes, remoteAddr, replyRaw[:nBytes])
-
-		serviceMsg, err := bacnet.Parse(replyRaw[:nBytes])
-		if err != nil {
-			log.Fatalf("error parsing the received message: %v\n", err)
-		}
-
-		// switch between recieved message type
-		t := serviceMsg.GetType()
-		switch t {
-		case plumbing.ComplexAck:
-			cACKEnc, ok := serviceMsg.(*services.ComplexACK)
-			if !ok {
-				log.Fatalf("we didn't receive a CACK reply...\n")
-			}
-			log.Printf("unmarshalled BVLC: %#v\n", cACKEnc.BVLC)
-			log.Printf("unmarshalled NPDU: %#v\n", cACKEnc.NPDU)
-
-			decodedCACK, err := cACKEnc.Decode()
-			if err != nil {
-				log.Fatalf("couldn't decode the CACK reply: %v\n", err)
-			}
-			printCACK(&decodedCACK)
-		case plumbing.Error:
-			errEnc, ok := serviceMsg.(*services.Error)
-			if !ok {
-				log.Fatalf("we didn't receive an Error reply...\n")
-			}
-			log.Printf("unmarshalled BVLC: %#v\n", errEnc.BVLC)
-			log.Printf("unmarshalled NPDU: %#v\n", errEnc.NPDU)
-
-			decodedErr, err := errEnc.Decode()
-			if err != nil {
-				log.Fatalf("couldn't decode the Error reply: %v\n", err)
-			}
-			log.Printf("decoded Error reply:\n\tError Class: %d\n\tError Code: %d\n",
-				decodedErr.ErrorClass, decodedErr.ErrorCode,
-			)
-		}
-
-		sentRequests++
-
-		if sentRequests == rpN {
-			break
-		}
-
-		time.Sleep(time.Duration(rpPeriod) * time.Second)
-	}
+	fmt.Printf("%s %d %s: %s\n", objectTypeName(obj.Type), obj.Instance, propertyName(uint32(rpPropertyId)), formatValues(values))
 }

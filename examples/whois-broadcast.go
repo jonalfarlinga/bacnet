@@ -15,14 +15,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// wiPeriod is the seconds between the Who-Is requests.
+var wiPeriod int
+
 func init() {
 	whoIsCmdBroad.Flags().StringVar(&bacPort, "bacnet-port", ":47808", "broadcast port to bind to.")
 	whoIsCmdBroad.Flags().IntVar(&nWhoB, "messages", 1, "Number of messages to send, being 0 unlimited.")
+	whoIsCmdBroad.Flags().IntVar(&wiPeriod, "period", 1, "Period, in seconds, between WhoIs requests.")
 }
 
 var (
 	nWhoB         int
-	bacPort         string
+	bacPort       string
 	whoIsCmdBroad = &cobra.Command{
 		Use:   "whoisb",
 		Short: "Send WhoIs requests.",

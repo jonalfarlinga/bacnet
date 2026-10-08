@@ -5,113 +5,73 @@
 package main
 
 import (
+	"fmt"
 	"log"
-	"net"
+	"sort"
+	"sync"
 	"time"
 
-	"github.com/jonalfarlinga/bacnet"
-	"github.com/jonalfarlinga/bacnet/common"
-	"github.com/jonalfarlinga/bacnet/services"
+	"github.com/jonalfarlinga/bacnet/client"
 	"github.com/spf13/cobra"
 )
 
 func init() {
-	whoIsCmd.Flags().IntVar(&wiPeriod, "period", 1, "Period, in seconds, between WhoIs requests.")
-	whoIsCmd.Flags().IntVar(&nWhoIs, "messages", 1, "Number of messages to send, being 0 unlimited.")
+	whoIsCmd.Flags().Uint32Var(&wiLow, "low", 0, "Lowest device instance to ask for.")
+	whoIsCmd.Flags().Uint32Var(&wiHigh, "high", 0, "Highest device instance to ask for; 0 with --low 0 asks every device.")
+	whoIsCmd.Flags().DurationVar(&wiWait, "wait", 3*time.Second, "How long to collect I-Ams.")
 }
 
 var (
-	wiPeriod int
-	nWhoIs   int
+	wiLow  uint32
+	wiHigh uint32
+	wiWait time.Duration
 
 	whoIsCmd = &cobra.Command{
 		Use:   "whois",
-		Short: "Send WhoIs requests.",
-		Long: "There's not much more really. This command sends a configurable number of\n" +
-			"WhoIs requests with a configurable period. That's pretty much it.",
+		Short: "Send a Who-Is and list the devices that answer.",
+		Long: "Sends one Who-Is, addressed to every network so that devices behind routers\n" +
+			"answer too, and lists the devices by instance as their I-Ams arrive. With\n" +
+			"--interface the Who-Is goes to the adapter's subnet broadcast; without it, to\n" +
+			"--remote-address. With --bbmd it goes through the BBMD, as a foreign device.",
 		Args: argValidation,
 		Run:  whoIsExample,
 	}
 )
 
 func whoIsExample(cmd *cobra.Command, args []string) {
-	remoteUDPAddr, err := net.ResolveUDPAddr("udp", rAddr)
-	if err != nil {
-		log.Fatalf("Failed to resolve UDP address: %s", err)
+	var (
+		mu    sync.Mutex
+		found = map[uint32]client.Device{}
+	)
+	c := openClient(func(d client.Device) {
+		mu.Lock()
+		found[d.Instance] = d
+		mu.Unlock()
+	})
+	defer c.Close()
+
+	var err error
+	if wiLow == 0 && wiHigh == 0 {
+		err = c.WhoIs()
+	} else {
+		err = c.WhoIsRange(wiLow, wiHigh)
 	}
-
-	ifaceAddrs, err := net.InterfaceAddrs()
 	if err != nil {
-		log.Fatalf("couldn't get interface information: %v\n", err)
+		log.Fatalf("sending the Who-Is: %v", err)
 	}
+	time.Sleep(wiWait)
 
-	listenConn, err := net.ListenPacket("udp", bAddr)
-	if err != nil {
-		log.Fatalf("failed to begin listening for packets: %v\n", err)
+	mu.Lock()
+	defer mu.Unlock()
+	instances := make([]uint32, 0, len(found))
+	for i := range found {
+		instances = append(instances, i)
 	}
-	defer listenConn.Close()
-
-	mWhoIs, err := bacnet.NewWhois()
-	if err != nil {
-		log.Fatalf("error generating initial WhoIs: %v\n", err)
-	}
-
-	replyRaw := make([]byte, 1024)
-	sentRequests := 0
-	for {
-		listenConn.SetDeadline(time.Now().Add(5 * time.Second))
-		if _, err := listenConn.WriteTo(mWhoIs, remoteUDPAddr); err != nil {
-			log.Fatalf("Failed to write Unconfimed request WhoIs packet: %s\n", err)
-		}
-
-		log.Printf("sent: %x", mWhoIs)
-
-		var nBytes int
-		var remoteAddr net.Addr
-		for {
-			nBytes, remoteAddr, err = listenConn.ReadFrom(replyRaw)
-			if err != nil {
-				log.Fatalf("error reading incoming packet: %v\n", err)
-			}
-			if !common.IsLocalAddr(ifaceAddrs, remoteAddr) {
-				break
-			}
-			log.Printf("got our own broadcast, back to listening...\n")
-			break
-		}
-
-		log.Printf("read %d bytes from %s: %x\n", nBytes, remoteAddr, replyRaw[:nBytes])
-
-		serviceMsg, err := bacnet.Parse(replyRaw[:nBytes])
-		if err != nil {
-			log.Fatalf("error parsing the received message: %v\n", err)
-		}
-		// switch between recieved messages
-		t := serviceMsg.GetType()
-		switch t {
-
-		}
-		iAmMessage, ok := serviceMsg.(*services.UnconfirmedIAm)
-		if !ok {
-			log.Fatalf("we didn't receive an IAm reply...\n")
-		}
-
-		log.Printf("unmarshalled BVLC: %#v\n", iAmMessage.BVLC)
-		log.Printf("unmarshalled NPDU: %#v\n", iAmMessage.NPDU)
-
-		decodedIAm, err := iAmMessage.Decode()
-		if err != nil {
-			log.Fatalf("couldn't decode the IAm reply: %v\n", err)
-		}
-
-		printIAm(&decodedIAm)
-
-		sentRequests++
-
-		if sentRequests == nWhoIs {
-			break
-		}
-
-		time.Sleep(time.Duration(wiPeriod) * time.Second)
+	sort.Slice(instances, func(i, j int) bool { return instances[i] < instances[j] })
+	fmt.Printf("%d device(s) answered in %s\n", len(found), wiWait)
+	for _, i := range instances {
+		d := found[i]
+		fmt.Printf("  device %-8d at %-40v max APDU %-5d segmentation %d vendor %d\n",
+			d.Instance, d.Addr, d.MaxAPDU, d.Segmentation, d.VendorID)
 	}
 }

@@ -22,7 +22,8 @@ func TestSendRefusesAllButReads(t *testing.T) {
 
 	for service := 0; service < 256; service++ {
 		want := service == int(services.ServiceConfirmedReadProperty) ||
-			service == int(services.ServiceConfirmedReadPropMultiple)
+			service == int(services.ServiceConfirmedReadPropMultiple) ||
+			service == int(services.ServiceConfirmedReadRange)
 		a := plumbing.NewAPDU(plumbing.ConfirmedReq, uint8(service), nil)
 		err := c.sendAPDU(plumbing.BVLCFuncUnicast, to.IP, npduTo(to, true), a)
 		if got := !errors.Is(err, ErrServiceNotAllowed); got != want {
@@ -37,10 +38,35 @@ func TestSendRefusesAllButReads(t *testing.T) {
 			t.Errorf("unconfirmed service %d: sent %t, want %t", service, got, want)
 		}
 	}
-	for _, pduType := range []uint8{plumbing.SimpleAck, plumbing.ComplexAck, plumbing.Error, plumbing.Reject, plumbing.Abort} {
+	for _, pduType := range []uint8{plumbing.SimpleAck, plumbing.ComplexAck, plumbing.Error, plumbing.Reject} {
 		err := c.sendAPDU(plumbing.BVLCFuncUnicast, to.IP, npduTo(to, false), &plumbing.APDU{Type: pduType})
 		if !errors.Is(err, ErrServiceNotAllowed) {
 			t.Errorf("PDU type %d was sent: the client answers nothing", pduType)
+		}
+	}
+	// The client aborts a reply it will not take, but never as a server.
+	if err := c.sendAPDU(plumbing.BVLCFuncUnicast, to.IP, npduTo(to, false), &plumbing.APDU{Type: plumbing.Abort}); err != nil {
+		t.Errorf("the client's own abort was refused: %v", err)
+	}
+	if err := c.sendAPDU(plumbing.BVLCFuncUnicast, to.IP, npduTo(to, false), &plumbing.APDU{Type: plumbing.Abort, Flags: 0x1}); !errors.Is(err, ErrServiceNotAllowed) {
+		t.Errorf("a server's abort was sent")
+	}
+
+	// A Who-Is carries nothing, or a range of instances, and nothing else.
+	rangeOnly, _ := services.WhoIsObjects(1, 2)
+	for name, tc := range map[string]struct {
+		payload []objects.APDUPayload
+		want    bool
+	}{
+		"empty":        {nil, true},
+		"range":        {rangeOnly, true},
+		"half a range": {rangeOnly[:1], false},
+		"not a range":  {[]objects.APDUPayload{objects.EncUnsignedInteger(1), objects.EncUnsignedInteger(2)}, false},
+	} {
+		a := plumbing.NewAPDU(plumbing.UnConfirmedReq, services.ServiceUnconfirmedWhoIs, tc.payload)
+		err := c.sendAPDU(plumbing.BVLCFuncUnicast, to.IP, npduTo(to, false), a)
+		if got := !errors.Is(err, ErrServiceNotAllowed); got != tc.want {
+			t.Errorf("Who-Is %s: sent %t, want %t", name, got, tc.want)
 		}
 	}
 

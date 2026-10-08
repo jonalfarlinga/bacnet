@@ -125,6 +125,29 @@ func (d *Device) multiState(inst uint32, name, description string, state uint, s
 	d.add(typeMSV, inst, name, description, props...)
 }
 
+// LogRecords is how many records each trend log holds.
+const LogRecords = 48
+
+// trendLog adds a trend log with LogRecords records five minutes apart, the
+// last of them now, logging a value that drifts around mid.
+func (d *Device) trendLog(inst uint32, name, description string, mid, swing float64) {
+	records := make([]logRecord, LogRecords)
+	now := time.Now().Truncate(time.Second)
+	for i := range records {
+		records[i] = logRecord{
+			at:    now.Add(-time.Duration(LogRecords-1-i) * 5 * time.Minute),
+			value: float32(mid + swing*math.Sin(float64(i)/5)),
+		}
+	}
+	o := d.add(objects.ObjectTypeTrendLog, inst, name, description,
+		property{id: objects.PropertyIdRecordCount, get: number(LogRecords)},
+		property{id: objects.PropertyIdTotalRecordCount, get: number(LogRecords)},
+		property{id: objects.PropertyIdBufferSize, get: number(LogRecords)},
+		property{id: objects.PropertyIdLogInterval, get: number(300 * 100)},
+	)
+	o.records = records
+}
+
 // finish adds the Device object, which lists the others, and puts it first.
 func (d *Device) finish() *Device {
 	now := func() time.Time { return time.Now() }
@@ -215,8 +238,8 @@ func airHandler() *Device {
 	d.binary(typeBV, 0, "AHU1.OCC", "Occupied", true, "Unoccupied", "Occupied", false)
 	d.multiState(0, "AHU1.MODE", "Operating mode", 2, "Off", "Cooling", "Heating", "Economizer")
 	d.add(objects.ObjectTypeSchedule, 0, "AHU1.SCHED", "Occupancy schedule")
-	d.add(objects.ObjectTypeTrendLog, 0, "AHU1.SAT.TL", "Supply air temperature, 5 minutes")
-	d.add(objects.ObjectTypeTrendLog, 1, "AHU1.DSP.TL", "Duct static pressure, 5 minutes")
+	d.trendLog(0, "AHU1.SAT.TL", "Supply air temperature, 5 minutes", 55.2, 1.5)
+	d.trendLog(1, "AHU1.DSP.TL", "Duct static pressure, 5 minutes", 1.25, 0.08)
 	d.add(objects.ObjectTypeNotificationClass, 0, "AHU1.ALARMS", "Alarm routing")
 	return d.finish()
 }

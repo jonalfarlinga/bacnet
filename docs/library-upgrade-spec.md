@@ -411,6 +411,20 @@ The Vagrantfile change and a README section for the host route are part of PR 8.
 
 PRs 4 and 5 can proceed in parallel with PRs 2 and 3.
 
+### 10.1 Status, 2026-10-07
+
+PRs 1 to 8 are delivered, with these differences from the text above, kept because they fit the explorer better:
+
+- Typed values are one `client.Value` struct with a `Kind` field, not the `objects.Value` interface of §5.3, and the multi-object RPM decoder (§5.5) lives in `client`, not `services`.
+- Discovery is `WhoIs` and `WhoIsRange` plus an `OnIAm` callback, not the collecting `WhoIs(ctx)` and `SubscribeIAm` of §7.1.
+- The read-only guard is global rather than per device (§7.7). It has nothing to unlock until write methods exist, and the per-device switch is left for them.
+- `Config.MaxRequestsPerSec` takes 0 as the default and a value below 0 as no limit. `MaxSegments` counts segments, not bytes, and a reply beyond it fails with `*ResponseTooLargeError`.
+- Tests run against the simulator in `client/sim`, not `testing/synctest` fakes (§8).
+
+The deny list, the in-flight limits, the rate limit, `Stats`, `ReadMany`, the ranged Who-Is and the cap logging of §7.4 are in.
+
+PR 9 is delivered: `ReadRange` with `LogRecords` for trend logs, the `whois`, `rpc`, `rpm` and `rrc` examples rewritten on `client`, a `probe` example, and the reassembler moved to `client.Reassembler` for the orchestrator. The name lookups of §5.4 live in `objects/names.go`. ReadRange by time is not sent, for want of date and time encoders; by position and by sequence number are.
+
 ## 11. Roadmap (after this upgrade)
 
 This upgrade delivers read-only access over BACnet/IP on UDP. That is the first step. The items below are planned and are not designed here; the order is not fixed.

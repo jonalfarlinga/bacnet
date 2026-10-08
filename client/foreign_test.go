@@ -118,6 +118,60 @@ func TestForeignDevice(t *testing.T) {
 	})
 }
 
+// A BBMD that stops answering moves the registration to failed, with a
+// backoff before the next attempt; when it is back, the client registers
+// again on its own and hears the devices behind it once more.
+func TestForeignDeviceRecovers(t *testing.T) {
+	network, err := sim.StartDevices(sim.RemoteSite(false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(network.Close)
+	c, heard := openOn(t, network, func(cfg *client.Config) {
+		cfg.Broadcast = netip.AddrPort{}
+		cfg.Retries = 0
+		cfg.Timeout = 300 * time.Millisecond
+		cfg.ForeignDevice = &client.ForeignDeviceConfig{BBMD: network.Addr(), TTL: time.Second}
+	})
+	waitFor(t, "the registration", func() bool {
+		st, _ := c.ForeignDeviceStatus()
+		return st.State == client.FDRegistered
+	})
+
+	// The BBMD goes away: the next renewal, within a second, gets no answer.
+	network.Silence(0, true)
+	waitFor(t, "the registration to fail", func() bool {
+		st, _ := c.ForeignDeviceStatus()
+		return st.State == client.FDFailed
+	})
+	st, _ := c.ForeignDeviceStatus()
+	if !errors.Is(st.LastResult, client.ErrTimeout) {
+		t.Errorf("the registration failed with %v, want a timeout", st.LastResult)
+	}
+	if wait := time.Until(st.NextAttempt); wait < 3*time.Second || wait > 6*time.Second {
+		t.Errorf("the next attempt is in %s, want about 5 seconds", wait)
+	}
+	if err := c.WhoIs(); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(200 * time.Millisecond)
+	if devices := heard(); len(devices) != 0 {
+		t.Errorf("devices %v answered while the BBMD was away", devices)
+	}
+
+	// The BBMD is back: the next attempt registers, and the broadcasts
+	// reach the site again.
+	network.Silence(0, false)
+	waitFor(t, "the registration to recover", func() bool {
+		st, _ := c.ForeignDeviceStatus()
+		return st.State == client.FDRegistered && st.Registrations >= 2
+	})
+	if err := c.WhoIs(); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the site's devices", func() bool { return len(heard()) == 5 })
+}
+
 // A BBMD that refuses the registration leaves the client failed, trying
 // again after a backoff, and its broadcasts reach nobody.
 func TestForeignDeviceRefused(t *testing.T) {

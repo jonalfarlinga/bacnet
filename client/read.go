@@ -237,3 +237,162 @@ func ErrorCodeName(v uint32) string {
 	}
 	return fmt.Sprintf("code %d", v)
 }
+
+// ---- ReadMany --------------------------------------------------------------
+
+// errNotInReply is the error given for a property of an object the device
+// left out of a ReadPropertyMultiple reply.
+var errNotInReply = errors.New("not in the reply")
+
+// ReadMany reads properties of many objects of one device, with
+// ReadPropertyMultiple in requests sized to what the device can answer, and
+// with ReadProperty one property at a time where the device has no
+// ReadPropertyMultiple, or declines one for a single object. Once a device
+// has said it has no ReadPropertyMultiple, the client does not ask it again.
+//
+// The results come in the order of specs, one for each, with the error the
+// device gave for a property in its PropertyResult. ReadMany itself returns
+// an error only when the device stops answering, or ctx ends.
+func (c *Client) ReadMany(ctx context.Context, dev Device, specs []ReadSpec) ([]ObjectResult, error) {
+	results := make([]ObjectResult, len(specs))
+	for i, s := range specs {
+		results[i] = ObjectResult{Object: s.Object}
+	}
+	batch := readManyBatch(dev, specs)
+	for start := 0; start < len(specs); start += batch {
+		end := min(start+batch, len(specs))
+		if err := c.readMany(ctx, dev, specs[start:end], results[start:end]); err != nil {
+			return nil, err
+		}
+	}
+	return results, nil
+}
+
+// readManyBatch is how many objects to ask about in one request. A device
+// that sends segmented replies can answer for many at once; one that cannot
+// has to fit the reply in one APDU, so the batch is sized by an estimate of
+// what each object and property comes back as.
+func readManyBatch(dev Device, specs []ReadSpec) int {
+	const (
+		most           = 32
+		perObject      = 8
+		perProperty    = 24
+		replyOverhead  = 16
+		smallestAPDU   = 50
+		segmentsBoth   = 0
+		segmentsToSend = 1
+	)
+	if dev.Segmentation == segmentsBoth || dev.Segmentation == segmentsToSend {
+		return most
+	}
+	props := 0
+	for _, s := range specs {
+		props += len(s.Props)
+	}
+	if len(specs) > 0 {
+		props = max(1, props/len(specs))
+	}
+	budget := int(dev.MaxAPDU)
+	if budget < smallestAPDU {
+		budget = smallestAPDU
+	}
+	return max(1, min(most, (budget-replyOverhead)/(perObject+perProperty*props)))
+}
+
+// readMany fills out, one result for each spec, from one request where it
+// can, and from less at a time where the device declines.
+func (c *Client) readMany(ctx context.Context, dev Device, specs []ReadSpec, out []ObjectResult) error {
+	if c.lacksRPM(dev.Addr) {
+		for i := range specs {
+			if err := c.readSingly(ctx, dev.Addr, specs[i], &out[i]); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	got, err := c.ReadPropertyMultiple(ctx, dev.Addr, specs)
+	switch {
+	case err == nil:
+		byObject := make(map[ObjectID]ObjectResult, len(got))
+		for _, r := range got {
+			byObject[r.Object] = r
+		}
+		for i, s := range specs {
+			if r, ok := byObject[s.Object]; ok {
+				out[i].Props = r.Props
+				continue
+			}
+			for _, p := range s.Props {
+				out[i].Props = append(out[i].Props, PropertyResult{ID: uint32(p), Err: errNotInReply})
+			}
+		}
+		return nil
+	case gone(err):
+		return err
+	case noRPM(err):
+		c.mu.Lock()
+		c.noRPM[keyOf(dev.Addr, 0)] = true
+		c.mu.Unlock()
+		c.log.Info("device has no ReadPropertyMultiple", "device", dev.Instance, "at", dev.Addr)
+		return c.readMany(ctx, dev, specs, out)
+	case len(specs) > 1:
+		// The device declined, or sent something unreadable; most often the
+		// reply would not fit. Ask for less at a time.
+		half := len(specs) / 2
+		if err := c.readMany(ctx, dev, specs[:half], out[:half]); err != nil {
+			return err
+		}
+		return c.readMany(ctx, dev, specs[half:], out[half:])
+	}
+	// One object the device declined, for whatever reason: property by
+	// property, so that its answer for each is kept.
+	return c.readSingly(ctx, dev.Addr, specs[0], &out[0])
+}
+
+// readSingly reads an object with one ReadProperty for each property.
+func (c *Client) readSingly(ctx context.Context, to Address, spec ReadSpec, out *ObjectResult) error {
+	for _, prop := range spec.Props {
+		values, err := c.ReadProperty(ctx, to, spec.Object, prop)
+		if gone(err) {
+			return err
+		}
+		out.Props = append(out.Props, PropertyResult{ID: uint32(prop), Values: values, Err: err})
+	}
+	return nil
+}
+
+func (c *Client) lacksRPM(to Address) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.noRPM[keyOf(to, 0)]
+}
+
+// noRPM reports whether an error is the device saying it has no
+// ReadPropertyMultiple, rather than declining one particular request.
+func noRPM(err error) bool {
+	var re *RejectError
+	if errors.As(err, &re) {
+		return re.Reason == objects.RejectReasonUnrecognizedService
+	}
+	var be *BACnetError
+	if errors.As(err, &be) {
+		return be.Class == errorClassServices &&
+			(be.Code == errorCodeServiceRequestDenied || be.Code == errorCodeOptionalFunctionalityNotSupported)
+	}
+	return false
+}
+
+const (
+	errorClassServices                         = 5
+	errorCodeServiceRequestDenied              = 29
+	errorCodeOptionalFunctionalityNotSupported = 45
+)
+
+// gone reports whether err means the device is not answering, or that
+// nobody is waiting for the answer any more. Any other error is the device's
+// answer to one request, and the next request is worth making.
+func gone(err error) bool {
+	return errors.Is(err, ErrTimeout) || errors.Is(err, ErrClosed) || errors.Is(err, ErrSourceDenied) ||
+		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
