@@ -1,7 +1,7 @@
 // Package client is a BACnet/IP client: one UDP socket, a read loop that
 // matches replies to requests, the read services, and change-of-value
-// subscriptions. It is the part of the client in docs/library-upgrade-spec.md
-// §7 that browsing takes; the explorer is its first user.
+// subscriptions. It is the client of docs/library-upgrade-spec.md §7. The
+// explorer, github.com/jonalfarlinga/bacnet-explorer, is its first user.
 //
 // It reaches devices on the local subnet, behind BACnet routers (it learns
 // which router serves each network), and on remote IP subnets through a BBMD

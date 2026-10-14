@@ -1,6 +1,6 @@
 # BACnet Library Upgrade — Specification (v1 draft)
 
-Companion to [explorer-spec.md](explorer-spec.md) §4. This spec covers the library changes the Explorer needs. These changes are also useful to anyone else using the library.
+Companion to [explorer-spec.md](https://github.com/jonalfarlinga/bacnet-explorer/blob/main/docs/explorer-spec.md) §4, in the explorer's repository. This spec covers the library changes the Explorer needs. These changes are also useful to anyone else using the library.
 
 ## 1. Goals
 

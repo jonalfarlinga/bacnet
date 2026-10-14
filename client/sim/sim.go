@@ -1,13 +1,14 @@
 // Package sim runs simulated BACnet/IP devices on the loopback interface, for
-// trying the explorer and testing its client without a network. The devices
-// answer Who-Is, ReadProperty and ReadPropertyMultiple, segment replies that
-// are too long for one APDU, and include a router with devices behind it, a
-// device that cannot segment and one without ReadPropertyMultiple. The
-// router answers Who-Is-Router-To-Network and rejects requests for networks
-// it does not have. A station can be a BBMD, which registers foreign devices
-// and forwards broadcasts to and from them. The devices take COV
-// subscriptions to the objects that have a present value, and notify the
-// subscribers when one is made and when NotifyCOV says so.
+// testing the client without a network, and for trying a program built on it
+// without one. The devices answer Who-Is, ReadProperty and
+// ReadPropertyMultiple, segment replies that are too long for one APDU, and
+// include a router with devices behind it, a device that cannot segment and
+// one without ReadPropertyMultiple. The router answers
+// Who-Is-Router-To-Network and rejects requests for networks it does not
+// have. A station can be a BBMD, which registers foreign devices and forwards
+// broadcasts to and from them. The devices take COV subscriptions to the
+// objects that have a present value, and notify the subscribers when one is
+// made and when NotifyCOV says so.
 //
 // Loopback has no broadcast address, so a frame sent as an
 // Original-Broadcast-NPDU to any station is heard by every station, as a
