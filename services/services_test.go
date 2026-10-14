@@ -34,7 +34,7 @@ func TestUnconfirmedWhoIs(t *testing.T) {
 	var testcases = []testCase{
 		{
 			description: "Unconfirmed request WhoIs frame",
-			structured: str,
+			structured:  str,
 			serialized: []byte{
 				0x81, 0x0b, 0x00, 0x08, // BVLC
 				0x01, 0x00, // NPDU
@@ -79,7 +79,7 @@ func TestUnconfirmedIAm(t *testing.T) {
 	var testcases = []testCase{
 		{
 			description: "Unconfirmed request IAm frame",
-			structured: str,
+			structured:  str,
 			serialized: []byte{
 				0x81, 0x0b, 0x00, 0x14, // BVLC
 				0x01, 0x00, // NPDU

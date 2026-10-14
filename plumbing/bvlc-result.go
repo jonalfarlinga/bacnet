@@ -16,17 +16,17 @@ const BVLCFuncResult = 0x00
 // Distribute-Broadcast-To-Network).
 const (
 	BVLCResultSuccess                          uint16 = 0x0000
-	BVLCResultWriteBroadcastDistributionNAK     uint16 = 0x0010
-	BVLCResultReadBroadcastDistributionNAK      uint16 = 0x0020
-	BVLCResultRegisterForeignDeviceNAK          uint16 = 0x0030
-	BVLCResultReadForeignDeviceTableNAK         uint16 = 0x0040
-	BVLCResultDeleteForeignDeviceTableEntryNAK  uint16 = 0x0050
-	BVLCResultDistributeBroadcastToNetworkNAK   uint16 = 0x0060
+	BVLCResultWriteBroadcastDistributionNAK    uint16 = 0x0010
+	BVLCResultReadBroadcastDistributionNAK     uint16 = 0x0020
+	BVLCResultRegisterForeignDeviceNAK         uint16 = 0x0030
+	BVLCResultReadForeignDeviceTableNAK        uint16 = 0x0040
+	BVLCResultDeleteForeignDeviceTableEntryNAK uint16 = 0x0050
+	BVLCResultDistributeBroadcastToNetworkNAK  uint16 = 0x0060
 )
 
 // BVLCResultCodeMap gives a human-readable label for each BVLC-Result code.
 var BVLCResultCodeMap = map[uint16]string{
-	BVLCResultSuccess:                         "Successful completion",
+	BVLCResultSuccess:                          "Successful completion",
 	BVLCResultWriteBroadcastDistributionNAK:    "Write-Broadcast-Distribution-Table NAK",
 	BVLCResultReadBroadcastDistributionNAK:     "Read-Broadcast-Distribution-Table NAK",
 	BVLCResultRegisterForeignDeviceNAK:         "Register-Foreign-Device NAK",

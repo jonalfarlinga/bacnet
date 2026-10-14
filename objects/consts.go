@@ -62,7 +62,7 @@ const (
 
 // Error classes
 const (
-	ErrorClassDevice   uint8 = iota
+	ErrorClassDevice uint8 = iota
 	ErrorClassObject
 	ErrorClassProperty
 	ErrorClassResources
@@ -99,15 +99,15 @@ var AbortReasonMap = map[uint8]string{
 	AbortReasonOther:                         "Other",
 	AbortReasonBufferOverflow:                "Buffer overflow",
 	AbortReasonInvalidAPDUInThisState:        "Invalid APDU in this state",
-	AbortReasonPreemptedByHigherPriorityTask:  "Preempted by higher priority task",
-	AbortReasonSegmentationNotSupported:       "Segmentation not supported",
-	AbortReasonSecurityError:                  "Security error",
-	AbortReasonInsufficientSecurity:           "Insufficient security",
-	AbortReasonWindowSizeOutOfRange:           "Window size out of range",
-	AbortReasonApplicationExceededReplyTime:   "Application exceeded reply time",
-	AbortReasonOutOfResources:                 "Out of resources",
-	AbortReasonTSMTimeout:                     "TSM timeout",
-	AbortReasonAPDUTooLong:                    "APDU too long",
+	AbortReasonPreemptedByHigherPriorityTask: "Preempted by higher priority task",
+	AbortReasonSegmentationNotSupported:      "Segmentation not supported",
+	AbortReasonSecurityError:                 "Security error",
+	AbortReasonInsufficientSecurity:          "Insufficient security",
+	AbortReasonWindowSizeOutOfRange:          "Window size out of range",
+	AbortReasonApplicationExceededReplyTime:  "Application exceeded reply time",
+	AbortReasonOutOfResources:                "Out of resources",
+	AbortReasonTSMTimeout:                    "TSM timeout",
+	AbortReasonAPDUTooLong:                   "APDU too long",
 }
 
 // Reject reasons (BACnetRejectReason)
