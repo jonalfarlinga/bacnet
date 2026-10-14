@@ -286,14 +286,12 @@ func (a *APDU) MarshalTo(b []byte) error {
 		b[offset] = a.InvokeID
 		offset++
 		b[offset] = a.Reason
-		offset++
 	case SegmentAck:
 		b[offset] = a.InvokeID
 		offset++
 		b[offset] = a.SequenceNumber
 		offset++
 		b[offset] = a.ActualWindowSize
-		offset++
 	case ComplexAck, SimpleAck, Error:
 		b[offset] = a.InvokeID
 		offset++

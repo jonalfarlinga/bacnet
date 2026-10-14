@@ -49,19 +49,6 @@ type Value struct {
 	Items  []Value // KindConstructed
 }
 
-// decodeValues decodes a run of tags, such as the contents of a property
-// value, into values. Nested opening and closing tags become KindConstructed.
-func decodeValues(tags []*objects.Object) ([]Value, error) {
-	values, rest, err := decodeUntilClose(tags)
-	if err != nil {
-		return nil, err
-	}
-	if len(rest) != 0 {
-		return nil, fmt.Errorf("closing tag %d without an opening tag", rest[0].TagNumber)
-	}
-	return values, nil
-}
-
 // decodeUntilClose decodes tags up to a closing tag that nothing in the run
 // opened, and returns what is left from that tag on.
 func decodeUntilClose(tags []*objects.Object) ([]Value, []*objects.Object, error) {
