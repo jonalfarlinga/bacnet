@@ -88,6 +88,12 @@ sidelined. Pick points, in batch, and press Track or Sideline. Each decision wri
 the decided points, with their devices, leave `temp.json`. The decision is for the data consumers: the
 explorer shows every point either way, marked `new`, `tracked` or `sidelined`.
 
+A registry file is never written again, and is read-only from the moment it appears. The **History** tab of
+the admin panel lists them all, the one in force first, with what each holds and how it differs from the
+decisions now. **Restore** puts an older one back in force by writing it as a new registry file, so the
+history only grows: a point decided about since is `new` again, and one removed since comes back, marked
+"not responding" until its device is read.
+
 On start, the explorer loads the latest registry and `temp.json` first and only then starts discovery.
 Everything loaded is marked "not responding" until it is heard from: a device when it answers the Who-Is
 or is read again (one listed by address is read again at once), a point when its device's points are read.
@@ -124,8 +130,10 @@ the store from an earlier one, the machine's own address, the adapter's subnet a
 and outside the adapter's subnet, where the subnets are not known, the addresses ending in .0 and .255. A
 device too old to be read through the wildcard instance answers with an error; the explorer then sends that
 one address a Who-Is, and lists the device if its I-Am comes back. If it does not, the address is named in
-the status. The status is in the tooltip of the header's BACnet/IP badge: the ranges, the next sweep, how far
-a running one is, and what the last one found.
+the status. The status is in the admin panel's footer, under the walk's, and in the tooltip of the header's
+BACnet/IP badge: the ranges, when the next sweep starts, and for the running one and the last one, when it
+started, the address it tried most recently, how many it has tried, and what it found. A running sweep's
+line is brought up to date every two seconds.
 
 To the network a sweep looks like a port scan of UDP 47808, and every unused address on the adapter's subnet
 costs an ARP broadcast: tell whoever watches the network before giving it ranges, and keep to the ranges
