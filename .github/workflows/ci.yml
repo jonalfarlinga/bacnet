@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go build ./...
+      - run: go vet ./...
+      # The client is concurrent: on Linux, where the race detector needs no
+      # C toolchain, every test runs under it.
+      - if: runner.os == 'Linux'
+        run: go test -race ./...
+      - if: runner.os == 'Windows'
+        run: go test ./...
+      - name: Build the examples
+        working-directory: examples
+        run: go build ./... && go vet ./...
+
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: |
+          files=$(gofmt -l .)
+          if [ -n "$files" ]; then echo "not gofmt'd:"; echo "$files"; exit 1; fi
+      - name: go.mod and go.sum are tidy
+        run: go mod tidy -diff
