@@ -435,7 +435,7 @@ This upgrade delivers read-only access over BACnet/IP on UDP. That is the first 
 |---|---|
 | Other IP transports | UDP is the starting point. `Address`, the peer key, and `Config.Conn` are specific to B/IP on UDP in this upgrade and will need a transport boundary inside `client` when a second transport is added. |
 | COV | Delivered, see §10.1. Left: SubscribeCOVProperty with a COV increment, and unsubscribed notifications. |
-| Write services | WriteProperty with priority and relinquish, for devices switched to writable (§7.7). Writes must not be retransmitted blindly, so this needs a per-call retry override and an error that separates "sent, no answer" from "never sent". |
+| Write services | Delivered after v0.4.0: `WriteProperty` with priority and relinquish, for devices switched to writable with `Config.Writable` and `SetWritable` (§7.7). It is sent once and never retransmitted, and `ErrNotSent` separates "never sent" from "sent, no answer". |
 | Alarms | GetEventInformation (a read; add to the allow-list), then AcknowledgeAlarm as a write service. |
 
 ## 12. Open questions

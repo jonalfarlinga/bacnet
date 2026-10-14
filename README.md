@@ -23,7 +23,7 @@ several directories:
 | `objects/` | The tags and the primitive values they carry, and the names of object types, properties and engineering units |
 | `services/` | The services as messages: Who-Is and I-Am, Who-Has, ReadProperty, ReadPropertyMultiple, ReadRange, WriteProperty, SubscribeCOV and its notifications, and the replies: SimpleACK, ComplexACK, SegmentACK, Error, Reject and Abort |
 | `common/` | Errors and utilities used across all the above |
-| `client/` | A BACnet/IP client: one UDP socket, request and reply matching with timeouts and retries, segmented replies, the routing table, foreign-device registration with a BBMD, COV subscriptions (`SubscribeCOV`: renewed halfway through their lifetime, confirmed notifications acknowledged), and the guard on what it sends, which `ReadOnly` narrows to reads |
+| `client/` | A BACnet/IP client: one UDP socket, request and reply matching with timeouts and retries, segmented replies, the routing table, foreign-device registration with a BBMD, COV subscriptions (`SubscribeCOV`: renewed halfway through their lifetime, confirmed notifications acknowledged), `WriteProperty` to devices switched to writable, and the guard on what it sends, which `ReadOnly` narrows to reads |
 | `client/sim/` | Simulated BACnet/IP devices on the loopback interface, which the client's tests run against, and which a program built on the client can be tried on without a network |
 
 [docs/library-upgrade-spec.md](docs/library-upgrade-spec.md) is the design of the client and of the codec
@@ -103,12 +103,15 @@ list, one entry at a time when the device will not segment; `ReadRange` reads a 
 `BACnetError`, `RejectError`, `AbortError`, and `ResponseTooLargeError` for a reply with more segments than
 `Config.MaxSegments` allows.
 
-The client writes nothing. Everything it sends goes through one function that refuses any service but the
-reads, the Segment-ACKs and Aborts a segmented reply needs, Who-Is-Router-To-Network, the BBMD functions,
-and SubscribeCOV with the acknowledgement of a confirmed notification; `ReadOnly` refuses those last two as
-well. It has no device identity: it never sends an I-Am and answers nothing but the notifications of its own
-subscriptions. The builders for the write services, such as `NewWriteProperty`, stay in the root package for
-programs that send them on a socket of their own.
+The client writes only where it is told to. Everything it sends goes through one function that refuses any
+service but the reads, the Segment-ACKs and Aborts a segmented reply needs, Who-Is-Router-To-Network, the
+BBMD functions, SubscribeCOV with the acknowledgement of a confirmed notification, and `WriteProperty` to a
+device switched to writable with `Config.Writable` or `SetWritable`; every device starts read-only, and
+`ReadOnly` refuses the subscriptions and the writes as well. A write is sent once and never resent: it
+returns `ErrTimeout` when it was sent and unanswered, and an error wrapping `ErrNotSent` when it never left
+the client. It has no device identity: it never sends an I-Am and answers nothing but the notifications of
+its own subscriptions. The builders for the other write services, such as `NewWriteProperty`, stay in the
+root package for programs that send them on a socket of their own.
 
 ## The examples
 

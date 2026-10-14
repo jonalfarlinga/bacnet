@@ -11,30 +11,70 @@ import (
 )
 
 // The client must refuse every service that is not a read or part of a COV
-// subscription, and with ReadOnly, every service that is not a read.
+// subscription, with ReadOnly every service that is not a read, and a
+// WriteProperty unless the device is switched to writable; one writable
+// device changes nothing for any other, and ReadOnly overrides the switch.
 func TestSendRefusesAllButReads(t *testing.T) {
-	t.Run("with subscriptions", func(t *testing.T) { sendRefusesAllBut(t, false) })
-	t.Run("read-only", func(t *testing.T) { sendRefusesAllBut(t, true) })
+	t.Run("with subscriptions", func(t *testing.T) { sendRefusesAllBut(t, false, false) })
+	t.Run("read-only", func(t *testing.T) { sendRefusesAllBut(t, true, false) })
+	t.Run("with a writable device", func(t *testing.T) { sendRefusesAllBut(t, false, true) })
+	t.Run("read-only with a writable device", func(t *testing.T) { sendRefusesAllBut(t, true, true) })
 }
 
-func sendRefusesAllBut(t *testing.T, readOnly bool) {
-	c, err := Open(Config{Local: netip.MustParseAddrPort("127.0.0.1:0"), ReadOnly: readOnly})
+func sendRefusesAllBut(t *testing.T, readOnly, writable bool) {
+	// Device 7 is the writable one, when there is one; it answers from the
+	// client's own address.
+	seven := uint32(7)
+	cfg := Config{Local: netip.MustParseAddrPort("127.0.0.1:0"), ReadOnly: readOnly}
+	if writable {
+		cfg.Writable = []SourceRule{{Instance: &seven}}
+	}
+	c, err := Open(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer c.Close()
 	// Anything that did get through would go to the client's own socket.
 	to := Address{IP: c.Local()}
+	c.learnInstance(seven, to)
+	// Another device, at another port, is never writable here.
+	other := Address{IP: netip.AddrPortFrom(to.IP.Addr(), to.IP.Port()+1)}
 
 	for service := 0; service < 256; service++ {
-		want := service == int(services.ServiceConfirmedReadProperty) ||
+		read := service == int(services.ServiceConfirmedReadProperty) ||
 			service == int(services.ServiceConfirmedReadPropMultiple) ||
 			service == int(services.ServiceConfirmedReadRange) ||
 			(!readOnly && service == int(services.ServiceConfirmedSubscribeCOV))
+		want := read || (writable && !readOnly && service == int(services.ServiceConfirmedWriteProperty))
 		a := plumbing.NewAPDU(plumbing.ConfirmedReq, uint8(service), nil)
 		err := c.sendAPDU(plumbing.BVLCFuncUnicast, to.IP, npduTo(to, true), a)
 		if got := !errors.Is(err, ErrServiceNotAllowed); got != want {
 			t.Errorf("confirmed service %d: sent %t, want %t", service, got, want)
+		}
+		err = c.sendAPDU(plumbing.BVLCFuncUnicast, other.IP, npduTo(other, true), a)
+		if got := !errors.Is(err, ErrServiceNotAllowed); got != read {
+			t.Errorf("confirmed service %d to another device: sent %t, want %t", service, got, read)
+		}
+	}
+	// A write is never broadcast, whatever the rules say.
+	write := plumbing.NewAPDU(plumbing.ConfirmedReq, services.ServiceConfirmedWriteProperty, nil)
+	if err := c.sendAPDU(plumbing.BVLCFuncBroadcast, to.IP, npduTo(to, true), write); !errors.Is(err, ErrServiceNotAllowed) {
+		t.Error("a broadcast write was sent")
+	}
+	// Switching the device back makes it read-only again, and forth,
+	// writable again.
+	if writable && !readOnly {
+		if err := c.SetWritable(SourceRule{Instance: &seven}, false); err != nil {
+			t.Fatal(err)
+		}
+		if err := c.sendAPDU(plumbing.BVLCFuncUnicast, to.IP, npduTo(to, true), write); !errors.Is(err, ErrServiceNotAllowed) {
+			t.Error("a write was sent after the device was switched back to read-only")
+		}
+		if err := c.SetWritable(SourceRule{Instance: &seven}, true); err != nil {
+			t.Fatal(err)
+		}
+		if err := c.sendAPDU(plumbing.BVLCFuncUnicast, to.IP, npduTo(to, true), write); err != nil {
+			t.Errorf("a write to the writable device was refused: %v", err)
 		}
 	}
 	for service := 0; service < 256; service++ {

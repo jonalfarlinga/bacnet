@@ -7,16 +7,18 @@
 // which router serves each network), and on remote IP subnets through a BBMD
 // that it registers with as a foreign device.
 //
-// It writes nothing. Everything it sends goes through one function that
-// refuses any service except Who-Is, ReadProperty, ReadPropertyMultiple,
-// ReadRange, the Segment-ACKs and Aborts a segmented reply needs,
-// Who-Is-Router-To-Network, the BBMD functions Register-Foreign-Device,
-// Read-Foreign-Device-Table and Read-Broadcast-Distribution-Table, and for
-// subscriptions, SubscribeCOV and the SimpleACK a confirmed COV notification
-// waits for. With Config.ReadOnly it refuses those two as well, and is then
-// read-only: it leaves nothing behind on a device. It has no device identity:
-// it never sends an I-Am, and answers nothing but the notifications of its
-// own subscriptions.
+// It writes only where it is told to. Everything it sends goes through one
+// function that refuses any service except Who-Is, ReadProperty,
+// ReadPropertyMultiple, ReadRange, the Segment-ACKs and Aborts a segmented
+// reply needs, Who-Is-Router-To-Network, the BBMD functions
+// Register-Foreign-Device, Read-Foreign-Device-Table and
+// Read-Broadcast-Distribution-Table, for subscriptions SubscribeCOV and the
+// SimpleACK a confirmed COV notification waits for, and WriteProperty to a
+// device switched to writable (Config.Writable, SetWritable); every device
+// starts read-only. With Config.ReadOnly it refuses the subscriptions and
+// the writes as well, and is then read-only: it leaves nothing behind on a
+// device. It has no device identity: it never sends an I-Am, and answers
+// nothing but the notifications of its own subscriptions.
 //
 // It talks to every device it can reach, except those on its deny list
 // (Config.Denied, SetDenied). It limits what it has in flight to each device
@@ -104,6 +106,10 @@ type Config struct {
 	// but broadcasts and drops what they send. SetDenied changes the list
 	// while the client runs.
 	Denied []SourceRule
+	// Writable is the devices the client may write to with WriteProperty;
+	// every other device is read-only, as is a broadcast. SetWritable
+	// changes the list while the client runs. ReadOnly overrides it.
+	Writable []SourceRule
 
 	// MaxInFlightDevice says how many requests may be in flight at once to
 	// a device reached directly, by its BACnet/IP address. nil allows
@@ -119,8 +125,9 @@ type Config struct {
 	MaxRequestsPerSec float64
 
 	// ReadOnly makes the client refuse what leaves state on a device or
-	// answers one: SubscribeCOV fails with ErrServiceNotAllowed, and no
-	// notification is acknowledged.
+	// answers one: SubscribeCOV and WriteProperty fail with
+	// ErrServiceNotAllowed, whatever Writable says, and no notification is
+	// acknowledged.
 	ReadOnly bool
 
 	// MaxSegments is the most segments the client reassembles into one
@@ -222,6 +229,8 @@ type Client struct {
 	// was last heard from, which rules by instance are applied to.
 	denied []SourceRule
 	known  map[uint32]Address
+	// writable is the devices switched out of read-only (write.go).
+	writable []SourceRule
 	// routes is the router for each network number, learned from
 	// I-Am-Router-To-Network and from the source of routed messages.
 	routes map[uint16]netip.AddrPort
@@ -305,6 +314,11 @@ func Open(cfg Config) (*Client, error) {
 			return nil, err
 		}
 	}
+	for _, r := range cfg.Writable {
+		if err := r.validate(); err != nil {
+			return nil, err
+		}
+	}
 	if cfg.ForeignDevice != nil {
 		if !cfg.ForeignDevice.BBMD.IsValid() || cfg.ForeignDevice.BBMD.Port() == 0 {
 			return nil, fmt.Errorf("foreign device: BBMD address %s is not an address and port", cfg.ForeignDevice.BBMD)
@@ -338,6 +352,7 @@ func Open(cfg Config) (*Client, error) {
 		noRPM:       map[txKey]bool{},
 		denied:      append([]SourceRule(nil), cfg.Denied...),
 		known:       map[uint32]Address{},
+		writable:    append([]SourceRule(nil), cfg.Writable...),
 		routes:      map[uint16]netip.AddrPort{},
 		busy:        map[uint16]time.Time{},
 		available:   make(chan struct{}),
@@ -422,15 +437,16 @@ func (f *frame) GetService() uint8            { return f.apdu.Service }
 // allowed reports whether a message is one this client may send: a read
 // service or a Segment-ACK in a unicast, broadcast or distribute envelope, a
 // Who-Is-Router-To-Network, or one of the BBMD functions that change nothing
-// but the client's own registration; and unless readOnly, what a COV
-// subscription takes.
-func allowed(msg plumbing.BACnet, readOnly bool) error {
+// but the client's own registration; unless readOnly, what a COV
+// subscription takes; and when the destination is writable, a
+// WriteProperty.
+func allowed(msg plumbing.BACnet, readOnly, writable bool) error {
 	switch m := msg.(type) {
 	case *frame:
 		if err := envelopeAllowed(m.bvlc.Function); err != nil {
 			return err
 		}
-		if !apduAllowed(m.apdu) && (readOnly || !covAllowed(m.apdu)) {
+		if !apduAllowed(m.apdu) && (readOnly || !covAllowed(m.apdu)) && (!writable || !writeAllowed(m.apdu)) {
 			return fmt.Errorf("PDU type %d service %d: %w", m.apdu.Type, m.apdu.Service, ErrServiceNotAllowed)
 		}
 		return nil
@@ -487,6 +503,12 @@ func covAllowed(a *plumbing.APDU) bool {
 	return false
 }
 
+// writeAllowed reports whether an APDU is a WriteProperty, which goes to a
+// device switched to writable and nowhere else.
+func writeAllowed(a *plumbing.APDU) bool {
+	return a.Type == plumbing.ConfirmedReq && a.Service == services.ServiceConfirmedWriteProperty
+}
+
 // whoIsRangeOnly reports whether a Who-Is carries nothing, or just the range
 // of instances asked for: context tags 0 and 1.
 func whoIsRangeOnly(payload []objects.APDUPayload) bool {
@@ -529,11 +551,13 @@ func destination(to netip.AddrPort, msg plumbing.BACnet) (Address, bool) {
 // send marshals one message and sends it. It is the only place the client
 // writes to the network.
 func (c *Client) send(to netip.AddrPort, msg plumbing.BACnet) error {
-	if err := allowed(msg, c.cfg.ReadOnly); err != nil {
+	dst, unicast := destination(to, msg)
+	writable := unicast && !c.cfg.ReadOnly && c.isWritable(dst)
+	if err := allowed(msg, c.cfg.ReadOnly, writable); err != nil {
 		c.log.Warn("refused to send", "to", to, "error", err)
 		return err
 	}
-	if dst, unicast := destination(to, msg); unicast {
+	if unicast {
 		if rule, denied := c.isDenied(dst, 0); denied {
 			c.count(dst, func(s *PeerStats) { s.Denied++ })
 			c.log.Debug("refused to send to a denied source", "to", dst, "rule", rule)
@@ -824,40 +848,56 @@ func (c *Client) failAll(err error) {
 // the request is safe.
 var errNoReply = errors.New("no reply yet")
 
+// sendMode says how exchange sends a request.
+type sendMode uint8
+
+const (
+	// sendRetrying resends a request that got no reply, Config.Retries
+	// times, with the same invoke ID: a read.
+	sendRetrying sendMode = iota
+	// sendOnce sends a request once and never again: a write, which a
+	// device that did it and lost the acknowledgement must not do twice.
+	sendOnce
+	// sendProbe sends once to an address where there may be nobody, and
+	// when nothing answers at an address the client has not talked to
+	// before, keeps nothing about it, no counters and no invoke ID.
+	sendProbe
+)
+
 // confirmed sends one request and returns the tags of the ComplexACK that
 // answers it, reassembled if it came in segments, or none for a service that
 // is answered with a SimpleACK. A request that gets no reply is resent with
 // the same invoke ID.
 func (c *Client) confirmed(ctx context.Context, to Address, service uint8, payload []objects.APDUPayload) ([]*objects.Object, error) {
-	return c.exchange(ctx, to, service, payload, false)
+	return c.exchange(ctx, to, service, payload, sendRetrying)
 }
 
-// exchange is confirmed, or with once set, the same for an address where
-// there may be nobody: the request is sent once and not again, and when
-// nothing answers at an address the client has not talked to before, the
-// client keeps nothing about it, no counters and no invoke ID.
-func (c *Client) exchange(ctx context.Context, to Address, service uint8, payload []objects.APDUPayload, once bool) ([]*objects.Object, error) {
+// exchange is confirmed, sending as the mode says. An error from before the
+// request left the client wraps ErrNotSent.
+func (c *Client) exchange(ctx context.Context, to Address, service uint8, payload []objects.APDUPayload, mode sendMode) ([]*objects.Object, error) {
 	if rule, denied := c.isDenied(to, 0); denied {
-		if !once {
+		if mode != sendProbe {
 			c.count(to, func(s *PeerStats) { s.Denied++ })
 		}
-		return nil, fmt.Errorf("%w: %s", ErrSourceDenied, rule)
+		return nil, notSent(fmt.Errorf("%w: %s", ErrSourceDenied, rule))
 	}
 	via, function, err := c.resolve(ctx, to)
 	if err != nil {
-		return nil, err
+		return nil, notSent(err)
 	}
 
 	release, err := c.acquire(ctx, to)
 	if err != nil {
-		return nil, err
+		return nil, notSent(err)
 	}
 	defer release()
 
 	retries := c.cfg.Retries
-	stranger, heard := false, false
-	if once {
+	if mode != sendRetrying {
 		retries = 0
+	}
+	stranger, heard := false, false
+	if mode == sendProbe {
 		who := keyOf(to, 0)
 		c.mu.Lock()
 		_, talked := c.invokes[who]
@@ -888,16 +928,23 @@ func (c *Client) exchange(ctx context.Context, to Address, service uint8, payloa
 	peer := to
 	to.IP = via
 	for attempt := 0; attempt <= retries; attempt++ {
+		// Before the first send, an error means the request never left.
+		unsent := func(err error) error {
+			if attempt == 0 {
+				return notSent(err)
+			}
+			return err
+		}
 		if to.Routed() {
 			if err := c.waitAvailable(ctx, to.Net, ch); err != nil {
-				return nil, err
+				return nil, unsent(err)
 			}
 		}
 		if err := c.limiter.wait(ctx, c.closed); err != nil {
-			return nil, err
+			return nil, unsent(err)
 		}
 		if err := c.sendAPDU(function, via, npduTo(to, true), req); err != nil {
-			return nil, err
+			return nil, unsent(err)
 		}
 		c.count(peer, func(s *PeerStats) {
 			s.Sent++
@@ -1017,7 +1064,7 @@ func (c *Client) await(ctx context.Context, ch chan inbound, to Address, invokeI
 		case plumbing.Abort:
 			return nil, &AbortError{Reason: a.Reason}
 		case plumbing.SimpleAck:
-			if service == services.ServiceConfirmedSubscribeCOV {
+			if service == services.ServiceConfirmedSubscribeCOV || service == services.ServiceConfirmedWriteProperty {
 				return nil, nil
 			}
 			return nil, errors.New("SimpleACK in reply to a read request")

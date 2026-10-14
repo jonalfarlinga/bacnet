@@ -6,7 +6,8 @@ import (
 	"net/netip"
 )
 
-// SourceRule matches devices, for the deny list. Exactly one field is set.
+// SourceRule matches devices, for the deny list and the writable switch.
+// Exactly one field is set.
 type SourceRule struct {
 	// Instance matches one device, by its device instance. The client
 	// learns which address that is from the device's I-Am.

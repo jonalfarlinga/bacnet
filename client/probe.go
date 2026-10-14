@@ -24,7 +24,7 @@ import (
 func (c *Client) Knock(ctx context.Context, to netip.AddrPort) (uint32, error) {
 	addr := Address{IP: to}
 	tags, err := c.exchange(ctx, addr, services.ServiceConfirmedReadProperty,
-		services.ConfirmedReadPropertyObjects(objects.ObjectTypeDevice, WildcardInstance, objects.PropertyIdObjectIdentifier), true)
+		services.ConfirmedReadPropertyObjects(objects.ObjectTypeDevice, WildcardInstance, objects.PropertyIdObjectIdentifier), sendProbe)
 	if err != nil {
 		return 0, err
 	}

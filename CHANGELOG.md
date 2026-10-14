@@ -2,6 +2,17 @@
 
 Releases up to v0.3.3 had no changelog; the tags are their record.
 
+## Unreleased
+
+### Added
+
+- `client`: `WriteProperty`, with a priority and a Null to relinquish, to a device switched to writable with
+  `Config.Writable` or `SetWritable` (`Writable` lists the rules); every device starts read-only, a broadcast
+  is never writable, and `ReadOnly` overrides the switch. A write is sent once and never resent: `ErrTimeout`
+  means it was sent and unanswered, and an error wrapping the new `ErrNotSent` means it never left the
+  client, with the reason wrapped as well. The guard test covers a writable device changing nothing for any
+  other.
+
 ## v0.4.0 (2026-10-14)
 
 The library is released on its own: the explorer developed in this repository lives in
