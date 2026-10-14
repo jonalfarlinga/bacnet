@@ -15,6 +15,10 @@ type ComplexACKRPM struct {
 	*plumbing.APDU
 }
 
+// ComplexACKRPMDec is a ReadPropertyMultiple reply taken apart: the object it
+// is for and the tags of its property values, as DecodeRPM returns it. The
+// client package decodes the same reply into typed values, one ObjectResult
+// per object with the error the device gave for each property.
 type ComplexACKRPMDec struct {
 	ObjectType uint16
 	InstanceId uint32
@@ -23,6 +27,9 @@ type ComplexACKRPMDec struct {
 	Skipped []*objects.Object
 }
 
+// DecodeRPM takes a ReadPropertyMultiple reply apart, for one received on a
+// socket the program owns. Client.ReadPropertyMultiple and Client.ReadMany in
+// the client package decode the reply into typed values.
 func (c *ComplexACK) DecodeRPM() (ComplexACKRPMDec, error) {
 	decCACK := ComplexACKRPMDec{}
 	context := []uint8{8}
