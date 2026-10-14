@@ -1,4 +1,4 @@
-package test_utils
+package testutil
 
 import (
 	"testing"
@@ -205,7 +205,7 @@ func TestParseReadPropertyMultiple(t *testing.T, Parse func([]byte) (plumbing.BA
 		Data:      []byte{0x02, 0x00, 0x00, 0x65},
 		Length:    4,
 	}
-	objectName:= &objects.Object{
+	objectName := &objects.Object{
 		TagNumber: 7,
 		TagClass:  false,
 		Data: []byte{0x00, 0x55, 0x4f, 0x2d, 0x41, 0x6e, 0x61, 0x6c, 0x79, 0x73,

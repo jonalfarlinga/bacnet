@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/jonalfarlinga/bacnet/test_utils"
+	"github.com/jonalfarlinga/bacnet/internal/testutil"
 )
 
 // FuzzParse feeds arbitrary datagrams through parsing, every decoder, and
 // marshalling. None of them may panic or change the input.
 func FuzzParse(f *testing.F) {
-	for _, frame := range test_utils.LoadHexFrames(f, "testdata/*.hex") {
+	for _, frame := range testutil.LoadHexFrames(f, "testdata/*.hex") {
 		f.Add(frame.Data)
 	}
 

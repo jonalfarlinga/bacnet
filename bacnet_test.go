@@ -3,18 +3,18 @@ package bacnet
 import (
 	"testing"
 
-	"github.com/jonalfarlinga/bacnet/test_utils"
+	"github.com/jonalfarlinga/bacnet/internal/testutil"
 )
 
 func TestParseWhois(t *testing.T) {
-	test_utils.TestParseWhois(t, Parse)
+	testutil.TestParseWhois(t, Parse)
 }
 func TestParseReadProperty(t *testing.T) {
-	test_utils.TestParseReadProperty(t, Parse)
+	testutil.TestParseReadProperty(t, Parse)
 }
 func TestParseIam(t *testing.T) {
-	test_utils.TestParseIam(t, Parse)
+	testutil.TestParseIam(t, Parse)
 }
 func TestParseReadPropertyMultiple(t *testing.T) {
-	test_utils.TestParseReadPropertyMultiple(t, Parse)
+	testutil.TestParseReadPropertyMultiple(t, Parse)
 }

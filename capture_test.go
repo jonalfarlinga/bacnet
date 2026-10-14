@@ -7,17 +7,17 @@ import (
 	"testing"
 
 	"github.com/jonalfarlinga/bacnet/common"
+	"github.com/jonalfarlinga/bacnet/internal/testutil"
 	"github.com/jonalfarlinga/bacnet/objects"
 	"github.com/jonalfarlinga/bacnet/plumbing"
 	"github.com/jonalfarlinga/bacnet/services"
-	"github.com/jonalfarlinga/bacnet/test_utils"
 )
 
 // fixtureParser returns the function that parses a fixture frame, and how
 // many bytes it puts in front of the frame before parsing. Files named
 // *_npdu.hex hold frames that start at the NPDU; they go through ParseNPDU,
 // which adds a BVLC header.
-func fixtureParser(frame test_utils.Frame, fallback bool) (parse func([]byte) (plumbing.BACnet, error), added int) {
+func fixtureParser(frame testutil.Frame, fallback bool) (parse func([]byte) (plumbing.BACnet, error), added int) {
 	if strings.Contains(frame.Name, "_npdu.hex:") {
 		return ParseNPDU, plumbing.NewBVLC(plumbing.BVLCFuncUnicast).MarshalLen()
 	}
@@ -29,7 +29,7 @@ func fixtureParser(frame test_utils.Frame, fallback bool) (parse func([]byte) (p
 
 // Every frame in testdata must parse without error.
 func TestFixtureFramesParse(t *testing.T) {
-	for _, frame := range test_utils.LoadHexFrames(t, "testdata/*.hex") {
+	for _, frame := range testutil.LoadHexFrames(t, "testdata/*.hex") {
 		t.Run(frame.Name, func(t *testing.T) {
 			parse, _ := fixtureParser(frame, false)
 			if _, err := parse(frame.Data); err != nil {
@@ -42,7 +42,7 @@ func TestFixtureFramesParse(t *testing.T) {
 // Marshalling a parsed frame must give back the bytes it was parsed from.
 // That holds for a segment too, which is written back from its raw payload.
 func TestFixtureFramesRoundTrip(t *testing.T) {
-	for _, frame := range test_utils.LoadHexFrames(t, "testdata/*.hex") {
+	for _, frame := range testutil.LoadHexFrames(t, "testdata/*.hex") {
 		t.Run(frame.Name, func(t *testing.T) {
 			parse, added := fixtureParser(frame, false)
 			msg, err := parse(frame.Data)
@@ -63,7 +63,7 @@ func TestFixtureFramesRoundTrip(t *testing.T) {
 // A truncated datagram must give an error or a shorter message, and never
 // read past the end of what was received.
 func TestFixtureFramesTruncated(t *testing.T) {
-	for _, frame := range test_utils.LoadHexFrames(t, "testdata/*.hex") {
+	for _, frame := range testutil.LoadHexFrames(t, "testdata/*.hex") {
 		t.Run(frame.Name, func(t *testing.T) {
 			parse, added := fixtureParser(frame, true)
 			for n := 0; n < len(frame.Data); n++ {

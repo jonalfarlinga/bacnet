@@ -7,9 +7,9 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/jonalfarlinga/bacnet/common"
+	"github.com/jonalfarlinga/bacnet/internal/testutil"
 	"github.com/jonalfarlinga/bacnet/objects"
 	"github.com/jonalfarlinga/bacnet/plumbing"
-	"github.com/jonalfarlinga/bacnet/test_utils"
 )
 
 // The tags of a ReadPropertyMultiple ack: object-identifier and object-name
@@ -186,7 +186,7 @@ func apduTags(frame []byte) []byte {
 // trip unchanged.
 func FuzzObjectTags(f *testing.F) {
 	f.Add(rpmAckTags)
-	for _, frame := range test_utils.LoadHexFrames(f, "../testdata/*.hex") {
+	for _, frame := range testutil.LoadHexFrames(f, "../testdata/*.hex") {
 		if tags := apduTags(frame.Data); tags != nil {
 			f.Add(tags)
 		}
