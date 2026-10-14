@@ -55,7 +55,7 @@ func (d *Device) add(typ uint16, inst uint32, name, description string, props ..
 	o := &object{id: id}
 	o.props = append(o.props,
 		property{id: objects.PropertyIdObjectIdentifier, get: one(objectID(id))},
-		property{id: objects.PropertyIdObjectName, get: text(name)},
+		writable(objects.PropertyIdObjectName, objects.EncString(name), objects.TagCharacterString),
 		property{id: objects.PropertyIdObjectType, get: enum(uint32(typ))},
 		property{id: objects.PropertyIdDescription, get: text(description)},
 	)
@@ -75,26 +75,29 @@ func point(value func() []*objects.Object, inAlarm bool) []property {
 		{id: objects.PropertyIdStatusFlags, get: bits(inAlarm, false, false, false)},
 		{id: objects.PropertyIdEventState, get: enum(eventState)},
 		{id: objects.PropertyIdReliability, get: enum(0)},
-		{id: objects.PropertyIdOutOfService, get: flag(false)},
+		writable(objects.PropertyIdOutOfService, objects.EncBoolean(false), objects.TagBoolean),
 	}
+}
+
+// commandablePoint is point for an object whose present value is written
+// through a priority array: the highest slot set, or the relinquish
+// default.
+func commandablePoint(c *commandable, inAlarm bool) []property {
+	props := point(c.present, inAlarm)
+	props[0].set = c.set
+	return append(props,
+		property{id: objects.PropertyIdPriorityArray, array: true, get: c.array},
+		property{id: objects.PropertyIdRelinquishDefault, get: c.relinquish},
+	)
 }
 
 func (d *Device) analog(typ uint16, inst uint32, name, description string, units uint16, value func() float64) {
 	real := func() []*objects.Object { return []*objects.Object{objects.EncReal(float32(value()))} }
-	props := append(point(real, false), property{id: objects.PropertyIdUnits, get: enum(uint32(units))})
+	props := point(real, false)
 	if typ != typeAI {
-		props = append(props,
-			property{id: objects.PropertyIdPriorityArray, array: true, get: func() []*objects.Object {
-				slots := make([]*objects.Object, 16)
-				for i := range slots {
-					slots[i] = objects.EncNull()
-				}
-				slots[15] = objects.EncReal(float32(value()))
-				return slots
-			}},
-			property{id: objects.PropertyIdRelinquishDefault, get: real},
-		)
+		props = commandablePoint(&commandable{kind: objects.TagReal, relinquish: real}, false)
 	}
+	props = append(props, property{id: objects.PropertyIdUnits, get: enum(uint32(units))})
 	d.add(typ, inst, name, description, props...)
 }
 
@@ -103,7 +106,11 @@ func (d *Device) binary(typ uint16, inst uint32, name, description string, activ
 	if active {
 		v = 1
 	}
-	props := append(point(enum(v), inAlarm),
+	props := point(enum(v), inAlarm)
+	if typ != typeBI {
+		props = commandablePoint(&commandable{kind: objects.TagEnumerated, relinquish: enum(v)}, inAlarm)
+	}
+	props = append(props,
 		property{id: objects.PropertyIdPolarity, get: enum(0)},
 		property{id: objects.PropertyIdInactiveText, get: text(inactiveText)},
 		property{id: objects.PropertyIdActiveText, get: text(activeText)},
@@ -112,7 +119,7 @@ func (d *Device) binary(typ uint16, inst uint32, name, description string, activ
 }
 
 func (d *Device) multiState(inst uint32, name, description string, state uint, states ...string) {
-	props := append(point(number(state), false),
+	props := append(commandablePoint(&commandable{kind: objects.TagUnsignedInteger, relinquish: number(state)}, false),
 		property{id: objects.PropertyIdNumberOfStates, get: number(uint(len(states)))},
 		property{id: objects.PropertyIdStateText, array: true, get: func() []*objects.Object {
 			list := make([]*objects.Object, len(states))
@@ -155,6 +162,7 @@ func (d *Device) finish() *Device {
 	services[12], services[26], services[34] = true, true, true // readProperty, i-Am, who-Is
 	services[14] = !d.NoRPM                                     // readPropertyMultiple
 	services[5] = true                                          // subscribeCOV
+	services[15] = true                                         // writeProperty
 	types := make([]bool, 30)
 	for _, o := range d.objs {
 		if int(o.id.ObjectType) < len(types) {

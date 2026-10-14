@@ -24,7 +24,7 @@ several directories:
 | `services/` | The services as messages: Who-Is and I-Am, Who-Has, ReadProperty, ReadPropertyMultiple, ReadRange, WriteProperty, SubscribeCOV and its notifications, and the replies: SimpleACK, ComplexACK, SegmentACK, Error, Reject and Abort |
 | `common/` | Errors and utilities used across all the above |
 | `client/` | A BACnet/IP client: one UDP socket, request and reply matching with timeouts and retries, segmented replies, the routing table, foreign-device registration with a BBMD, COV subscriptions (`SubscribeCOV`: renewed halfway through their lifetime, confirmed notifications acknowledged), `WriteProperty` to devices switched to writable, and the guard on what it sends, which `ReadOnly` narrows to reads |
-| `client/sim/` | Simulated BACnet/IP devices on the loopback interface, which the client's tests run against, and which a program built on the client can be tried on without a network |
+| `client/sim/` | Simulated BACnet/IP devices on the loopback interface, which the client's tests run against, and which a program built on the client can be tried on without a network, writes included |
 
 [docs/library-upgrade-spec.md](docs/library-upgrade-spec.md) is the design of the client and of the codec
 changes made for it, with the status of each part. [CHANGELOG.md](CHANGELOG.md) lists what each release

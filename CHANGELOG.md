@@ -12,6 +12,12 @@ Releases up to v0.3.3 had no changelog; the tags are their record.
   means it was sent and unanswered, and an error wrapping the new `ErrNotSent` means it never left the
   client, with the reason wrapped as well. The guard test covers a writable device changing nothing for any
   other.
+- `client/sim`: the devices take `WriteProperty` on the present value of their commandable objects (AO,
+  AV, BO, BV and MSV), through a sixteen-slot priority array over the relinquish default, and on
+  out-of-service and object-name, answering a SimpleACK or the error a device would, so that a program
+  built on the client can be tried with writes. They record and acknowledge the confirmed services the
+  parser has no type for that such a program sends only when told to, LifeSafetyOperation among them.
+  `Writes` and `Services` list what reached them.
 
 ## v0.4.0 (2026-10-14)
 

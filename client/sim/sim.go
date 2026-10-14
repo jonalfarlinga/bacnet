@@ -8,7 +8,11 @@
 // have. A station can be a BBMD, which registers foreign devices and forwards
 // broadcasts to and from them. The devices take COV subscriptions to the
 // objects that have a present value, and notify the subscribers when one is
-// made and when NotifyCOV says so.
+// made and when NotifyCOV says so. They take WriteProperty on the present
+// value of their commandable objects, through a priority array, and on
+// out-of-service and object-name; and they record and acknowledge the
+// confirmed services a program built on the client sends only when told
+// to, so that a test can see what reached them (Writes, Services).
 //
 // Loopback has no broadcast address, so a frame sent as an
 // Original-Broadcast-NPDU to any station is heard by every station, as a
@@ -92,6 +96,10 @@ type property struct {
 	// array marks a property whose elements can be read by index.
 	array bool
 	get   func() []*objects.Object
+	// set takes a write to the property, nil for one that takes none. It
+	// returns the error class and code to answer with, 0 and 0 to
+	// acknowledge.
+	set func(value []*objects.Object, priority uint8) (class, code uint8)
 }
 
 // Network is a set of running stations. Each station is one UDP socket: a
@@ -120,6 +128,10 @@ type station struct {
 	cov       []*covSub
 	unacked   map[txKey]*covSub
 	covInvoke uint8
+	// writes is every WriteProperty the station's devices took, and
+	// recorded every request of a service they only record (write.go).
+	writes   []Write
+	recorded []Service
 }
 
 type fdEntry struct {
@@ -259,6 +271,9 @@ func (n *Network) serve(st *station) {
 func (st *station) handle(src netip.AddrPort, raw []byte) {
 	msg, err := bacnet.Parse(raw)
 	if err != nil {
+		// A service the parser has no type for may be one the devices
+		// record.
+		st.unhandled(src, raw)
 		return
 	}
 	switch m := msg.(type) {
@@ -271,6 +286,8 @@ func (st *station) handle(src netip.AddrPort, raw []byte) {
 	case *services.ConfirmedReadProperty:
 		st.confirmed(src, m.NPDU, m.APDU)
 	case *services.ConfirmedReadRange:
+		st.confirmed(src, m.NPDU, m.APDU)
+	case *services.ConfirmedWriteProperty:
 		st.confirmed(src, m.NPDU, m.APDU)
 	case *services.ConfirmedCOV:
 		st.subscribe(src, m.NPDU, m.APDU)
@@ -291,13 +308,20 @@ func (st *station) handle(src netip.AddrPort, raw []byte) {
 	}
 }
 
-// confirmed answers a read request for the device it is addressed to, or
-// rejects the network it is for when the station routes to no such network.
+// confirmed answers a read or write request for the device it is addressed
+// to, or rejects the network it is for when the station routes to no such
+// network.
 func (st *station) confirmed(src netip.AddrPort, npdu *plumbing.NPDU, apdu *plumbing.APDU) {
-	if dev := st.target(npdu); dev != nil {
+	dev := st.target(npdu)
+	switch {
+	case dev == nil:
+		if npdu.Control&0x20 != 0 && len(st.nets()) > 0 {
+			st.rejectNetwork(src, npdu.DNET)
+		}
+	case apdu.Service == services.ServiceConfirmedWriteProperty:
+		st.write(src, dev, apdu)
+	default:
 		st.read(src, dev, apdu)
-	} else if npdu.Control&0x20 != 0 && len(st.nets()) > 0 {
-		st.rejectNetwork(src, npdu.DNET)
 	}
 }
 
