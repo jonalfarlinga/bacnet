@@ -2,7 +2,7 @@
 
 Releases up to v0.3.3 had no changelog; the tags are their record.
 
-## v0.4.0 (unreleased)
+## v0.4.0 (2026-10-14)
 
 The library is released on its own: the explorer developed in this repository lives in
 [jonalfarlinga/bacnet-explorer](https://github.com/jonalfarlinga/bacnet-explorer) since 2026-10-14, with its
