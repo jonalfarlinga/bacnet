@@ -20,9 +20,9 @@
 // device. It has no device identity: it never sends an I-Am, and answers
 // nothing but the notifications of its own subscriptions.
 //
-// It talks to every device it can reach, except those on its deny list
-// (Config.Denied, SetDenied). It limits what it has in flight to each device
-// and to each routed network, and how many requests it sends in a second.
+// It talks to every device it can reach. It limits what it has in flight to
+// each device and to each routed network, and how many requests it sends in
+// a second.
 package client
 
 import (
@@ -102,10 +102,6 @@ type Config struct {
 	Timeout time.Duration // wait for each reply; 3s if not set
 	Retries int           // resends of a request that got no reply
 
-	// Denied is the sources the client leaves alone: it sends them nothing
-	// but broadcasts and drops what they send. SetDenied changes the list
-	// while the client runs.
-	Denied []SourceRule
 	// Writable is the devices the client may write to with WriteProperty;
 	// every other device is read-only, as is a broadcast. SetWritable
 	// changes the list while the client runs. ReadOnly overrides it.
@@ -175,8 +171,6 @@ var (
 	// ErrNetworkUnreachable is a router's Reject-Message-To-Network: it
 	// does not reach the network the request was for.
 	ErrNetworkUnreachable = errors.New("no router reaches the network")
-	// ErrSourceDenied is a request to a device on the deny list.
-	ErrSourceDenied = errors.New("source denied")
 	// ErrResponseTooLarge is a segmented reply longer than the client
 	// reassembles. The error carries the sizes, as a *ResponseTooLargeError.
 	ErrResponseTooLarge = errors.New("the reply is longer than the client reassembles")
@@ -225,11 +219,10 @@ type Client struct {
 	stats   map[txKey]*PeerStats
 	// noRPM marks the devices that have turned ReadPropertyMultiple down.
 	noRPM map[txKey]bool
-	// denied is the deny list, and known the address each device instance
-	// was last heard from, which rules by instance are applied to.
-	denied []SourceRule
-	known  map[uint32]Address
-	// writable is the devices switched out of read-only (write.go).
+	// known is the address each device instance was last heard from, which
+	// a writable rule by instance is applied to, and writable the devices
+	// switched out of read-only (write.go).
+	known    map[uint32]Address
 	writable []SourceRule
 	// routes is the router for each network number, learned from
 	// I-Am-Router-To-Network and from the source of routed messages.
@@ -309,11 +302,6 @@ func Open(cfg Config) (*Client, error) {
 	if cfg.MaxSegments <= 0 {
 		cfg.MaxSegments = DefaultMaxSegments
 	}
-	for _, r := range cfg.Denied {
-		if err := r.validate(); err != nil {
-			return nil, err
-		}
-	}
 	for _, r := range cfg.Writable {
 		if err := r.validate(); err != nil {
 			return nil, err
@@ -350,7 +338,6 @@ func Open(cfg Config) (*Client, error) {
 		inflight:    map[limitKey]*slots{},
 		stats:       map[txKey]*PeerStats{},
 		noRPM:       map[txKey]bool{},
-		denied:      append([]SourceRule(nil), cfg.Denied...),
 		known:       map[uint32]Address{},
 		writable:    append([]SourceRule(nil), cfg.Writable...),
 		routes:      map[uint16]netip.AddrPort{},
@@ -528,8 +515,8 @@ func whoIsRangeOnly(payload []objects.APDUPayload) bool {
 }
 
 // destination says which device a message is for, and whether it is a
-// unicast: a broadcast cannot leave one device out, so the deny list is
-// applied to unicasts only.
+// unicast: a broadcast cannot single one device out, so the writable switch
+// is looked up for unicasts only.
 func destination(to netip.AddrPort, msg plumbing.BACnet) (Address, bool) {
 	dst := Address{IP: to}
 	f, ok := msg.(*frame)
@@ -556,13 +543,6 @@ func (c *Client) send(to netip.AddrPort, msg plumbing.BACnet) error {
 	if err := allowed(msg, c.cfg.ReadOnly, writable); err != nil {
 		c.log.Warn("refused to send", "to", to, "error", err)
 		return err
-	}
-	if unicast {
-		if rule, denied := c.isDenied(dst, 0); denied {
-			c.count(dst, func(s *PeerStats) { s.Denied++ })
-			c.log.Debug("refused to send to a denied source", "to", dst, "rule", rule)
-			return fmt.Errorf("%w: %s", ErrSourceDenied, rule)
-		}
 	}
 	b, err := msg.MarshalBinary()
 	if err != nil {
@@ -731,9 +711,6 @@ func (c *Client) dispatch(src netip.AddrPort, msg plumbing.BACnet) {
 		}
 		from := sourceOf(src, m.NPDU)
 		c.learnInstance(d.InstanceNum, from)
-		if c.dropDenied(from, d.InstanceNum) {
-			return
-		}
 		c.log.Debug("I-Am", "device", d.InstanceNum, "from", from)
 		if c.cfg.OnIAm == nil {
 			return
@@ -788,22 +765,9 @@ func (c *Client) noteSource(src netip.AddrPort, npdu *plumbing.NPDU) {
 	}
 }
 
-// dropDenied reports whether a message from a device is to be dropped for
-// the device being on the deny list, and logs it.
-func (c *Client) dropDenied(from Address, instance uint32) bool {
-	rule, denied := c.isDenied(from, instance)
-	if denied {
-		c.log.Debug("dropped a message from a denied source", "from", from, "rule", rule)
-	}
-	return denied
-}
-
 func (c *Client) deliver(src netip.AddrPort, npdu *plumbing.NPDU, a *plumbing.APDU) {
 	c.noteSource(src, npdu)
 	from := sourceOf(src, npdu)
-	if c.dropDenied(from, 0) {
-		return
-	}
 	key := keyOf(from, a.InvokeID)
 	c.mu.Lock()
 	ch := c.pending[key]
@@ -875,12 +839,6 @@ func (c *Client) confirmed(ctx context.Context, to Address, service uint8, paylo
 // exchange is confirmed, sending as the mode says. An error from before the
 // request left the client wraps ErrNotSent.
 func (c *Client) exchange(ctx context.Context, to Address, service uint8, payload []objects.APDUPayload, mode sendMode) ([]*objects.Object, error) {
-	if rule, denied := c.isDenied(to, 0); denied {
-		if mode != sendProbe {
-			c.count(to, func(s *PeerStats) { s.Denied++ })
-		}
-		return nil, notSent(fmt.Errorf("%w: %s", ErrSourceDenied, rule))
-	}
 	via, function, err := c.resolve(ctx, to)
 	if err != nil {
 		return nil, notSent(err)

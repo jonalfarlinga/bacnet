@@ -423,6 +423,8 @@ PRs 1 to 8 are delivered, with these differences from the text above, kept becau
 
 The deny list, the in-flight limits, the rate limit, `Stats`, `ReadMany`, the ranged Who-Is and the cap logging of §7.4 are in.
 
+The deny list is withdrawn, 2026-10-22, after v0.5.0: which devices a program leaves alone is the program's decision, not the client's, and the explorer applies its config file's rules itself. Goal 6's deny list and the deny-list half of §7.7 no longer apply; `SourceRule` and the map from device instance to address stay, for the writable switch.
+
 COV is delivered, from the roadmap (§11), 2026-10-08: `SubscribeCOV` returns a `Subscription` that the client renews at half its lifetime, with a backoff after a failure, until `Cancel`; notifications reach a callback as `COVNotification`, and a confirmed one is answered with a SimpleACK. `CancelCOV` drops a subscription the client does not hold. The send guard takes SubscribeCOV and that SimpleACK, and nothing else new: a notification for no subscription of the client's gets no answer. `Config.ReadOnly` refuses both, which is how the explorer stays read-only. There is no subscription without a lifetime, no SubscribeCOVProperty, and `Close` does not cancel. The simulator takes subscriptions and notifies on `NotifyCOV`.
 
 PR 9 is delivered: `ReadRange` with `LogRecords` for trend logs, the `whois`, `rpc`, `rpm` and `rrc` examples rewritten on `client`, a `probe` example, and the reassembler moved to `client.Reassembler` for the orchestrator. The name lookups of §5.4 live in `objects/names.go`. ReadRange by time is not sent, for want of date and time encoders; by position and by sequence number are.

@@ -217,8 +217,7 @@ func TestWriteProperty(t *testing.T) {
 }
 
 // A write never leaves the client for a device that is not writable, for a
-// client opened ReadOnly, for a denied device, or with nothing to send, and
-// the error says so.
+// client opened ReadOnly, or with nothing to send, and the error says so.
 func TestWritePropertyNotSent(t *testing.T) {
 	p := newPeer(t)
 	ctx := context.Background()
@@ -233,7 +232,6 @@ func TestWritePropertyNotSent(t *testing.T) {
 	}{
 		{"not writable", func(cfg *client.Config) { cfg.Writable = nil }, nil, client.ErrServiceNotAllowed},
 		{"read-only", func(cfg *client.Config) { cfg.ReadOnly = true }, nil, client.ErrServiceNotAllowed},
-		{"denied", nil, func(c *client.Client) { c.SetDenied(rule, true) }, client.ErrSourceDenied},
 		{"switched back", nil, func(c *client.Client) { c.SetWritable(rule, false) }, client.ErrServiceNotAllowed},
 	} {
 		c := openWriter(t, p, tc.change)

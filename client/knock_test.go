@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/jonalfarlinga/bacnet/client/sim"
-	"github.com/jonalfarlinga/bacnet/objects"
 )
 
 // A knock names the device at an address, and leaves nothing in the client
@@ -107,31 +106,5 @@ func TestKnockDeclined(t *testing.T) {
 			t.Fatalf("a Who-Is to one device drew %+v, want the I-Am of device 4000 alone", got)
 		}
 		time.Sleep(5 * time.Millisecond)
-	}
-}
-
-// A device denied by its instance, at an address the client had not heard
-// it from, is told by its answer and left alone from then on.
-func TestKnockDenied(t *testing.T) {
-	instance := uint32(4000)
-	c, network := openSim(t, func(cfg *Config) {
-		cfg.Broadcast = netip.MustParseAddrPort("127.0.0.1:9")
-		cfg.Denied = []SourceRule{{Instance: &instance}}
-	})
-	ctx := context.Background()
-	at := network.Addrs()[3]
-
-	if _, err := c.Knock(ctx, at); !errors.Is(err, ErrSourceDenied) {
-		t.Errorf("knocking on a denied device gave %v, want it denied", err)
-	}
-	_, err := c.ReadProperty(ctx, Address{IP: at}, ObjectID{Type: objects.ObjectTypeDevice, Instance: 4000}, objects.PropertyIdObjectName)
-	if !errors.Is(err, ErrSourceDenied) {
-		t.Errorf("reading the denied device after the knock gave %v, want it denied", err)
-	}
-	if _, err := c.Knock(ctx, at); !errors.Is(err, ErrSourceDenied) {
-		t.Errorf("a second knock gave %v, want it denied", err)
-	}
-	if st := c.Stats().Peers[at.String()]; st.Sent != 1 {
-		t.Errorf("the denied device counts %+v, want the one request that found it out", st)
 	}
 }

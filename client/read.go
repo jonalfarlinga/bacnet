@@ -398,6 +398,6 @@ const (
 // nobody is waiting for the answer any more. Any other error is the device's
 // answer to one request, and the next request is worth making.
 func gone(err error) bool {
-	return errors.Is(err, ErrTimeout) || errors.Is(err, ErrClosed) || errors.Is(err, ErrSourceDenied) ||
+	return errors.Is(err, ErrTimeout) || errors.Is(err, ErrClosed) ||
 		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }

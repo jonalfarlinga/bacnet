@@ -8,7 +8,13 @@ import (
 
 	"github.com/jonalfarlinga/bacnet/client"
 	"github.com/jonalfarlinga/bacnet/client/sim"
+	"github.com/jonalfarlinga/bacnet/objects"
 )
+
+// deviceObject is the Device object of a device instance.
+func deviceObject(instance uint32) client.ObjectID {
+	return client.ObjectID{Type: objects.ObjectTypeDevice, Instance: instance}
+}
 
 // openOn opens a client on a simulated network, with a change to the
 // configuration if one is given, and returns it with a function that gives

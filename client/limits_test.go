@@ -106,39 +106,6 @@ func TestRateLimit(t *testing.T) {
 	}
 }
 
-// Denying a source fails the requests to it that are in flight.
-func TestDenyFailsInFlight(t *testing.T) {
-	c, _ := openSim(t, nil)
-	dnet := uint16(2001)
-	routers, err := c.WhoIsRouterToNetwork(context.Background(), &dnet)
-	if err != nil || len(routers) != 1 {
-		t.Fatalf("routers for network 2001: %+v, %v", routers, err)
-	}
-	// Hold the request on the network with a Router-Busy, then deny it.
-	c.dispatch(routers[0].Router, plumbing.NewNetworkMessage(
-		plumbing.NewBVLC(plumbing.BVLCFuncUnicast), plumbing.NewNPDU(false, false, false, false),
-		plumbing.NetMsgRouterBusyToNetwork, plumbing.NetworksData(2001),
-	))
-	done := make(chan error, 1)
-	go func() {
-		_, err := c.ReadProperty(context.Background(), Address{Net: 2001, MAC: []byte{5}},
-			ObjectID{Type: objects.ObjectTypeDevice, Instance: 2101}, objects.PropertyIdObjectName)
-		done <- err
-	}()
-	time.Sleep(100 * time.Millisecond)
-	if err := c.SetDenied(SourceRule{Net: &dnet}, true); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case err := <-done:
-		if !errors.Is(err, ErrSourceDenied) {
-			t.Errorf("the request in flight ended with %v, want it denied", err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("the request in flight did not end when its network was denied")
-	}
-}
-
 // Invoke IDs rotate, and skip one still in flight.
 func TestInvokeIDs(t *testing.T) {
 	c, _ := openSim(t, nil)

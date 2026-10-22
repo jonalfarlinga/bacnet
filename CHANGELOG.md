@@ -2,6 +2,16 @@
 
 Releases up to v0.3.3 had no changelog; the tags are their record.
 
+## Unreleased
+
+### Breaking
+
+- `client`: the deny list is gone: `Config.Denied`, `SetDenied`, `Denied`, `ErrSourceDenied` and
+  `PeerStats.Denied`. Which devices a program leaves alone is the program's decision, not the client's:
+  the explorer applies its config file's rules itself. `SourceRule` names devices for
+  the writable switch alone, and the client keeps the address it heard each device instance from for a
+  writable rule by instance.
+
 ## v0.5.0 (2026-10-14)
 
 ### Added

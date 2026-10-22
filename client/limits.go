@@ -129,9 +129,6 @@ type PeerStats struct {
 	// Errors is the requests the device answered with an Error, Reject or
 	// Abort.
 	Errors int
-	// Denied is the requests refused because the device was on the deny
-	// list.
-	Denied int
 	// WindowClamped is the segmented replies that proposed a window larger
 	// than the client accepts.
 	WindowClamped int

@@ -278,9 +278,6 @@ func (c *Client) covNotification(src netip.AddrPort, npdu *plumbing.NPDU, a *plu
 		c.log.Debug("dropped a COV notification that could not be decoded", "from", from, "error", err)
 		return
 	}
-	if c.dropDenied(from, n.Device) {
-		return
-	}
 	n.From = from
 	n.Confirmed = a.Type == plumbing.ConfirmedReq
 

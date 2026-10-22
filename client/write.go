@@ -10,10 +10,10 @@ import (
 )
 
 // ErrNotSent is a request that never left the client. An error that wraps
-// it wraps the reason as well: ErrServiceNotAllowed, ErrSourceDenied, the
-// context's error, ErrClosed, or no route to the device. An error that does
-// not wrap it, ErrTimeout among them, means the request was sent, so a
-// write may have been done.
+// it wraps the reason as well: ErrServiceNotAllowed, the context's error,
+// ErrClosed, or no route to the device. An error that does not wrap it,
+// ErrTimeout among them, means the request was sent, so a write may have
+// been done.
 var ErrNotSent = errors.New("not sent")
 
 // notSent marks an error from before a request left the client.
@@ -29,10 +29,9 @@ func notSent(err error) error { return fmt.Errorf("%w: %w", ErrNotSent, err) }
 // nil means the device acknowledged it. ErrTimeout means it was sent and
 // nothing answered, so the device may or may not have done it. An error
 // wrapping ErrNotSent means it never left the client: ErrServiceNotAllowed
-// for a device that is not writable or a client opened ReadOnly,
-// ErrSourceDenied for one on the deny list, the context's error, or
-// ErrClosed. A device's Error, Reject or Abort comes back as a BACnetError,
-// RejectError or AbortError.
+// for a device that is not writable or a client opened ReadOnly, the
+// context's error, or ErrClosed. A device's Error, Reject or Abort comes
+// back as a BACnetError, RejectError or AbortError.
 func (c *Client) WriteProperty(ctx context.Context, to Address, obj ObjectID, prop uint16, value []*objects.Object, priority uint8) error {
 	if priority > 16 {
 		return notSent(fmt.Errorf("priority %d is not 1 to 16", priority))
@@ -98,7 +97,7 @@ func (c *Client) isWritable(addr Address) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, r := range c.writable {
-		if r.matches(addr, 0, c.known) {
+		if r.matches(addr, c.known) {
 			return true
 		}
 	}

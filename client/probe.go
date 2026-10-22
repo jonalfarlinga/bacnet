@@ -17,10 +17,6 @@ import (
 // nothing about it. A device that answers and will not say which it is, as
 // one older than the wildcard instance does, fails with an error that
 // Declined reports.
-//
-// A device denied by its instance, at an address the client has not heard it
-// from, can only be told by its answer: it gets this one request, fails with
-// ErrSourceDenied, and gets none after.
 func (c *Client) Knock(ctx context.Context, to netip.AddrPort) (uint32, error) {
 	addr := Address{IP: to}
 	tags, err := c.exchange(ctx, addr, services.ServiceConfirmedReadProperty,
@@ -37,9 +33,6 @@ func (c *Client) Knock(ctx context.Context, to netip.AddrPort) (uint32, error) {
 	}
 	instance := values[0].Object.Instance
 	c.learnInstance(instance, addr)
-	if rule, denied := c.isDenied(addr, instance); denied {
-		return instance, fmt.Errorf("%w: %s", ErrSourceDenied, rule)
-	}
 	return instance, nil
 }
 
