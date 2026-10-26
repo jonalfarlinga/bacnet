@@ -163,6 +163,16 @@ func isOpening(t *objects.Object, number uint8) bool {
 	return t.Kind == objects.TagOpening && t.TagNumber == number
 }
 
+// MaxObjectListLength is the longest object list ReadObjectList reads
+// element by element. The length is the device's own claim, read from
+// element 0 before any element is, so it bounds both the reads and the
+// memory set aside for them.
+const MaxObjectListLength = 100000
+
+// ErrObjectListTooLong is an object list whose stated length is more than
+// MaxObjectListLength.
+var ErrObjectListTooLong = errors.New("the object list is longer than the client reads element by element")
+
 // ReadObjectList reads the identifiers of every object in a device. It asks
 // for the whole array first and, where the device declines that, as one that
 // cannot segment does for a long list, reads it element by element. progress,
@@ -184,8 +194,11 @@ func (c *Client) ReadObjectList(ctx context.Context, dev Device, progress func(d
 	if len(values) != 1 || values[0].Kind != KindUnsigned {
 		return nil, errors.New("the object list's length is not a number")
 	}
+	if values[0].Uint > MaxObjectListLength {
+		return nil, fmt.Errorf("%w: the device says %d", ErrObjectListTooLong, values[0].Uint)
+	}
 	total := int(values[0].Uint)
-	list := make([]ObjectID, 0, total)
+	list := make([]ObjectID, 0, min(total, 1024))
 	for i := 1; i <= total; i++ {
 		values, err := c.ReadPropertyIndex(ctx, dev.Addr, device, objects.PropertyIdObjectList, uint32(i))
 		if err != nil {
