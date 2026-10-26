@@ -85,3 +85,57 @@ func TestReassembler(t *testing.T) {
 		t.Errorf("a continuation without a start gave %+v, want it dropped", res)
 	}
 }
+
+// A first segment that is not the one already taken, sent again, starts a
+// new reassembly: one that never completed is not continued with the
+// segments of the message that reuses its invoke ID.
+func TestReassemblerNewMessageReplacesStale(t *testing.T) {
+	r := NewReassembler(time.Minute)
+	bvlc := plumbing.NewBVLC(plumbing.BVLCFuncUnicast)
+	npdu := plumbing.NewNPDU(false, false, false, false)
+	enumerated := func(v byte) []byte { return []byte{0x91, v} } // one Enumerated tag
+	values := func(t *testing.T, raw []byte) []byte {
+		t.Helper()
+		msg, err := bacnet.Parse(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []byte
+		for _, o := range msg.(*services.ComplexACK).APDU.Objects {
+			got = append(got, o.(*objects.Object).Data...)
+		}
+		return got
+	}
+
+	// A reply that stops after three segments, then a different reply on
+	// the same invoke ID.
+	for seq := range uint8(3) {
+		if res := r.Feed("dev", bvlc, npdu, segment(seq, true, enumerated(seq))); !res.Accepted || res.Complete {
+			t.Fatalf("segment %d of the stale reply gave %+v", seq, res)
+		}
+	}
+	if res := r.Feed("dev", bvlc, npdu, segment(0, true, enumerated(10))); !res.Accepted || res.Complete || res.Dropped != "" {
+		t.Fatalf("the first segment of the new reply gave %+v, want it accepted and incomplete", res)
+	}
+	res := r.Feed("dev", bvlc, npdu, segment(1, false, enumerated(11)))
+	if !res.Complete {
+		t.Fatalf("the last segment of the new reply gave %+v, want the whole message", res)
+	}
+	if got := values(t, res.Raw); string(got) != string([]byte{10, 11}) {
+		t.Errorf("the new reply reassembled as %v, want [10 11] without the stale segments", got)
+	}
+
+	// A stale reply of one segment is replaced as well when the first
+	// segment differs, and kept when it is the same one sent again.
+	r.Feed("dev", bvlc, npdu, segment(0, true, enumerated(20)))
+	if res := r.Feed("dev", bvlc, npdu, segment(0, true, enumerated(30))); !res.Accepted || res.Complete {
+		t.Fatalf("a different first segment gave %+v, want it accepted", res)
+	}
+	if res := r.Feed("dev", bvlc, npdu, segment(0, true, enumerated(30))); !res.Accepted || res.Complete {
+		t.Fatalf("the first segment sent again gave %+v, want it accepted", res)
+	}
+	res = r.Feed("dev", bvlc, npdu, segment(1, false, enumerated(31)))
+	if got := values(t, res.Raw); !res.Complete || string(got) != string([]byte{30, 31}) {
+		t.Errorf("the reply reassembled as %v (complete %v), want [30 31]", got, res.Complete)
+	}
+}

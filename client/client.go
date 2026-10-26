@@ -109,11 +109,14 @@ type Config struct {
 
 	// MaxInFlightDevice says how many requests may be in flight at once to
 	// a device reached directly, by its BACnet/IP address. nil allows
-	// DefaultMaxInFlightDevice.
+	// DefaultMaxInFlightDevice. A value above MaxInFlight fails the request
+	// with ErrInFlightLimit before it is sent; a value below 1 means 1.
 	MaxInFlightDevice func(Address) int
 	// MaxInFlightNet says how many requests may be in flight at once to all
 	// the devices of one routed network together: a serial trunk behind a
 	// router carries one exchange at a time. nil allows DefaultMaxInFlightNet.
+	// Above MaxInFlight fails the request with ErrInFlightLimit; below 1
+	// means 1.
 	MaxInFlightNet func(net uint16) int
 	// MaxRequestsPerSec limits the requests the client sends, to all devices
 	// together: a token bucket that allows a burst of a second's worth. 0 is
@@ -211,6 +214,10 @@ type Client struct {
 	pending map[txKey]chan inbound
 	// invokes is the last invoke ID given to a request to each device.
 	invokes map[txKey]uint8
+	// quarantine is, for the invoke ID of each request sent and not
+	// answered, until when it is kept out of use: a late reply must not
+	// pass for the answer to a new request.
+	quarantine map[txKey]time.Time
 	// inflight is the slots for requests to each device reached directly
 	// and to each routed network.
 	inflight map[limitKey]*slots
@@ -335,6 +342,7 @@ func Open(cfg Config) (*Client, error) {
 		log:         cfg.Logger,
 		pending:     map[txKey]chan inbound{},
 		invokes:     map[txKey]uint8{},
+		quarantine:  map[txKey]time.Time{},
 		inflight:    map[limitKey]*slots{},
 		stats:       map[txKey]*PeerStats{},
 		noRPM:       map[txKey]bool{},
@@ -839,16 +847,15 @@ func (c *Client) confirmed(ctx context.Context, to Address, service uint8, paylo
 // exchange is confirmed, sending as the mode says. An error from before the
 // request left the client wraps ErrNotSent.
 func (c *Client) exchange(ctx context.Context, to Address, service uint8, payload []objects.APDUPayload, mode sendMode) ([]*objects.Object, error) {
-	via, function, err := c.resolve(ctx, to)
-	if err != nil {
-		return nil, notSent(err)
-	}
-
 	release, err := c.acquire(ctx, to)
 	if err != nil {
 		return nil, notSent(err)
 	}
 	defer release()
+	via, function, err := c.resolve(ctx, to)
+	if err != nil {
+		return nil, notSent(err)
+	}
 
 	retries := c.cfg.Retries
 	if mode != sendRetrying {
@@ -876,9 +883,20 @@ func (c *Client) exchange(ctx context.Context, to Address, service uint8, payloa
 	req.MaxSeg = 7                       // more than 64 segments
 	req.MaxSize = 5                      // up to 1476 bytes
 	key, ch := c.begin(to, req)
+	if ch == nil {
+		return nil, notSent(errors.New("all invoke IDs are in use"))
+	}
+	// A request sent and not answered may be answered late. Its invoke ID
+	// is kept out of use for a timeout, so that the late reply is not taken
+	// for the answer to a new request; not for a stranger, about which the
+	// client keeps nothing.
+	sent, answered := false, false
 	defer func() {
 		c.mu.Lock()
 		delete(c.pending, key)
+		if sent && !answered && !stranger {
+			c.quarantine[key] = time.Now().Add(c.cfg.Timeout)
+		}
 		c.mu.Unlock()
 	}()
 
@@ -901,9 +919,13 @@ func (c *Client) exchange(ctx context.Context, to Address, service uint8, payloa
 		if err := c.limiter.wait(ctx, c.closed); err != nil {
 			return nil, unsent(err)
 		}
+		if err := requestActive(ctx, c.closed); err != nil {
+			return nil, unsent(err)
+		}
 		if err := c.sendAPDU(function, via, npduTo(to, true), req); err != nil {
 			return nil, unsent(err)
 		}
+		sent = true
 		c.count(peer, func(s *PeerStats) {
 			s.Sent++
 			if attempt > 0 {
@@ -912,6 +934,7 @@ func (c *Client) exchange(ctx context.Context, to Address, service uint8, payloa
 		})
 		tags, err := c.await(ctx, ch, to, req.InvokeID, service)
 		if !errors.Is(err, errNoReply) {
+			answered = !gone(err)
 			if Declined(err) {
 				c.count(peer, func(s *PeerStats) { s.Errors++ })
 			}
@@ -931,24 +954,34 @@ func (c *Client) exchange(ctx context.Context, to Address, service uint8, payloa
 }
 
 // begin gives a request the next invoke ID for its device, one that no
-// request in flight to the device has, and registers where its reply goes.
+// request in flight to the device has and that no request given up on may
+// still be answered by, and registers where its reply goes. A nil channel
+// means every ID is taken; no pending request is replaced.
 func (c *Client) begin(to Address, req *plumbing.APDU) (txKey, chan inbound) {
 	ch := make(chan inbound, 64)
 	peer := keyOf(to, 0)
+	now := time.Now()
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	id := c.invokes[peer]
 	for range 256 {
 		id++
-		if _, used := c.pending[keyOf(to, id)]; !used {
-			break
+		key := keyOf(to, id)
+		if _, used := c.pending[key]; used {
+			continue
 		}
+		if until, held := c.quarantine[key]; held {
+			if now.Before(until) {
+				continue
+			}
+			delete(c.quarantine, key)
+		}
+		c.invokes[peer] = id
+		req.InvokeID = id
+		c.pending[key] = ch
+		return key, ch
 	}
-	c.invokes[peer] = id
-	req.InvokeID = id
-	key := keyOf(to, id)
-	c.pending[key] = ch
-	return key, ch
+	return txKey{}, nil
 }
 
 // resolve says where a request for to goes: the device's own address, the
@@ -977,6 +1010,12 @@ func (c *Client) resolve(ctx context.Context, to Address) (netip.AddrPort, uint8
 	// the network set, and learn the router from the reply.
 	bcast, function := c.broadcastTarget()
 	return bcast, function, nil
+}
+
+// simpleAckService reports whether a service is answered with a SimpleACK,
+// rather than a ComplexACK carrying a result.
+func simpleAckService(service uint8) bool {
+	return service == services.ServiceConfirmedSubscribeCOV || service == services.ServiceConfirmedWriteProperty
 }
 
 func (c *Client) await(ctx context.Context, ch chan inbound, to Address, invokeID, service uint8) ([]*objects.Object, error) {
@@ -1014,6 +1053,9 @@ func (c *Client) await(ctx context.Context, ch chan inbound, to Address, invokeI
 		}
 
 		a := in.apdu
+		if (a.Type == plumbing.SimpleAck || a.Type == plumbing.ComplexAck || a.Type == plumbing.Error) && a.Service != service {
+			continue // a late reply to a different service with a reused ID
+		}
 		switch a.Type {
 		case plumbing.Error:
 			return nil, decodeError(a.Objects)
@@ -1022,11 +1064,14 @@ func (c *Client) await(ctx context.Context, ch chan inbound, to Address, invokeI
 		case plumbing.Abort:
 			return nil, &AbortError{Reason: a.Reason}
 		case plumbing.SimpleAck:
-			if service == services.ServiceConfirmedSubscribeCOV || service == services.ServiceConfirmedWriteProperty {
+			if simpleAckService(service) {
 				return nil, nil
 			}
 			return nil, errors.New("SimpleACK in reply to a read request")
 		case plumbing.ComplexAck:
+			if simpleAckService(service) {
+				return nil, errors.New("ComplexACK in reply to a request requiring SimpleACK")
+			}
 		default:
 			continue
 		}

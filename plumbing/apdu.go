@@ -262,24 +262,22 @@ func (a *APDU) MarshalTo(b []byte) error {
 	case UnConfirmedReq:
 		b[offset] = a.Service
 		offset++
-		if a.MarshalLen() > 2 {
-			for _, o := range a.Objects {
-				ob, err := o.MarshalBinary()
-				if err != nil {
-					return fmt.Errorf("failed to marshal UnconfirmedReq: %v", err)
-				}
+		for _, o := range a.Objects {
+			ob, err := o.MarshalBinary()
+			if err != nil {
+				return fmt.Errorf("failed to marshal UnconfirmedReq: %v", err)
+			}
 
-				copy(b[offset:offset+o.MarshalLen()], ob)
-				offset += int(o.MarshalLen())
+			copy(b[offset:offset+o.MarshalLen()], ob)
+			offset += int(o.MarshalLen())
 
-				if offset > a.MarshalLen() {
-					return fmt.Errorf(
-						"failed to marshal UnconfirmedReq marshal length %d binary length %d: %v",
-						a.MarshalLen(),
-						len(b),
-						common.ErrTooShortToMarshalBinary,
-					)
-				}
+			if offset > a.MarshalLen() {
+				return fmt.Errorf(
+					"failed to marshal UnconfirmedReq marshal length %d binary length %d: %v",
+					a.MarshalLen(),
+					len(b),
+					common.ErrTooShortToMarshalBinary,
+				)
 			}
 		}
 	case Reject, Abort:
@@ -297,23 +295,21 @@ func (a *APDU) MarshalTo(b []byte) error {
 		offset++
 		b[offset] = a.Service
 		offset++
-		if a.MarshalLen() > 4 {
-			for _, o := range a.Objects {
-				ob, err := o.MarshalBinary()
-				if err != nil {
-					return fmt.Errorf("failed to marshal CACK/SACK/ERROR: %s", err)
-				}
+		for _, o := range a.Objects {
+			ob, err := o.MarshalBinary()
+			if err != nil {
+				return fmt.Errorf("failed to marshal CACK/SACK/ERROR: %s", err)
+			}
 
-				copy(b[offset:offset+o.MarshalLen()], ob)
-				offset += o.MarshalLen()
+			copy(b[offset:offset+o.MarshalLen()], ob)
+			offset += o.MarshalLen()
 
-				if offset > a.MarshalLen() {
-					return fmt.Errorf(
-						"failed to marshal CACK/SACK/ERROR - binary overflow at offset %d: %v",
-						offset,
-						common.ErrTooShortToMarshalBinary,
-					)
-				}
+			if offset > a.MarshalLen() {
+				return fmt.Errorf(
+					"failed to marshal CACK/SACK/ERROR - binary overflow at offset %d: %v",
+					offset,
+					common.ErrTooShortToMarshalBinary,
+				)
 			}
 		}
 	case ConfirmedReq:
@@ -323,23 +319,21 @@ func (a *APDU) MarshalTo(b []byte) error {
 		offset++
 		b[offset] = a.Service
 		offset++
-		if a.MarshalLen() > 4 {
-			for _, o := range a.Objects {
-				ob, err := o.MarshalBinary()
-				if err != nil {
-					return fmt.Errorf("failed to marshal ConfirmedReq: %v", err)
-				}
+		for _, o := range a.Objects {
+			ob, err := o.MarshalBinary()
+			if err != nil {
+				return fmt.Errorf("failed to marshal ConfirmedReq: %v", err)
+			}
 
-				copy(b[offset:offset+o.MarshalLen()], ob)
-				offset += o.MarshalLen()
+			copy(b[offset:offset+o.MarshalLen()], ob)
+			offset += o.MarshalLen()
 
-				if offset > a.MarshalLen() {
-					return fmt.Errorf(
-						"failed to marshal ConfirmedReq - binary overflow at offset %d: %v",
-						offset,
-						common.ErrTooShortToMarshalBinary,
-					)
-				}
+			if offset > a.MarshalLen() {
+				return fmt.Errorf(
+					"failed to marshal ConfirmedReq - binary overflow at offset %d: %v",
+					offset,
+					common.ErrTooShortToMarshalBinary,
+				)
 			}
 		}
 	}

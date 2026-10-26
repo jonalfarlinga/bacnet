@@ -37,19 +37,19 @@ type Service struct {
 // recordedServices is the confirmed services the devices record and
 // acknowledge without acting on them.
 var recordedServices = map[uint8]bool{
-	services.ServiceConfirmedAcknowledgeAlarm:            true,
-	services.ServiceConfirmedGetAlarmSummary:             true,
-	services.ServiceConfirmedGetEnrollmentSummary:        true,
-	services.ServiceConfirmedAtomicReadFile:              true,
-	services.ServiceConfirmedAtomicWriteFile:             true,
-	services.ServiceConfirmedAddListElement:              true,
-	services.ServiceConfirmedRemoveListElement:           true,
-	services.ServiceConfirmedCreateObject:                true,
-	services.ServiceConfirmedDeleteObject:                true,
-	services.ServiceConfirmedWritePropMultiple:           true,
+	services.ServiceConfirmedAcknowledgeAlarm:           true,
+	services.ServiceConfirmedGetAlarmSummary:            true,
+	services.ServiceConfirmedGetEnrollmentSummary:       true,
+	services.ServiceConfirmedAtomicReadFile:             true,
+	services.ServiceConfirmedAtomicWriteFile:            true,
+	services.ServiceConfirmedAddListElement:             true,
+	services.ServiceConfirmedRemoveListElement:          true,
+	services.ServiceConfirmedCreateObject:               true,
+	services.ServiceConfirmedDeleteObject:               true,
+	services.ServiceConfirmedWritePropMultiple:          true,
 	services.ServiceConfirmedDeviceCommunicationControl: true,
-	services.ServiceConfirmedTextMessage:                 true,
-	services.ServiceConfirmedReinitializeDevice:          true,
+	services.ServiceConfirmedTextMessage:                true,
+	services.ServiceConfirmedReinitializeDevice:         true,
 	27: true, // LifeSafetyOperation
 	29: true, // GetEventInformation
 }

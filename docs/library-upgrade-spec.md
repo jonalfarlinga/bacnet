@@ -292,7 +292,7 @@ All of these support `errors.Is` and `errors.As`. `Error()` strings use the §5.
 - Writes are serialized through one sender, which applies the global rate limiter.
 
 ### 7.4 Client TSM (confirmed requests)
-- **Invoke IDs**: allocated per peer key, rotating sequentially to avoid reusing a recently timed-out ID. If all 256 are in use, the call blocks until one frees up or the context ends.
+- **Invoke IDs**: allocated per peer key, rotating sequentially. The ID of a request that was sent and not answered (timeout, context ended, client closed) is quarantined for one `Timeout` after the request gave up, so that a late reply is not taken for the answer to a new request; a reply must also be to the service asked. Concurrency callbacks above 256 fail with `ErrInFlightLimit` before sending. At the maximum supported limit, further requests wait for a concurrency slot or their context to end; a defensive allocation check never overwrites a pending transaction.
 - **Concurrency**: a semaphore acquired before an invoke ID.
   - A directly reachable device has its own semaphore of size `MaxInFlightDevice(addr)`.
   - Routed devices share one semaphore per DNET of size `MaxInFlightNet(net)`. An MS/TP trunk carries one exchange at a time, so the limit counts requests to the whole network, not to each device on it.

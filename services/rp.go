@@ -79,7 +79,7 @@ func NewConfirmedReadPropertyMultiple(bvlc *plumbing.BVLC, npdu *plumbing.NPDU) 
 	c := &ConfirmedReadProperty{
 		BVLC: bvlc,
 		NPDU: npdu,
-		APDU: plumbing.NewAPDU(plumbing.ConfirmedReq, ServiceConfirmedReadProperty, ConfirmedReadPropertyMultipleObjects(
+		APDU: plumbing.NewAPDU(plumbing.ConfirmedReq, ServiceConfirmedReadPropMultiple, ConfirmedReadPropertyMultipleObjects(
 			objects.ObjectTypeAnalogOutput, 1, []uint16{})),
 	}
 	c.SetLength()

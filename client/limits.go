@@ -2,6 +2,8 @@ package client
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/netip"
 	"sync"
 	"time"
@@ -13,6 +15,15 @@ const (
 	DefaultMaxInFlightNet    = 1
 	DefaultMaxRequestsPerSec = 50
 )
+
+// MaxInFlight is the number of distinct invoke IDs available to one peer.
+// Limits returned by Config's concurrency callbacks must not exceed it.
+const MaxInFlight = 256
+
+// ErrInFlightLimit is a limit from MaxInFlightDevice or MaxInFlightNet
+// above MaxInFlight. The request fails with it, wrapped in ErrNotSent,
+// before anything is sent.
+var ErrInFlightLimit = errors.New("in-flight limit above the invoke IDs available")
 
 // limitKey is what an in-flight limit applies to: one device reached
 // directly, or one routed network as a whole.
@@ -34,11 +45,19 @@ type slots struct {
 // device, or the routed network it is on, has as many in flight as the
 // configuration allows. It returns the function that gives the slot back.
 func (c *Client) acquire(ctx context.Context, to Address) (func(), error) {
+	if err := requestActive(ctx, c.closed); err != nil {
+		return nil, err
+	}
 	key := limitKey{ip: to.IP}
-	size := c.cfg.MaxInFlightDevice(to)
+	var size int
 	if to.Routed() {
 		key = limitKey{net: to.Net}
 		size = c.cfg.MaxInFlightNet(to.Net)
+	} else {
+		size = c.cfg.MaxInFlightDevice(to)
+	}
+	if size > MaxInFlight {
+		return nil, fmt.Errorf("%w: %d allowed, %d asked", ErrInFlightLimit, MaxInFlight, size)
 	}
 	size = max(1, size)
 
@@ -60,6 +79,11 @@ func (c *Client) acquire(ctx context.Context, to Address) (func(), error) {
 
 	select {
 	case s.sem <- struct{}{}:
+		if err := requestActive(ctx, c.closed); err != nil {
+			<-s.sem
+			leave()
+			return nil, err
+		}
 		return func() {
 			<-s.sem
 			leave()
@@ -89,10 +113,15 @@ func newBucket(perSecond float64) *bucket {
 
 // wait takes one token, waiting for it when none is there.
 func (b *bucket) wait(ctx context.Context, closed <-chan struct{}) error {
-	if b == nil {
-		return nil
-	}
 	for {
+		// Checked before each try, so that a request that is cancelled or
+		// closed does not go on with a token that happens to be free.
+		if err := requestActive(ctx, closed); err != nil {
+			return err
+		}
+		if b == nil {
+			return nil
+		}
 		b.mu.Lock()
 		now := time.Now()
 		b.tokens = min(b.burst, b.tokens+now.Sub(b.last).Seconds()*b.rate)
@@ -115,6 +144,18 @@ func (b *bucket) wait(ctx context.Context, closed <-chan struct{}) error {
 			timer.Stop()
 			return ErrClosed
 		}
+	}
+}
+
+func requestActive(ctx context.Context, closed <-chan struct{}) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	select {
+	case <-closed:
+		return ErrClosed
+	default:
+		return nil
 	}
 }
 

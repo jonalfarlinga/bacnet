@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"fmt"
 	"time"
 
@@ -49,8 +50,11 @@ type segmentBuffer struct {
 	invokeID uint8
 	service  uint8
 	data     []byte
-	nextSeq  uint8
-	touched  time.Time
+	// lastLen is the length of the last segment taken, the one a device
+	// sends again when its Segment-ACK is lost.
+	lastLen int
+	nextSeq uint8
+	touched time.Time
 }
 
 // NewReassembler returns a Reassembler that drops a reassembly left
@@ -68,8 +72,15 @@ func (r *Reassembler) Feed(peer string, bvlc *plumbing.BVLC, npdu *plumbing.NPDU
 	key := segmentKey{peer: peer, invokeID: apdu.InvokeID, pduType: apdu.Type}
 	seq := apdu.SequenceNumber
 	more := apdu.HasMoreSegments()
+	buf, ok := r.active[key]
+	if seq == 0 && ok && buf.nextSeq != 0 && !buf.resent(apdu.Payload) {
+		// A first segment while a reassembly is under way, and not the one
+		// already taken sent again: a new message on the invoke ID of a
+		// reassembly that never completed. It starts over.
+		ok = false
+	}
 
-	if seq == 0 {
+	if seq == 0 && !ok {
 		r.active[key] = &segmentBuffer{
 			bvlc:     bvlc,
 			npdu:     npdu,
@@ -80,6 +91,7 @@ func (r *Reassembler) Feed(peer string, bvlc *plumbing.BVLC, npdu *plumbing.NPDU
 			invokeID: apdu.InvokeID,
 			service:  apdu.Service,
 			data:     append([]byte(nil), apdu.Payload...),
+			lastLen:  len(apdu.Payload),
 			nextSeq:  1,
 			touched:  time.Now(),
 		}
@@ -89,19 +101,20 @@ func (r *Reassembler) Feed(peer string, bvlc *plumbing.BVLC, npdu *plumbing.NPDU
 		return FeedResult{Accepted: true}
 	}
 
-	buf, ok := r.active[key]
 	if !ok {
 		return FeedResult{Dropped: fmt.Sprintf(
 			"segment %d of invoke ID %d from %s: no reassembly under way, its first segment was not seen",
 			seq, apdu.InvokeID, peer)}
 	}
-	if seq < buf.nextSeq {
+	// Sequence numbers wrap at 256. A recently received sequence behind
+	// nextSeq is a duplicate even when its numeric value is larger.
+	if seq != buf.nextSeq && uint8(buf.nextSeq-seq) < 128 {
 		// A retransmitted duplicate of a segment already taken: acknowledged
 		// again, not appended again.
 		buf.touched = time.Now()
 		return FeedResult{Accepted: true}
 	}
-	if seq > buf.nextSeq {
+	if seq != buf.nextSeq {
 		delete(r.active, key)
 		return FeedResult{Dropped: fmt.Sprintf(
 			"reassembly of invoke ID %d from %s: segment %d arrived where %d was expected",
@@ -109,12 +122,21 @@ func (r *Reassembler) Feed(peer string, bvlc *plumbing.BVLC, npdu *plumbing.NPDU
 	}
 
 	buf.data = append(buf.data, apdu.Payload...)
+	buf.lastLen = len(apdu.Payload)
 	buf.nextSeq++
 	buf.touched = time.Now()
 	if !more {
 		return r.finish(key)
 	}
 	return FeedResult{Accepted: true}
+}
+
+// resent reports whether a first segment is the one the buffer holds, sent
+// again. A device sends its first segment again only while it waits for the
+// Segment-ACK of that one, so nothing after it has been taken yet; the
+// sequence number wraps, so the segment is the last one taken.
+func (b *segmentBuffer) resent(payload []byte) bool {
+	return b.nextSeq == 1 && bytes.Equal(payload, b.data[len(b.data)-b.lastLen:])
 }
 
 // finish rebuilds the wire bytes of the whole message from the segments,
@@ -134,6 +156,9 @@ func (r *Reassembler) finish(key segmentKey) FeedResult {
 
 	bvlcLen := buf.bvlc.MarshalLen()
 	npduLen := buf.npdu.MarshalLen()
+	if bvlcLen+npduLen+len(apduBytes) > 0xFFFF {
+		return FeedResult{Accepted: true, Dropped: "the reassembled message exceeds the BVLC length limit"}
+	}
 	buf.bvlc.Length = uint16(bvlcLen + npduLen + len(apduBytes))
 
 	raw := make([]byte, bvlcLen+npduLen+len(apduBytes))

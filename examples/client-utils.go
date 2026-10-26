@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -65,7 +66,34 @@ func openClient(onIAm func(client.Device)) *client.Client {
 	if err != nil {
 		log.Fatalf("opening the client: %v", err)
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), exTimeout)
+	defer cancel()
+	if err := waitForeignDevice(ctx, c); err != nil {
+		c.Close()
+		log.Fatalf("registering with the BBMD: %v", err)
+	}
 	return c
+}
+
+// Open starts registration asynchronously. The examples must wait before
+// their first broadcast, otherwise a BBMD may discard their only Who-Is.
+func waitForeignDevice(ctx context.Context, c *client.Client) error {
+	tick := time.NewTicker(10 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		status, configured := c.ForeignDeviceStatus()
+		if !configured || status.State == client.FDRegistered {
+			return nil
+		}
+		if status.State == client.FDFailed {
+			return status.LastResult
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-tick.C:
+		}
+	}
 }
 
 // target is the device the flags name: at --remote-address, or behind the

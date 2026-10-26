@@ -12,6 +12,26 @@ Releases up to v0.3.3 had no changelog; the tags are their record.
   the writable switch alone, and the client keeps the address it heard each device instance from for a
   writable rule by instance.
 
+### Fixed
+
+- `client`: a request whose context has ended, or whose client has closed, fails with `ErrNotSent` before
+  anything is sent, even when an in-flight slot or a rate-limit token is free. A reply must be to the
+  service asked, and the invoke ID of a request sent and not answered is kept out of use for a timeout,
+  so that a late reply does not pass for the answer to a new request. Concurrency callbacks above
+  `MaxInFlight` (256) fail with the new `ErrInFlightLimit`, wrapped in `ErrNotSent`, and invoke-ID
+  exhaustion never replaces a pending transaction.
+- `client`: `ReadMany` sizes outgoing APDUs to the device's `MaxAPDU`, falls back to individual reads
+  for an oversized property list, and matches repeated object specifications and resolved wildcard
+  Device identifiers correctly. `Probe` learns the address for writable rules by instance.
+- `client.Reassembler`: preserve data and recognize retransmissions across sequence-number wraparound,
+  and start over on a first segment that is not the one already taken sent again, rather than continue a
+  reassembly that never completed with the segments of the message reusing its invoke ID; reject
+  reassembled frames too large for the BVLC length field.
+- Codec: decode WriteProperty with optional priority and array index, preserve constructed values,
+  and populate the decoded real value used by the server example. Select the correct service in the
+  ReadPropertyMultiple constructor and marshal single-byte ACK payloads.
+- Examples: wait for foreign-device registration before sending the first discovery broadcast.
+
 ## v0.5.0 (2026-10-14)
 
 ### Added

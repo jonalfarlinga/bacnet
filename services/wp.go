@@ -19,6 +19,7 @@ type ConfirmedWritePropertyDec struct {
 	ObjectType  uint16
 	InstanceNum uint32
 	PropertyId  uint16
+	ArrayIndex  *uint32
 	Value       float32
 	Priority    uint8
 	Tags        []*objects.Object
@@ -137,7 +138,7 @@ func (c *ConfirmedWriteProperty) SetLength() {
 func (c *ConfirmedWriteProperty) Decode() (ConfirmedWritePropertyDec, error) {
 	decCWP := ConfirmedWritePropertyDec{}
 
-	if len(c.APDU.Objects) != 5 {
+	if len(c.APDU.Objects) < 5 {
 		return decCWP, fmt.Errorf(
 			"failed to decode ConfirmedWP - object count %d: %v",
 			len(c.APDU.Objects),
@@ -145,65 +146,85 @@ func (c *ConfirmedWriteProperty) Decode() (ConfirmedWritePropertyDec, error) {
 		)
 	}
 
-	context := []uint8{8}
-	objs := make([]*objects.Object, 0)
+	tags := make([]*objects.Object, len(c.APDU.Objects))
 	for i, obj := range c.APDU.Objects {
-		enc_obj, ok := obj.(*objects.Object)
-		if !ok {
-			return decCWP, fmt.Errorf(
-				"ComplexACK object at index %d is not Object type: %v",
-				i, common.ErrInvalidObjectType,
-			)
-		}
-
-		// add or remove context based on opening and closing tags
-		if enc_obj.Kind == objects.TagOpening {
-			context = append(context, enc_obj.TagNumber)
-			continue
-		}
-		if enc_obj.Kind == objects.TagClosing {
-			if len(context) <= 1 {
-				return decCWP, fmt.Errorf(
-					"LogBufferCACK object at index %d has mismatched closing tag: %v",
-					i, common.ErrInvalidObjectType,
-				)
-			}
-			context = context[:len(context)-1]
-			continue
-		}
-
-		if enc_obj.TagClass {
-			c := combine(context[len(context)-1], enc_obj.TagNumber)
-			switch c {
-			case combine(8, 0):
-				objId, err := objects.DecObjectIdentifier(obj)
-				if err != nil {
-					return decCWP, fmt.Errorf("decoding ConfirmedWP: %v", err)
-				}
-				decCWP.ObjectType = objId.ObjectType
-				decCWP.InstanceNum = objId.InstanceNumber
-			case combine(8, 1):
-				propId, err := objects.DecUnsignedInteger(obj)
-				if err != nil {
-					return decCWP, fmt.Errorf("decoding ConfirmedWP: %v", err)
-				}
-				decCWP.PropertyId = uint16(propId)
-			case combine(8, 4):
-				priority, err := objects.DecUnsignedInteger(obj)
-				if err != nil {
-					return decCWP, fmt.Errorf("decoding ConfirmedWP: %v", err)
-				}
-				decCWP.Priority = uint8(priority)
-			}
-		} else {
-			tag, err := decodeAppTags(enc_obj, &obj)
-			if err != nil {
-				return decCWP, fmt.Errorf("decode Application Tag: %v", err)
-			}
-			objs = append(objs, tag)
+		var ok bool
+		if tags[i], ok = obj.(*objects.Object); !ok || tags[i] == nil {
+			return decCWP, fmt.Errorf("WriteProperty object %d: %w", i, common.ErrInvalidObjectType)
 		}
 	}
-	decCWP.Tags = objs
+	contextTag := func(t *objects.Object, number uint8) bool {
+		return t.TagClass && t.Kind == objects.TagPrimitive && t.TagNumber == number
+	}
+	if !contextTag(tags[0], 0) || !contextTag(tags[1], 1) {
+		return decCWP, fmt.Errorf("WriteProperty requires object and property identifiers: %w", common.ErrWrongStructure)
+	}
+	id, err := objects.DecObjectIdentifier(tags[0])
+	if err != nil {
+		return decCWP, err
+	}
+	prop, err := objects.DecUnsignedInteger(tags[1])
+	if err != nil || prop > 0xFFFF {
+		return decCWP, fmt.Errorf("invalid WriteProperty property identifier: %w", common.ErrWrongStructure)
+	}
+	decCWP.ObjectType, decCWP.InstanceNum, decCWP.PropertyId = id.ObjectType, id.InstanceNumber, uint16(prop)
+	rest := tags[2:]
+	if contextTag(rest[0], 2) {
+		index, err := objects.DecUnsignedInteger(rest[0])
+		if err != nil {
+			return decCWP, err
+		}
+		decCWP.ArrayIndex = &index
+		rest = rest[1:]
+	}
+	if len(rest) == 0 || rest[0].Kind != objects.TagOpening || rest[0].TagNumber != 3 {
+		return decCWP, fmt.Errorf("WriteProperty requires a value: %w", common.ErrWrongStructure)
+	}
+	stack := []uint8{3}
+	i := 1
+	for ; i < len(rest); i++ {
+		t := rest[i]
+		switch t.Kind {
+		case objects.TagOpening:
+			stack = append(stack, t.TagNumber)
+		case objects.TagClosing:
+			if t.TagNumber != stack[len(stack)-1] {
+				return decCWP, fmt.Errorf("mismatched WriteProperty value tags: %w", common.ErrWrongStructure)
+			}
+			stack = stack[:len(stack)-1]
+		}
+		if len(stack) == 0 {
+			break
+		}
+		if !t.TagClass && t.Kind == objects.TagPrimitive {
+			var payload objects.APDUPayload = t
+			decoded, err := decodeAppTags(t, &payload)
+			if err != nil {
+				return decCWP, err
+			}
+			decoded.Length = t.Length
+			decCWP.Tags = append(decCWP.Tags, decoded)
+		} else {
+			decCWP.Tags = append(decCWP.Tags, t)
+		}
+	}
+	if len(stack) != 0 || i == 1 {
+		return decCWP, fmt.Errorf("missing or unclosed WriteProperty value: %w", common.ErrWrongStructure)
+	}
+	if len(decCWP.Tags) == 1 {
+		decCWP.Value, _ = decCWP.Tags[0].Value.(float32)
+	}
+	rest = rest[i+1:]
+	if len(rest) > 0 {
+		if len(rest) != 1 || !contextTag(rest[0], 4) {
+			return decCWP, fmt.Errorf("unexpected tags after WriteProperty value: %w", common.ErrWrongStructure)
+		}
+		priority, err := objects.DecUnsignedInteger(rest[0])
+		if err != nil || priority < 1 || priority > 16 {
+			return decCWP, fmt.Errorf("invalid WriteProperty priority: %w", common.ErrWrongStructure)
+		}
+		decCWP.Priority = uint8(priority)
+	}
 
 	return decCWP, nil
 }

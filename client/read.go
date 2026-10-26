@@ -77,8 +77,8 @@ func propertyValue(tags []*objects.Object) ([]Value, error) {
 }
 
 // ReadPropertyMultiple reads properties of several objects in one request.
-// The reply has to fit in what the device can send, so the caller sizes its
-// batches to the device.
+// The caller sizes both the request and reply to the device. ReadMany does
+// that batching automatically when given the device's capabilities.
 func (c *Client) ReadPropertyMultiple(ctx context.Context, to Address, specs []ReadSpec) ([]ObjectResult, error) {
 	var payload []objects.APDUPayload
 	for _, s := range specs {
@@ -250,7 +250,7 @@ func ErrorCodeName(v uint32) string {
 var errNotInReply = errors.New("not in the reply")
 
 // ReadMany reads properties of many objects of one device, with
-// ReadPropertyMultiple in requests sized to what the device can answer, and
+// ReadPropertyMultiple in requests sized to what the device can receive and answer, and
 // with ReadProperty one property at a time where the device has no
 // ReadPropertyMultiple, or declines one for a single object. Once a device
 // has said it has no ReadPropertyMultiple, the client does not ask it again.
@@ -263,51 +263,88 @@ func (c *Client) ReadMany(ctx context.Context, dev Device, specs []ReadSpec) ([]
 	for i, s := range specs {
 		results[i] = ObjectResult{Object: s.Object}
 	}
-	batch := readManyBatch(dev, specs)
-	for start := 0; start < len(specs); start += batch {
+	for start := 0; start < len(specs); {
+		batch := readManyBatch(dev, specs[start:])
 		end := min(start+batch, len(specs))
 		if err := c.readMany(ctx, dev, specs[start:end], results[start:end]); err != nil {
 			return nil, err
 		}
+		start = end
 	}
 	return results, nil
 }
 
+// The sizes ReadMany works with: the header of a confirmed request, the
+// APDU every device accepts at least, the most objects asked about in one
+// request, and the estimates for a reply the device cannot segment.
+const (
+	apduHeader    = 4
+	smallestAPDU  = 50
+	mostPerBatch  = 32
+	perObject     = 8
+	perProperty   = 24
+	replyOverhead = 16
+)
+
+// requestBudget is the request APDU the device accepts: its MaxAPDU, or
+// the smallest every device must when it has not said.
+func requestBudget(dev Device) int {
+	return max(smallestAPDU, int(dev.MaxAPDU))
+}
+
+// fitsRequest reports whether one spec's ReadPropertyMultiple fits the
+// device's APDU on its own.
+func fitsRequest(dev Device, s ReadSpec) bool {
+	return apduHeader+rpmSpecSize(s) <= requestBudget(dev)
+}
+
 // readManyBatch is how many objects to ask about in one request. A device
-// that sends segmented replies can answer for many at once; one that cannot
-// has to fit the reply in one APDU, so the batch is sized by an estimate of
-// what each object and property comes back as.
+// that sends segmented replies can answer for many at once, but every
+// outgoing request must still fit in its MaxAPDU. Replies that cannot be
+// segmented are sized by an estimate; requests use their exact wire size.
 func readManyBatch(dev Device, specs []ReadSpec) int {
 	const (
-		most           = 32
-		perObject      = 8
-		perProperty    = 24
-		replyOverhead  = 16
-		smallestAPDU   = 50
 		segmentsBoth   = 0
 		segmentsToSend = 1
 	)
-	if dev.Segmentation == segmentsBoth || dev.Segmentation == segmentsToSend {
-		return most
+	budget := requestBudget(dev)
+	segmented := dev.Segmentation == segmentsBoth || dev.Segmentation == segmentsToSend
+	request, reply := apduHeader, replyOverhead
+	for i, s := range specs[:min(mostPerBatch, len(specs))] {
+		size := rpmSpecSize(s)
+		estimate := perObject + perProperty*max(1, len(s.Props))
+		if i > 0 && (request+size > budget || (!segmented && reply+estimate > budget)) {
+			return i
+		}
+		request += size
+		reply += estimate
 	}
-	props := 0
-	for _, s := range specs {
-		props += len(s.Props)
+	return max(1, min(mostPerBatch, len(specs)))
+}
+
+// rpmSpecSize is the wire size of one object's part of a
+// ReadPropertyMultiple request, as ConfirmedReadPropertyMultipleObjects
+// builds it: the object identifier in context tag 0, then the property
+// identifiers in context tag 0 between opening and closing tag 1. A
+// property identifier takes one byte up to 255, two above.
+func rpmSpecSize(s ReadSpec) int {
+	size := 5 + 2
+	for _, p := range s.Props {
+		size += 2
+		if p > 0xFF {
+			size++
+		}
 	}
-	if len(specs) > 0 {
-		props = max(1, props/len(specs))
-	}
-	budget := int(dev.MaxAPDU)
-	if budget < smallestAPDU {
-		budget = smallestAPDU
-	}
-	return max(1, min(most, (budget-replyOverhead)/(perObject+perProperty*props)))
+	return size
 }
 
 // readMany fills out, one result for each spec, from one request where it
 // can, and from less at a time where the device declines.
 func (c *Client) readMany(ctx context.Context, dev Device, specs []ReadSpec, out []ObjectResult) error {
-	if c.lacksRPM(dev.Addr) {
+	// One object's property list may be too long for a ReadPropertyMultiple
+	// on its own: its properties are read one at a time rather than in an
+	// APDU the device would not take.
+	if c.lacksRPM(dev.Addr) || (len(specs) == 1 && !fitsRequest(dev, specs[0])) {
 		for i := range specs {
 			if err := c.readSingly(ctx, dev.Addr, specs[i], &out[i]); err != nil {
 				return err
@@ -319,19 +356,7 @@ func (c *Client) readMany(ctx context.Context, dev Device, specs []ReadSpec, out
 	got, err := c.ReadPropertyMultiple(ctx, dev.Addr, specs)
 	switch {
 	case err == nil:
-		byObject := make(map[ObjectID]ObjectResult, len(got))
-		for _, r := range got {
-			byObject[r.Object] = r
-		}
-		for i, s := range specs {
-			if r, ok := byObject[s.Object]; ok {
-				out[i].Props = r.Props
-				continue
-			}
-			for _, p := range s.Props {
-				out[i].Props = append(out[i].Props, PropertyResult{ID: uint32(p), Err: errNotInReply})
-			}
-		}
+		matchReadMany(dev.Instance, specs, got, out)
 		return nil
 	case gone(err):
 		return err
@@ -353,6 +378,56 @@ func (c *Client) readMany(ctx context.Context, dev Device, specs []ReadSpec, out
 	// One object the device declined, for whatever reason: property by
 	// property, so that its answer for each is kept.
 	return c.readSingly(ctx, dev.Addr, specs[0], &out[0])
+}
+
+// Results may be reordered by object. Repeated specs for one object retain
+// separate results, and a wildcard Device ID may be resolved by the peer. An
+// object the device left out gets errNotInReply for every property asked,
+// ALL, REQUIRED and OPTIONAL included.
+func matchReadMany(instance uint32, specs []ReadSpec, got, out []ObjectResult) {
+	normalize := func(id ObjectID) ObjectID {
+		if id.Type != objects.ObjectTypeDevice {
+			return id
+		}
+		if instance == 0 || instance == WildcardInstance {
+			// Which device this is has not been learned: every Device
+			// object asked about, or answered for, is this one.
+			id.Instance = WildcardInstance
+		} else if id.Instance == WildcardInstance {
+			id.Instance = instance
+		}
+		return id
+	}
+	byObject := make(map[ObjectID][]ObjectResult, len(got))
+	for _, r := range got {
+		id := normalize(r.Object)
+		byObject[id] = append(byObject[id], r)
+	}
+	for i, s := range specs {
+		var props []PropertyResult
+		id := normalize(s.Object)
+		replies := byObject[id]
+		answered := len(replies) > 0
+		if answered {
+			props = replies[0].Props
+			byObject[id] = replies[1:]
+		}
+		for _, p := range s.Props {
+			if answered && (p == objects.PropertyIdAll || p == objects.PropertyIdRequired || p == objects.PropertyIdOptional) {
+				// The device chose the properties: its list is the result.
+				out[i].Props = props
+				break
+			}
+			result := PropertyResult{ID: uint32(p), Err: errNotInReply}
+			for _, r := range props {
+				if r.ID == uint32(p) && r.Index == nil {
+					result = r
+					break
+				}
+			}
+			out[i].Props = append(out[i].Props, result)
+		}
+	}
 }
 
 // readSingly reads an object with one ReadProperty for each property.

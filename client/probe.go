@@ -101,5 +101,6 @@ func (c *Client) Probe(ctx context.Context, to Address, instance uint32) (Device
 	if len(got) == 0 {
 		return dev, errors.New("the device answered none of the reads that describe it")
 	}
+	c.learnInstance(dev.Instance, to)
 	return dev, nil
 }

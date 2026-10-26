@@ -103,6 +103,13 @@ list, one entry at a time when the device will not segment; `ReadRange` reads a 
 `BACnetError`, `RejectError`, `AbortError`, and `ResponseTooLargeError` for a reply with more segments than
 `Config.MaxSegments` allows.
 
+`ReadMany` manages both outgoing request size and estimated reply size from the supplied `Device`.
+Callers using `ReadPropertyMultiple` directly size their own requests. Concurrency limits returned by
+`MaxInFlightDevice` or `MaxInFlightNet` must not exceed `client.MaxInFlight` (256); a larger value fails
+the request with `ErrInFlightLimit`, wrapped in `ErrNotSent`, before anything is sent. The invoke ID of a
+request that was sent and not answered is kept out of use for one timeout, so that a reply arriving late
+is not taken for the answer to a new request.
+
 The client writes only where it is told to. Everything it sends goes through one function that refuses any
 service but the reads, the Segment-ACKs and Aborts a segmented reply needs, Who-Is-Router-To-Network, the
 BBMD functions, SubscribeCOV with the acknowledgement of a confirmed notification, and `WriteProperty` to a

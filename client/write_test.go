@@ -118,6 +118,24 @@ var (
 	oneReal  = []*objects.Object{objects.EncReal(1)}
 )
 
+func TestWritePropertyAlreadyCanceled(t *testing.T) {
+	p := newPeer(t)
+	for _, rate := range []float64{-1, 50} {
+		c := openWriter(t, p, func(cfg *client.Config) { cfg.MaxRequestsPerSec = rate })
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		for range 32 {
+			err := c.WriteProperty(ctx, client.Address{IP: p.addr()}, setpoint, objects.PropertyIdPresentValue, oneReal, 16)
+			if !errors.Is(err, client.ErrNotSent) || !errors.Is(err, context.Canceled) {
+				t.Fatalf("cancelled write: %v", err)
+			}
+		}
+		if wp, _ := p.receive(30 * time.Millisecond); wp != nil {
+			t.Fatal("an already-cancelled write reached the device")
+		}
+	}
+}
+
 // A write goes out once with the object, property, value and priority, and
 // comes back as the device's answer: a SimpleACK, an Error, or silence
 // after a single send.
