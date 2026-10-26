@@ -2,7 +2,7 @@
 
 Releases up to v0.3.3 had no changelog; the tags are their record.
 
-## Unreleased
+## v0.6.0 (2026-10-26)
 
 ### Breaking
 
