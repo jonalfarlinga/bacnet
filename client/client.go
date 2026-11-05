@@ -619,6 +619,45 @@ func (c *Client) WhoIsAt(to netip.AddrPort) error {
 	return c.sendAPDU(plumbing.BVLCFuncUnicast, to, plumbing.NewNPDU(false, false, false, false), whoIs)
 }
 
+// WhoIsNetwork sends a Who-Is that only the devices on one remote network
+// answer: a broadcast on that network alone, sent to the router the client
+// has learned for it. Discovery one network at a time draws the I-Ams of one
+// trunk rather than of the whole site. With no router known for net, the
+// Who-Is is broadcast with the network set, so that only the router that
+// serves it passes it on, and the I-Ams that answer teach the client the
+// route for the next one. net is neither 0, the local network, which a
+// WhoIsAt or a WhoIs reaches, nor 0xFFFF, every network, which is WhoIs.
+func (c *Client) WhoIsNetwork(net uint16) error {
+	return c.whoIsNetwork(net, nil)
+}
+
+// WhoIsNetworkRange is a WhoIsNetwork that only the devices with an instance
+// from low to high answer.
+func (c *Client) WhoIsNetworkRange(net uint16, low, high uint32) error {
+	payload, err := services.WhoIsObjects(low, high)
+	if err != nil {
+		return err
+	}
+	return c.whoIsNetwork(net, payload)
+}
+
+func (c *Client) whoIsNetwork(net uint16, payload []objects.APDUPayload) error {
+	if net == 0 || net == 0xFFFF {
+		return fmt.Errorf("network %d is not one remote network", net)
+	}
+	if err := c.limiter.wait(context.Background(), c.closed); err != nil {
+		return err
+	}
+	// No MAC: a broadcast on net.
+	npdu := npduTo(Address{Net: net}, false)
+	whoIs := plumbing.NewAPDU(plumbing.UnConfirmedReq, services.ServiceUnconfirmedWhoIs, payload)
+	if router, ok := c.route(net); ok {
+		return c.sendAPDU(plumbing.BVLCFuncUnicast, router, npdu, whoIs)
+	}
+	to, function := c.broadcastTarget()
+	return c.sendAPDU(function, to, npdu, whoIs)
+}
+
 func (c *Client) whoIs(payload []objects.APDUPayload) error {
 	if err := c.limiter.wait(context.Background(), c.closed); err != nil {
 		return err

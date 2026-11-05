@@ -2,6 +2,16 @@
 
 Releases up to v0.3.3 had no changelog; the tags are their record.
 
+## Unreleased
+
+### Added
+
+- `client`: `WhoIsNetwork` and `WhoIsNetworkRange` send a Who-Is that only the devices on one remote
+  network answer, a broadcast on that network alone, to the router the client has learned for it. With
+  no route known it is broadcast with the network set, so only the router that serves it passes it on,
+  and the I-Ams teach the route. Discovery one network at a time draws the I-Ams of one trunk instead of
+  the whole site's.
+
 ## v0.6.0 (2026-10-26)
 
 ### Breaking
