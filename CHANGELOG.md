@@ -2,7 +2,7 @@
 
 Releases up to v0.3.3 had no changelog; the tags are their record.
 
-## Unreleased
+## v0.7.0 (2026-11-20)
 
 ### Added
 
@@ -11,6 +11,14 @@ Releases up to v0.3.3 had no changelog; the tags are their record.
   no route known it is broadcast with the network set, so only the router that serves it passes it on,
   and the I-Ams teach the route. Discovery one network at a time draws the I-Ams of one trunk instead of
   the whole site's.
+
+### Fixed
+
+- `client`: `ReadObjectList` no longer trusts the length a device states for its object list when it
+  reads the list element by element. A stated length above the new `MaxObjectListLength` (100000) fails
+  with the new `ErrObjectListTooLong` before any element is read, and the memory set aside no longer
+  grows with the stated length, only with the elements that arrive. A device answering 4294967295 made
+  the client reserve 32 GiB and send element reads without end.
 
 ## v0.6.0 (2026-10-26)
 
