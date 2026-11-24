@@ -16,10 +16,10 @@ Read-only over BACnet/IP on UDP is the first step, not the end state. §11 lists
 ## 2. Non-goals (this upgrade)
 
 - Sending segmented *requests*. Read requests are small, and oversized RPMs are split instead (§6.4).
-- Server-side TSM (answering confirmed requests) and an MS/TP data link. MS/TP devices are reached only through routers.
+- Server-side TSM (answering confirmed requests; changed after v0.7.0, see §10.1) and an MS/TP data link. MS/TP devices are reached only through routers.
 - Transports other than BACnet/IP on UDP. UDP is the starting point; other IP transports are on the roadmap (§11).
 - COV subscriptions. On the roadmap (§11).
-- A device identity. The client is not a BACnet device: it has no Device object, never sends I-Am, and never answers Who-Is.
+- A device identity. The client is not a BACnet device: it has no Device object, never sends I-Am, and never answers Who-Is. (Changed after v0.7.0: the program may give it an identity, see §10.1.)
 - Client methods for write services. The low-level builders stay (§9). Write methods are on the roadmap (§11); they are additive and work only against a device switched to writable.
 
 ## 3. Current-state issues this spec fixes
@@ -427,6 +427,10 @@ The deny list is withdrawn, 2026-10-22, after v0.5.0: which devices a program le
 
 COV is delivered, from the roadmap (§11), 2026-10-08: `SubscribeCOV` returns a `Subscription` that the client renews at half its lifetime, with a backoff after a failure, until `Cancel`; notifications reach a callback as `COVNotification`, and a confirmed one is answered with a SimpleACK. `CancelCOV` drops a subscription the client does not hold. The send guard takes SubscribeCOV and that SimpleACK, and nothing else new: a notification for no subscription of the client's gets no answer. `Config.ReadOnly` refuses both, which is how the explorer stays read-only. There is no subscription without a lifetime, no SubscribeCOVProperty, and `Close` does not cancel. The simulator takes subscriptions and notifies on `NotifyCOV`.
 
+The identity non-goal of §2 is narrowed, after v0.7.0. The client still has no identity of its own, but the program built on it may be a BACnet device, and it cannot say so on a socket of its own while the client holds the port. `Config.Identity` (device instance, vendor identifier) is the program's identity: `IAm` broadcasts its I-Am to every network, and the read loop answers a Who-Is that asks for the instance, a broadcast with a broadcast on the network it came from (through the BBMD for a foreign device) and a unicast with a unicast. The I-Am states 1476 bytes and no segmentation, which describe the client and not the program. `Config.OnWhoIs` hears every Who-Is. The send guard takes the I-Am of that identity and of no other device, and none with `Config.ReadOnly`. 
+
+Answering confirmed requests is delivered with it, which narrows the server-side TSM non-goal of §2 too: a device that says I-Am and cannot be read is no device to the tools that find it. The line drawn is that the client carries and the program answers. `Handle(service, handler)` gives the requests of a service to a `Handler`, which gets a `Request` (who asks, the service's tags, the longest reply taken) and returns the reply's tags, none for a SimpleACK, or a `BACnetError`, `RejectError` or `AbortError`. The client echoes the invoke ID, replies the way the request came (DNET and DADR from the request's SNET and SADR, to the router it came from), drops a request sent again while its handler has it, runs each handler on a goroutine of its own with at most `MaxServing` (64) at once, and rejects a service with no handler as unrecognized, including one `Parse` has no type for, which the read loop recovers the invoke ID of. It holds no object: `ServeReadProperty` and `ServeReadPropertyMultiple` decode and encode those two services around a `PropertyReader` of the program's, and resolve the wildcard device instance to the identity's. The send guard takes an acknowledgement, Error, Reject or server Abort only to a device with a request open, with that request's invoke ID. Not delivered: segmented replies (a reply longer than the requester takes, or than 1476 bytes, is aborted with segmentation-not-supported), segmented requests (aborted the same way), and cancelling a handler when the requester aborts. Without an identity, or with `Config.ReadOnly`, incoming confirmed requests are ignored as §7.3 says.
+
 PR 9 is delivered: `ReadRange` with `LogRecords` for trend logs, the `whois`, `rpc`, `rpm` and `rrc` examples rewritten on `client`, a `probe` example, and the reassembler moved to `client.Reassembler` for the orchestrator. The name lookups of §5.4 live in `objects/names.go`. ReadRange by time is not sent, for want of date and time encoders; by position and by sequence number are.
 
 ## 11. Roadmap (after this upgrade)
@@ -438,11 +442,12 @@ This upgrade delivers read-only access over BACnet/IP on UDP. That is the first 
 | Other IP transports | UDP is the starting point. `Address`, the peer key, and `Config.Conn` are specific to B/IP on UDP in this upgrade and will need a transport boundary inside `client` when a second transport is added. |
 | COV | Delivered, see §10.1. Left: SubscribeCOVProperty with a COV increment, and unsubscribed notifications. |
 | Write services | Delivered after v0.4.0: `WriteProperty` with priority and relinquish, for devices switched to writable with `Config.Writable` and `SetWritable` (§7.7). It is sent once and never retransmitted, and `ErrNotSent` separates "never sent" from "sent, no answer". |
+| Answering confirmed requests | Delivered unsegmented, see §10.1. Left: segmented replies (windows, Segment-ACKs, retransmission), without which a program's long properties, an object list of some hundred objects, are read element by element; and Who-Has. |
 | Alarms | GetEventInformation (a read; add to the allow-list), then AcknowledgeAlarm as a write service. |
 
 ## 12. Open questions
 
-Resolved: the window cap stays fixed at 64 with the cap logging in §7.4, the client has no device identity (§2), and the in-flight limit for routed devices is per DNET with a default of 1 (§7.4).
+Resolved: the window cap stays fixed at 64 with the cap logging in §7.4, the client has no device identity of its own (§2; the program may give it one, §10.1), and the in-flight limit for routed devices is per DNET with a default of 1 (§7.4).
 
 The routed test scenario uses bacnet-stack's gateway app (§8). This was chosen from reading its source at the pinned commit; it has not been built or run yet. The multi-port `apps/router` can be added later for real two-network forwarding, but it needs `libconfig-dev` and a second network or VM.
 

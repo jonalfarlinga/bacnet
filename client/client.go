@@ -17,8 +17,20 @@
 // device switched to writable (Config.Writable, SetWritable); every device
 // starts read-only. With Config.ReadOnly it refuses the subscriptions and
 // the writes as well, and is then read-only: it leaves nothing behind on a
-// device. It has no device identity: it never sends an I-Am, and answers
-// nothing but the notifications of its own subscriptions.
+// device.
+//
+// It has no device identity of its own. A program that is a BACnet device
+// gives it one (Config.Identity), and the client then says I-Am for it: when
+// asked to (IAm) and to the Who-Is that asks for it. Without one it never
+// sends an I-Am, and answers no confirmed request but the notifications of
+// its own subscriptions.
+//
+// With an identity it also answers the confirmed requests other devices send
+// the program: Handle gives a service to a handler of the program's, and the
+// client matches each reply to its request and sends it back the way the
+// request came, to the device that asked and to no other. What the program
+// is, which objects and properties it has and what they hold, is the
+// handler's business and none of the client's. Replies are not segmented.
 //
 // It talks to every device it can reach. It limits what it has in flight to
 // each device and to each routed network, and how many requests it sends in
@@ -37,6 +49,7 @@ import (
 	"time"
 
 	"github.com/jonalfarlinga/bacnet"
+	"github.com/jonalfarlinga/bacnet/common"
 	"github.com/jonalfarlinga/bacnet/objects"
 	"github.com/jonalfarlinga/bacnet/plumbing"
 	"github.com/jonalfarlinga/bacnet/services"
@@ -125,8 +138,8 @@ type Config struct {
 
 	// ReadOnly makes the client refuse what leaves state on a device or
 	// answers one: SubscribeCOV and WriteProperty fail with
-	// ErrServiceNotAllowed, whatever Writable says, and no notification is
-	// acknowledged.
+	// ErrServiceNotAllowed, whatever Writable says, no notification is
+	// acknowledged, and no I-Am is sent, whatever Identity says.
 	ReadOnly bool
 
 	// MaxSegments is the most segments the client reassembles into one
@@ -153,6 +166,15 @@ type Config struct {
 	// OnIAm is called from the read loop for every I-Am heard. It must not
 	// block.
 	OnIAm func(Device)
+
+	// Identity is the BACnet device the program is, if it is one. The client
+	// then answers the Who-Is that asks for it with its I-Am, and IAm
+	// broadcasts it. nil is no device: nothing is announced and no Who-Is is
+	// answered. ReadOnly overrides it.
+	Identity *Identity
+	// OnWhoIs is called from the read loop for every Who-Is heard, before
+	// the client answers it, with or without an Identity. It must not block.
+	OnWhoIs func(WhoIsRequest)
 }
 
 // PacketEvent is one datagram sent or received.
@@ -247,11 +269,19 @@ type Client struct {
 	bvlcWait map[bvlcKey]chan plumbing.BACnet
 	// subs is the COV subscriptions whose notifications are delivered.
 	subs map[covKey]*Subscription
+	// handlers is the program's handler for each confirmed service it
+	// answers, and serving the requests that are with a handler or being
+	// turned down: the only devices a reply may go to (serve.go).
+	handlers map[uint8]Handler
+	serving  map[txKey]struct{}
 
 	fd *foreign // nil unless ForeignDevice is configured
 
 	closed chan struct{}
 	done   chan struct{}
+	// ctx ends when the client closes: what the handlers are given.
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // txKey identifies a confirmed request by its peer and invoke ID. A routed
@@ -314,6 +344,13 @@ func Open(cfg Config) (*Client, error) {
 			return nil, err
 		}
 	}
+	if cfg.Identity != nil {
+		if err := cfg.Identity.validate(); err != nil {
+			return nil, err
+		}
+		id := *cfg.Identity
+		cfg.Identity = &id
+	}
 	if cfg.ForeignDevice != nil {
 		if !cfg.ForeignDevice.BBMD.IsValid() || cfg.ForeignDevice.BBMD.Port() == 0 {
 			return nil, fmt.Errorf("foreign device: BBMD address %s is not an address and port", cfg.ForeignDevice.BBMD)
@@ -354,9 +391,12 @@ func Open(cfg Config) (*Client, error) {
 		routerWatch: map[*routerWatcher]struct{}{},
 		bvlcWait:    map[bvlcKey]chan plumbing.BACnet{},
 		subs:        map[covKey]*Subscription{},
+		handlers:    map[uint8]Handler{},
+		serving:     map[txKey]struct{}{},
 		closed:      make(chan struct{}),
 		done:        make(chan struct{}),
 	}
+	c.ctx, c.cancel = context.WithCancel(context.Background())
 	if cfg.MaxRequestsPerSec > 0 {
 		c.limiter = newBucket(cfg.MaxRequestsPerSec)
 	}
@@ -381,6 +421,7 @@ func (c *Client) Close() error {
 	default:
 	}
 	close(c.closed)
+	c.cancel()
 	err := c.conn.Close()
 	<-c.done
 	return err
@@ -433,15 +474,18 @@ func (f *frame) GetService() uint8            { return f.apdu.Service }
 // service or a Segment-ACK in a unicast, broadcast or distribute envelope, a
 // Who-Is-Router-To-Network, or one of the BBMD functions that change nothing
 // but the client's own registration; unless readOnly, what a COV
-// subscription takes; and when the destination is writable, a
-// WriteProperty.
-func allowed(msg plumbing.BACnet, readOnly, writable bool) error {
+// subscription takes, and the I-Am of the identity the client was given, if
+// it was given one, and when the destination has a confirmed request open
+// with the client (serving), the reply to it; and when the destination is
+// writable, a WriteProperty.
+func allowed(msg plumbing.BACnet, readOnly, writable bool, identity *Identity, serving bool) error {
 	switch m := msg.(type) {
 	case *frame:
 		if err := envelopeAllowed(m.bvlc.Function); err != nil {
 			return err
 		}
-		if !apduAllowed(m.apdu) && (readOnly || !covAllowed(m.apdu)) && (!writable || !writeAllowed(m.apdu)) {
+		if !apduAllowed(m.apdu) && (readOnly || !covAllowed(m.apdu)) && (readOnly || !iAmAllowed(m.apdu, identity)) &&
+			(readOnly || !serving || !replyAllowed(m.apdu)) && (!writable || !writeAllowed(m.apdu)) {
 			return fmt.Errorf("PDU type %d service %d: %w", m.apdu.Type, m.apdu.Service, ErrServiceNotAllowed)
 		}
 		return nil
@@ -548,7 +592,14 @@ func destination(to netip.AddrPort, msg plumbing.BACnet) (Address, bool) {
 func (c *Client) send(to netip.AddrPort, msg plumbing.BACnet) error {
 	dst, unicast := destination(to, msg)
 	writable := unicast && !c.cfg.ReadOnly && c.isWritable(dst)
-	if err := allowed(msg, c.cfg.ReadOnly, writable); err != nil {
+	// A reply goes to the device whose request it answers, and to no other.
+	serving := false
+	if f, ok := msg.(*frame); ok && unicast && replyAllowed(f.apdu) {
+		c.mu.Lock()
+		_, serving = c.serving[keyOf(dst, f.apdu.InvokeID)]
+		c.mu.Unlock()
+	}
+	if err := allowed(msg, c.cfg.ReadOnly, writable, c.cfg.Identity, serving); err != nil {
 		c.log.Warn("refused to send", "to", to, "error", err)
 		return err
 	}
@@ -726,6 +777,9 @@ func (c *Client) readLoop() {
 			src = origin
 		}
 		msg, err := bacnet.ParseWithFallback(buf[:n])
+		if err != nil && errors.Is(err, common.ErrNotImplemented) && c.unparsed(src, buf[:n]) {
+			continue
+		}
 		if err != nil {
 			c.log.Debug("dropped a datagram that could not be parsed", "from", src, "error", err, "bytes", fmt.Sprintf("%x", buf[:n]))
 			continue
@@ -769,6 +823,18 @@ func (c *Client) dispatch(src netip.AddrPort, msg plumbing.BACnet) {
 			Segmentation: d.SegmentationSupported,
 			VendorID:     d.VendorId,
 		})
+	case *services.UnconfirmedWhoIs:
+		c.heardWhoIs(src, m)
+	case *services.ConfirmedReadProperty:
+		c.request(src, m.BVLC, m.NPDU, m.APDU)
+	case *services.ConfirmedReadRange:
+		c.request(src, m.BVLC, m.NPDU, m.APDU)
+	case *services.ConfirmedWriteProperty:
+		c.request(src, m.BVLC, m.NPDU, m.APDU)
+	case *services.ConfirmedCOV:
+		c.request(src, m.BVLC, m.NPDU, m.APDU)
+	case *services.SegmentedAPDU:
+		c.request(src, m.BVLC, m.NPDU, m.APDU)
 	case *services.ComplexACK:
 		c.deliver(src, m.NPDU, m.APDU)
 	case *services.Error:

@@ -23,7 +23,7 @@ several directories:
 | `objects/` | The tags and the primitive values they carry, and the names of object types, properties and engineering units |
 | `services/` | The services as messages: Who-Is and I-Am, Who-Has, ReadProperty, ReadPropertyMultiple, ReadRange, WriteProperty, SubscribeCOV and its notifications, and the replies: SimpleACK, ComplexACK, SegmentACK, Error, Reject and Abort |
 | `common/` | Errors and utilities used across all the above |
-| `client/` | A BACnet/IP client: one UDP socket, request and reply matching with timeouts and retries, segmented replies, the routing table, foreign-device registration with a BBMD, COV subscriptions (`SubscribeCOV`: renewed halfway through their lifetime, confirmed notifications acknowledged), `WriteProperty` to devices switched to writable, and the guard on what it sends, which `ReadOnly` narrows to reads |
+| `client/` | A BACnet/IP client: one UDP socket, request and reply matching with timeouts and retries, segmented replies, the routing table, foreign-device registration with a BBMD, COV subscriptions (`SubscribeCOV`: renewed halfway through their lifetime, confirmed notifications acknowledged), `WriteProperty` to devices switched to writable, the I-Am of a program that is a device (`Config.Identity`) and the replies to the requests it is sent (`Handle`), and the guard on what it sends, which `ReadOnly` narrows to reads |
 | `client/sim/` | Simulated BACnet/IP devices on the loopback interface, which the client's tests run against, and which a program built on the client can be tried on without a network, writes included |
 
 [docs/library-upgrade-spec.md](docs/library-upgrade-spec.md) is the design of the client and of the codec
@@ -116,9 +116,40 @@ BBMD functions, SubscribeCOV with the acknowledgement of a confirmed notificatio
 device switched to writable with `Config.Writable` or `SetWritable`; every device starts read-only, and
 `ReadOnly` refuses the subscriptions and the writes as well. A write is sent once and never resent: it
 returns `ErrTimeout` when it was sent and unanswered, and an error wrapping `ErrNotSent` when it never left
-the client. It has no device identity: it never sends an I-Am and answers nothing but the notifications of
-its own subscriptions. The builders for the other write services, such as `NewWriteProperty`, stay in the
+the client. The builders for the other write services, such as `NewWriteProperty`, stay in the
 root package for programs that send them on a socket of their own.
+
+The client has no device identity of its own. A program that is a BACnet device gives it one with
+`Config.Identity`, a device instance and a vendor identifier, and the client then says I-Am for it: `IAm`
+broadcasts it, and a Who-Is that asks for the instance is answered. `Config.OnWhoIs` hears every Who-Is.
+Without an identity, or with `ReadOnly`, no I-Am is sent and no confirmed request is answered but the
+notifications of the client's own subscriptions.
+
+With an identity the program can also be read. `Handle` gives the confirmed requests of a service to a
+handler of the program's; the client echoes the invoke ID, sends the reply back the way the request came,
+and rejects a service with no handler. What the program is, its objects and their properties, stays the
+program's: the client holds none. `ServeReadProperty` and `ServeReadPropertyMultiple` make both read
+services out of one function that gives a property's value:
+
+```go
+cfg.Identity = &client.Identity{Instance: 77, VendorID: 260}
+c, err := client.Open(cfg)
+// ...
+read := func(ctx context.Context, obj client.ObjectID, prop client.PropertyRef) ([]*objects.Object, error) {
+	if obj != (client.ObjectID{Type: objects.ObjectTypeDevice, Instance: 77}) {
+		return nil, &client.BACnetError{Class: uint32(objects.ErrorClassObject), Code: client.ErrorCodeUnknownObject}
+	}
+	if prop.ID != uint32(objects.PropertyIdObjectName) {
+		return nil, &client.BACnetError{Class: uint32(objects.ErrorClassProperty), Code: client.ErrorCodeUnknownProperty}
+	}
+	return []*objects.Object{objects.EncString("my program")}, nil
+}
+c.Handle(client.ServiceReadProperty, client.ServeReadProperty(read))
+c.Handle(client.ServiceReadPropertyMultiple, client.ServeReadPropertyMultiple(read))
+```
+
+Replies are not segmented: one longer than the requester takes is aborted. The `device` example serves a
+whole Device object this way.
 
 ## The examples
 
@@ -146,8 +177,8 @@ you can leverage with `task`:
     $ task build-mac
 
 You can find more information on Task on its [official site](https://taskfile.dev). Once compiled, just invoke the
-binary with no arguments to get an idea of what it can do. The `whois`, `rpc`, `rpm`, `rrc`, `cov` and
-`probe` commands are built on the `client` package and are the reference for using it; the servers and the
+binary with no arguments to get an idea of what it can do. The `whois`, `rpc`, `rpm`, `rrc`, `cov`, `probe`
+and `device` commands are built on the `client` package and are the reference for using it; the servers and the
 `orchestrator` work on a raw socket with the root package's builders and `Parse()`.
 
 `scripts/readonly_check.go` runs read-only checks against one live device and reports what the library can

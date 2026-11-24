@@ -2,6 +2,31 @@
 
 Releases up to v0.3.3 had no changelog; the tags are their record.
 
+## Unreleased
+
+### Added
+
+- `client`: a program that is a BACnet device gives the client its identity, `Config.Identity` (device
+  instance and vendor identifier), and the client says I-Am for it: `IAm` broadcasts it to every network,
+  and a Who-Is that asks for the instance is answered, a broadcast with a broadcast on the network it
+  came from and a unicast with a unicast. `Config.OnWhoIs` hears every Who-Is, with or without an
+  identity. The send guard takes the I-Am of that identity and of no other device, and none with
+  `Config.ReadOnly`. The client has no identity of its own: without one it sends no I-Am, as before.
+- `client`: a client with an identity answers the confirmed requests other devices send the program.
+  `Handle` gives a service to a `Handler` of the program's, which gets the `Request` and returns the
+  reply's parameters, nothing for a SimpleACK, or a `BACnetError`, `RejectError` or `AbortError`. The
+  client echoes the invoke ID, sends the reply back the way the request came, through the router for a
+  routed requester, drops a request sent again while its handler has it, and rejects a service with no
+  handler as unrecognized, the ones the parser has no type for included. `ServeReadProperty` and
+  `ServeReadPropertyMultiple` turn one `PropertyReader`, "the value of this property of this object",
+  into the handlers of both services. Which objects and properties the program has is the program's:
+  the client holds no object. Replies are not segmented: one longer than the requester takes, or than
+  1476 bytes, is aborted, as is a request in segments. The send guard takes a reply only to the device
+  whose request is open, with that request's invoke ID. Without an identity, or with `Config.ReadOnly`,
+  confirmed requests are ignored as before.
+- `examples`: `device` listens as a device, answering Who-Is and reads of its Device object, and
+  `cov --identity` subscribes as one.
+
 ## v0.7.0 (2026-11-20)
 
 ### Added

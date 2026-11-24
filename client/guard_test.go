@@ -163,6 +163,99 @@ func sendRefusesAllBut(t *testing.T, readOnly, writable bool) {
 	}
 }
 
+// The client sends the I-Am of the identity it was given and of no other
+// device, and none at all without an identity or when it is read-only.
+func TestSendIAmOnlyOfIdentity(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		identity *Identity
+		readOnly bool
+		instance uint32
+		want     bool
+	}{
+		{"no identity", nil, false, 77, false},
+		{"its own", &Identity{Instance: 77}, false, 77, true},
+		{"another device's", &Identity{Instance: 77}, false, 78, false},
+		{"its own, read-only", &Identity{Instance: 77}, true, 77, false},
+	} {
+		c, err := Open(Config{Local: netip.MustParseAddrPort("127.0.0.1:0"), Identity: tc.identity, ReadOnly: tc.readOnly})
+		if err != nil {
+			t.Fatal(err)
+		}
+		to := Address{IP: c.Local()}
+		a := plumbing.NewAPDU(plumbing.UnConfirmedReq, services.ServiceUnconfirmedIAm, services.IAmObjects(tc.instance, 1476, 3, 0))
+		err = c.sendAPDU(plumbing.BVLCFuncBroadcast, to.IP, npduTo(to, false), a)
+		if got := !errors.Is(err, ErrServiceNotAllowed); got != tc.want {
+			t.Errorf("%s: sent %t, want %t", tc.name, got, tc.want)
+		}
+		// Not of an object that is no device, and not with anything left out.
+		notDevice := services.IAmObjects(tc.instance, 1476, 3, 0)
+		notDevice[0] = objects.EncObjectIdentifier(false, objects.TagBACnetObjectIdentifier, objects.ObjectTypeAnalogInput, tc.instance)
+		for name, payload := range map[string][]objects.APDUPayload{"not a device": notDevice, "cut short": a.Objects[:1], "empty": nil} {
+			bad := plumbing.NewAPDU(plumbing.UnConfirmedReq, services.ServiceUnconfirmedIAm, payload)
+			if err := c.sendAPDU(plumbing.BVLCFuncBroadcast, to.IP, npduTo(to, false), bad); !errors.Is(err, ErrServiceNotAllowed) {
+				t.Errorf("%s: an I-Am that is %s was sent", tc.name, name)
+			}
+		}
+		c.Close()
+	}
+}
+
+// A reply goes to the device whose request the client has open, with that
+// request's invoke ID, and to no other; never in segments, never as a
+// broadcast, and never from a read-only client.
+func TestSendRepliesOnlyToOpenRequests(t *testing.T) {
+	for _, readOnly := range []bool{false, true} {
+		c, err := Open(Config{Local: netip.MustParseAddrPort("127.0.0.1:0"), Identity: &Identity{Instance: 77}, ReadOnly: readOnly})
+		if err != nil {
+			t.Fatal(err)
+		}
+		asker := Address{IP: c.Local()}
+		other := Address{IP: netip.AddrPortFrom(asker.IP.Addr(), asker.IP.Port()+1)}
+		routed := Address{IP: c.Local(), Net: 5, MAC: []byte{9}}
+		c.mu.Lock()
+		c.serving[keyOf(asker, 12)] = struct{}{}
+		c.serving[keyOf(routed, 13)] = struct{}{}
+		c.mu.Unlock()
+
+		replies := []*plumbing.APDU{
+			{Type: plumbing.SimpleAck, Service: services.ServiceConfirmedWriteProperty},
+			{Type: plumbing.ComplexAck, Service: services.ServiceConfirmedReadProperty},
+			{Type: plumbing.Error, Service: services.ServiceConfirmedReadProperty},
+			{Type: plumbing.Reject},
+			{Type: plumbing.Abort, Flags: 0x1},
+		}
+		for _, a := range replies {
+			for _, tc := range []struct {
+				name     string
+				to       Address
+				invoke   uint8
+				function uint8
+				want     bool
+			}{
+				{"the device that asked", asker, 12, plumbing.BVLCFuncUnicast, !readOnly},
+				{"the routed device that asked", routed, 13, plumbing.BVLCFuncUnicast, !readOnly},
+				{"another invoke ID", asker, 13, plumbing.BVLCFuncUnicast, false},
+				{"another device", other, 12, plumbing.BVLCFuncUnicast, false},
+				{"another device of the network", Address{IP: c.Local(), Net: 5, MAC: []byte{8}}, 13, plumbing.BVLCFuncUnicast, false},
+				{"a broadcast", asker, 12, plumbing.BVLCFuncBroadcast, false},
+			} {
+				reply := *a
+				reply.InvokeID = tc.invoke
+				err := c.sendAPDU(tc.function, tc.to.IP, npduTo(tc.to, false), &reply)
+				if got := !errors.Is(err, ErrServiceNotAllowed); got != tc.want {
+					t.Errorf("read-only %t, PDU type %d to %s: sent %t, want %t", readOnly, a.Type, tc.name, got, tc.want)
+				}
+			}
+		}
+		segment := &plumbing.APDU{Type: plumbing.ComplexAck, Flags: 0x8, InvokeID: 12, Service: services.ServiceConfirmedReadProperty}
+		if err := c.sendAPDU(plumbing.BVLCFuncUnicast, asker.IP, npduTo(asker, false), segment); !errors.Is(err, ErrServiceNotAllowed) {
+			t.Errorf("read-only %t: a reply in segments was sent", readOnly)
+		}
+		c.Close()
+	}
+}
+
 func TestDecodeRPM(t *testing.T) {
 	// Two objects: a value, a value at an array index, an error, and a
 	// constructed value with a nested one.

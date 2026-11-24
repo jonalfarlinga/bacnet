@@ -23,6 +23,8 @@ func init() {
 	COVClient.Flags().DurationVar(&covLifetime, "lifetime", client.DefaultCOVLifetime, "How long the device keeps the subscription without a renewal; the client renews it at half of that.")
 	COVClient.Flags().BoolVar(&covConfirmed, "confirmed", false, "Ask for confirmed notifications, which the client acknowledges.")
 	COVClient.Flags().DurationVar(&covListen, "listen", 0, "How long to listen before cancelling; 0 listens until interrupted.")
+	COVClient.Flags().Uint32Var(&covIdentity, "identity", 0, "Device instance to subscribe as: the client answers a Who-Is that asks for it with an I-Am. Without it the client has no identity.")
+	COVClient.Flags().Uint16Var(&covVendor, "identity-vendor", 0, "Vendor identifier to state in the I-Am of --identity.")
 }
 
 var (
@@ -32,6 +34,8 @@ var (
 	covLifetime   time.Duration
 	covConfirmed  bool
 	covListen     time.Duration
+	covIdentity   uint32
+	covVendor     uint16
 
 	COVClient = &cobra.Command{
 		Use:   "cov",
@@ -40,19 +44,41 @@ var (
 			"--dadr behind the router there, and prints the notifications the device\n" +
 			"sends. The client renews the subscription halfway through its lifetime and\n" +
 			"acknowledges confirmed notifications. After --listen, or when interrupted,\n" +
-			"it cancels the subscription.",
+			"it cancels the subscription. With --identity the client is that device to\n" +
+			"whoever asks: some devices send confirmed notifications only to a\n" +
+			"subscriber that has answered their Who-Is and whose Device object they\n" +
+			"could read; the reads are answered and listed.",
 		Args: argValidation,
 		Run:  COVClientExample,
 	}
 )
 
 func COVClientExample(cmd *cobra.Command, args []string) {
-	c := openClient(nil)
+	stamp := func() string { return time.Now().Format("15:04:05.000") }
+	identified := cmd.Flags().Changed("identity")
+	c := openClientWith(nil, func(cfg *client.Config) {
+		if !identified {
+			return
+		}
+		cfg.Identity = &client.Identity{Instance: covIdentity, VendorID: covVendor}
+		cfg.OnWhoIs = func(w client.WhoIsRequest) {
+			answer := "not answered"
+			if w.Asks(covIdentity) {
+				answer = fmt.Sprintf("answering as device %d", covIdentity)
+			}
+			fmt.Printf("%s Who-Is from %v: %s\n", stamp(), w.From, answer)
+		}
+	})
 	defer c.Close()
+	if identified {
+		// A device that has heard the I-Am reads the subscriber's Device
+		// object before it takes it for one.
+		serveDevice(c, covIdentity, covVendor, "bacnet-examples")
+		fmt.Printf("%s subscribing as device %d\n", stamp(), covIdentity)
+	}
 
 	obj := client.ObjectID{Type: covObjectType, Instance: covInstanceId}
 	name := fmt.Sprintf("%s %d", objectTypeName(obj.Type), obj.Instance)
-	stamp := func() string { return time.Now().Format("15:04:05.000") }
 
 	sub, err := c.SubscribeCOV(context.Background(), target(), obj,
 		client.COVOptions{Confirmed: covConfirmed, Lifetime: covLifetime, ProcessID: covProcessId},

@@ -40,6 +40,11 @@ func clientFlags(cmd *cobra.Command) {
 // openClient opens a client as the flags say, logging what it does to
 // stderr. onIAm, if given, hears every I-Am.
 func openClient(onIAm func(client.Device)) *client.Client {
+	return openClientWith(onIAm, nil)
+}
+
+// openClientWith is openClient with a change to the configuration.
+func openClientWith(onIAm func(client.Device), change func(*client.Config)) *client.Client {
 	var cfg client.Config
 	if exInterface != "" {
 		ifc, err := client.FindInterface(exInterface)
@@ -62,6 +67,9 @@ func openClient(onIAm func(client.Device)) *client.Client {
 		level = slog.LevelDebug
 	}
 	cfg.Logger = slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+	if change != nil {
+		change(&cfg)
+	}
 	c, err := client.Open(cfg)
 	if err != nil {
 		log.Fatalf("opening the client: %v", err)
